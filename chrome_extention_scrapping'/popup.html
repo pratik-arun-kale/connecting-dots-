@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Context Workspace</title>
+  <style>
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #161921;
+      --surface2:  #1e2230;
+      --border:    #2a2f3f;
+
+      --accent:    #6366f1;
+      --accent-dim: rgba(99, 102, 241, 0.15);
+
+      --success:   #3ddc84;
+      --error:     #ff5f5f;
+
+      --text:      #e8ecf4;
+      --text-2:    #8892a4;
+      --text-3:    #4f5870;
+
+      --mono: 'JetBrains Mono', 'Fira Code', monospace;
+      --ui:   'Inter', 'Segoe UI', system-ui, sans-serif;
+
+      --r:  8px;
+      --r2: 5px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 340px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--ui);
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ───────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      width: 26px; height: 26px;
+      background: linear-gradient(135deg, var(--accent) 0%, #7c6dff 100%);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 0 10px rgba(99,102,241,0.3);
+    }
+    .logo svg { width: 14px; height: 14px; fill: none; stroke: white; stroke-width: 2; stroke-linecap: round; }
+
+    .header-info { flex: 1; min-width: 0; }
+    .header-title { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; color: var(--text); }
+
+    .backend-status {
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--text-3);
+      margin-top: 1px;
+      transition: color 0.2s;
+    }
+    .backend-status.ok  { color: var(--success); }
+    .backend-status.off { color: var(--error); }
+
+    /* ── Sections ─────────────────────────────────────────── */
+    .section { border-bottom: 1px solid var(--border); }
+
+    .section-header {
+      padding: 8px 14px 4px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-3);
+    }
+
+    .section-body { padding: 4px 14px 10px; }
+
+    /* ── Project ──────────────────────────────────────────── */
+    .project-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .project-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge {
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(99,102,241,0.25);
+      border-radius: 99px;
+      padding: 1px 7px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* ── Empty state ──────────────────────────────────────── */
+    .empty-state { padding: 6px 0 2px; }
+    .empty-msg   { font-size: 12px; font-weight: 600; color: var(--text-2); }
+    .empty-hint  { font-size: 11px; color: var(--text-3); margin-top: 3px; line-height: 1.4; }
+
+    .link-btn {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(99,102,241,0.3);
+      border-radius: var(--r2);
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .link-btn:hover { background: rgba(99,102,241,0.25); }
+
+    /* ── Platform rows ────────────────────────────────────── */
+    .platform-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+    }
+    .platform-row + .platform-row { border-top: 1px solid var(--border); }
+
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .platform-label { flex: 1; font-size: 12px; font-weight: 500; color: var(--text); }
+
+    .tab-status {
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--text-3);
+    }
+    .tab-status.open { color: var(--success); }
+
+    .open-tab-btn {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-2);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--r2);
+      padding: 2px 8px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      flex-shrink: 0;
+    }
+    .open-tab-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* ── Capture history ──────────────────────────────────── */
+    .capture-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+    }
+    .capture-row + .capture-row { border-top: 1px solid var(--border); }
+
+    .capture-info { display: flex; flex-direction: column; gap: 1px; }
+    .capture-platform { font-size: 11px; font-weight: 600; color: var(--text); }
+    .capture-meta     { font-size: 10px; font-family: var(--mono); color: var(--text-3); }
+
+    .no-data {
+      font-size: 11px;
+      color: var(--text-3);
+      padding: 2px 0 4px;
+      line-height: 1.4;
+    }
+
+    /* ── Footer ───────────────────────────────────────────── */
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+    }
+
+    .ghost-btn {
+      font-size: 11px;
+      color: var(--text-3);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px 0;
+      font-family: var(--ui);
+      transition: color 0.15s;
+    }
+    .ghost-btn:hover { color: var(--error); }
+
+    .footer-hint { font-size: 10px; color: var(--text-3); font-family: var(--mono); }
+  </style>
+</head>
+<body>
+  <div>
+
+    <!-- ── Header ─────────────────────────────────────────── -->
+    <header class="header">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <div class="header-info">
+        <div class="header-title">Context Workspace</div>
+        <div id="backendStatus" class="backend-status">Checking backend…</div>
+      </div>
+    </header>
+
+    <!-- ── Project ────────────────────────────────────────── -->
+    <section class="section">
+      <div class="section-header">Active Project</div>
+      <div class="section-body" id="projectBody">
+        <div class="no-data">Loading…</div>
+      </div>
+    </section>
+
+    <!-- ── AI Platforms ───────────────────────────────────── -->
+    <section class="section" id="platformsSection">
+      <div class="section-header">AI Platforms</div>
+      <div class="section-body" id="platformBody"></div>
+    </section>
+
+    <!-- ── Recent Saves ───────────────────────────────────── -->
+    <section class="section" id="historySection">
+      <div class="section-header">Recent Saves</div>
+      <div class="section-body" id="historyBody"></div>
+    </section>
+
+    <!-- ── Footer ─────────────────────────────────────────── -->
+    <footer class="footer">
+      <button id="clearBtn" class="ghost-btn">Clear State</button>
+      <span class="footer-hint">v1.1</span>
+    </footer>
+
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\kale_p\\\\Music\\\\Connecting dots\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(\"/c/Program Files/PostgreSQL/17/bin/pg_hba.conf\")",
+      "Read(//c/Program Files/PostgreSQL/17/data/**)",
+      "Bash(grep -v \"^$\")",
+      "Bash(cat \"C:/Program Files/PostgreSQL/17/data/pg_hba.conf\" 2>/dev/null | grep -v \"^#\" | grep \"\\\\S\" | head -20 || \\\\ *)",
+      "Read(//c/Users/kale_p/AppData/**)",
+      "Bash(curl -si -X POST http://localhost:8000/api/v1/projects/create-with-sessions -H 'Origin: http://localhost:3000' -H 'Content-Type: application/json' -d '{\"name\":\"test\",\"platforms\":[\"chatgpt\"]}')",
+      "Bash(python -m alembic upgrade head)",
+      "Bash(npm --version)",
+      "Bash(npm run *)",
+      "Bash(ls -la \"c:\\\\\\\\Users\\\\\\\\kale_p\\\\\\\\Music\\\\\\\\Connecting dots\\\\\\\\context-workspace\\\\\\\\\")",
+      "Bash(find \"c:\\\\\\\\Users\\\\\\\\kale_p\\\\\\\\Music\\\\\\\\Connecting dots\\\\\\\\context-workspace\\\\\\\\src\" -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" \\\\\\))",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(item['text']\\) for item in data if item['type']=='text']\")",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

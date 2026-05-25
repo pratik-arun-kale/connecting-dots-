@@ -1,0 +1,106 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AI Context Workspace — local development stack
+# ─────────────────────────────────────────────────────────────────────────────
+# Services:
+#   backend   – FastAPI app (hot-reload via volume mount)
+#   postgres  – PostgreSQL 16
+#   redis     – Redis 7 (future-ready; not used by app yet)
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-common-env: &common-env
+  APP_ENV: development
+  DEBUG: "true"
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ai_context_workspace
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  LOG_LEVEL: DEBUG
+  LOG_FORMAT: console
+  ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173"
+
+services:
+
+  # ── FastAPI backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      target: runtime          # skip builder stage in local dev if desired
+    image: ai-context-workspace:dev
+    container_name: acw_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source so uvicorn --reload picks up changes
+      - .:/app
+    environment:
+      <<: *common-env
+    command: >
+      uvicorn main:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+        --reload-dir /app
+        --log-level debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - acw_net
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: acw_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"            # expose for local DB tools (TablePlus, DBeaver…)
+    environment:
+      POSTGRES_DB: ai_context_workspace
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      # Performance tuning for development
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_context_workspace"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - acw_net
+
+  # ── Redis (future-ready — not wired to app yet) ───────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: acw_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - acw_net
+    profiles:
+      - redis   # opt-in: `docker compose --profile redis up` to start Redis
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  acw_net:
+    driver: bridge

@@ -1,0 +1,18 @@
+{
+  "type": "module",
+  "name": "pagecapture-workspace",
+  "private": true,
+  "version": "1.2.0",
+  "description": "Context Workspace Chrome extension — project-aware AI session tracker",
+  "scripts": {
+    "build": "esbuild src/background.ts --bundle --format=esm --outfile=background.js --platform=browser",
+    "watch": "esbuild src/background.ts --bundle --format=esm --outfile=background.js --platform=browser --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.298",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  },
+  "main": "pipeline/index.js"
+}
