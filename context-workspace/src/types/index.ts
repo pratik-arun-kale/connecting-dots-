@@ -82,15 +82,30 @@ export interface ApiProject {
 
 export type LinkStatus = 'pending' | 'linked' | 'unlinked' | 'failed';
 
+export type SessionStateLiteral =
+  | 'pending'
+  | 'creating_tab'
+  | 'waiting_for_ui'
+  | 'injecting_bootstrap'
+  | 'waiting_for_url'
+  | 'linking'
+  | 'completed'
+  | 'failed';
+
 export interface ApiSession {
   id: string;
   project_id: string;
   source_platform: Platform;
+  session_state: SessionStateLiteral;
   title: string | null;
   tab_url: string | null;
+  bootstrap_message: string | null;
+  attempt: number;
   linked_url: string | null;
   link_status: LinkStatus;
   linked_at: string | null;
+  failed_at: string | null;
+  failure_reason: string | null;
   created_at: string;
 }
 
@@ -123,15 +138,12 @@ export interface ApiContextListResponse {
 // Extension message types
 // ──────────────────────────────────────────────
 
-export interface OpenProjectSessionsPayload {
+export interface CreateProviderSessionMessage {
+  type: 'CREATE_PROVIDER_SESSION';
+  sessionId: string;
   projectId: string;
-  sessions: Array<{
-    sessionId: string;
-    platform: Platform;
-  }>;
+  platform: Platform;
+  bootstrapMessage: string | null;
 }
 
-export interface ExtensionMessage {
-  type: 'OPEN_PROJECT_SESSIONS';
-  payload: OpenProjectSessionsPayload;
-}
+export type ExtensionMessage = CreateProviderSessionMessage;

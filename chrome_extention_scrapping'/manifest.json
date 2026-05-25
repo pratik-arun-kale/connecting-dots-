@@ -1,10 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "PageCapture — Full Page Extractor",
-  "version": "1.1.0",
-  "description": "Captures AI conversation context and connects sessions to the Context Workspace.",
+  "name": "Connecting Dots — AI Context Workspace",
+  "version": "2.0.0",
+  "description": "Orchestrates AI provider sessions and links them to Context Workspace projects.",
   "permissions": [
-    "activeTab",
     "alarms",
     "scripting",
     "storage",
@@ -12,6 +11,7 @@
     "webNavigation"
   ],
   "host_permissions": [
+    "https://chatgpt.com/*",
     "https://chat.openai.com/*",
     "https://claude.ai/*",
     "https://gemini.google.com/*"
@@ -37,8 +37,18 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://chat.openai.com/*"],
-      "js": ["chatgpt-capture.js"],
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["content-scripts/chatgpt-cs.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["content-scripts/claude-cs.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://gemini.google.com/*"],
+      "js": ["content-scripts/gemini-cs.js"],
       "run_at": "document_idle"
     }
   ],

@@ -10,7 +10,7 @@ import uuid
 
 from sqlalchemy import func, select
 
-from app.models.session import Session
+from app.models.session import Session, SessionState
 from app.repositories.base import BaseRepository
 
 
@@ -24,11 +24,9 @@ class SessionRepository(BaseRepository[Session]):
         offset: int = 0,
         limit: int = 100,
     ) -> tuple[list[Session], int]:
-        """Return all sessions for a project, newest first, with total count."""
+        """All sessions for a project, newest first, with total count."""
         count_result = await self.session.execute(
-            select(func.count())
-            .select_from(Session)
-            .where(Session.project_id == project_id)
+            select(func.count()).select_from(Session).where(Session.project_id == project_id)
         )
         total = count_result.scalar_one()
 
@@ -41,3 +39,25 @@ class SessionRepository(BaseRepository[Session]):
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all()), total
+
+    async def get_active_for_project_and_platform(
+        self,
+        project_id: uuid.UUID,
+        platform: str,
+    ) -> Session | None:
+        """Return the non-terminal session for (project, platform), if any.
+
+        Used to enforce the one-active-session-per-provider invariant
+        without relying solely on the DB partial unique index.
+        """
+        stmt = (
+            select(Session)
+            .where(
+                Session.project_id == project_id,
+                Session.source_platform == platform,
+                Session.session_state.notin_(list(SessionState.TERMINAL)),
+            )
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()

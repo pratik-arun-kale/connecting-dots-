@@ -3,10 +3,12 @@ app/api/v1/routes/sessions.py
 ──────────────────────────────
 Session endpoints.
 
-POST   /sessions                        – create a session
-GET    /sessions/{project_id}           – list sessions for a project
-GET    /sessions/detail/{session_id}    – get a single session
-PATCH  /sessions/{session_id}/link      – bind a live tab URL to a session
+POST   /sessions                     – create (idempotent: returns existing active session)
+GET    /sessions/{project_id}        – list sessions for a project
+GET    /sessions/detail/{session_id} – get a single session
+PATCH  /sessions/{session_id}/state  – extension reports FSM state transition
+PATCH  /sessions/{session_id}/link   – extension reports captured conversation URL
+PATCH  /sessions/{session_id}/fail   – extension reports terminal failure
 """
 
 import uuid
@@ -17,8 +19,10 @@ from app.dependencies import SessionServiceDep
 from app.schemas.session import (
     LinkSessionRequest,
     SessionCreate,
+    SessionFailureRequest,
     SessionListResponse,
     SessionResponse,
+    SessionStateUpdate,
 )
 
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
@@ -28,13 +32,14 @@ router = APIRouter(prefix="/sessions", tags=["Sessions"])
     "",
     response_model=SessionResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a session",
+    summary="Create a session (idempotent)",
+    responses={200: {"description": "Existing active session returned"}},
 )
 async def create_session(
     payload: SessionCreate,
     service: SessionServiceDep,
 ) -> SessionResponse:
-    session = await service.create_session(payload)
+    session, created = await service.create_or_get_session(payload)
     return SessionResponse.model_validate(session)
 
 
@@ -72,9 +77,27 @@ async def get_session(
 
 
 @router.patch(
+    "/{session_id}/state",
+    response_model=SessionResponse,
+    summary="Report FSM state transition (extension only)",
+    responses={
+        409: {"description": "Session is in a terminal state"},
+        422: {"description": "Transition is not allowed from current state"},
+    },
+)
+async def update_session_state(
+    session_id: uuid.UUID,
+    payload: SessionStateUpdate,
+    service: SessionServiceDep,
+) -> SessionResponse:
+    session = await service.transition_state(session_id, payload)
+    return SessionResponse.model_validate(session)
+
+
+@router.patch(
     "/{session_id}/link",
     response_model=SessionResponse,
-    summary="Bind a live tab URL to a session",
+    summary="Bind captured conversation URL (extension only)",
     responses={
         409: {"description": "Session already linked to a different URL"},
         422: {"description": "URL does not belong to a supported AI platform"},
@@ -86,4 +109,18 @@ async def link_session(
     service: SessionServiceDep,
 ) -> SessionResponse:
     session = await service.link_session(session_id, payload)
+    return SessionResponse.model_validate(session)
+
+
+@router.patch(
+    "/{session_id}/fail",
+    response_model=SessionResponse,
+    summary="Report terminal failure (extension only)",
+)
+async def fail_session(
+    session_id: uuid.UUID,
+    payload: SessionFailureRequest,
+    service: SessionServiceDep,
+) -> SessionResponse:
+    session = await service.fail_session(session_id, payload)
     return SessionResponse.model_validate(session)

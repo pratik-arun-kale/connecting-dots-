@@ -15,15 +15,33 @@ from pydantic import Field, field_validator
 
 from app.schemas.base import AppBaseModel
 
-# Mirror the allowed values from the model — kept in sync manually.
-SourcePlatformLiteral = Literal["chatgpt", "claude", "gemini", "docs", "unknown"]
+SourcePlatformLiteral = Literal["chatgpt", "claude", "gemini", "unknown"]
 
-# URLs must belong to a known AI platform. chrome-extension:// and localhost
-# are explicitly excluded — linked_url is the live session URL, not the
-# extension origin.
 _ALLOWED_URL_RE = re.compile(
-    r"^https://(chat\.openai\.com|claude\.ai|gemini\.google\.com)/"
+    r"^https://(chatgpt\.com|chat\.openai\.com|claude\.ai|gemini\.google\.com)/"
 )
+
+FailureReasonLiteral = Literal[
+    "auth_required",
+    "ui_timeout",
+    "bootstrap_failed",
+    "url_timeout",
+    "link_conflict",
+    "backend_error",
+    "tab_closed",
+    "provider_error",
+]
+
+SessionStateLiteral = Literal[
+    "pending",
+    "creating_tab",
+    "waiting_for_ui",
+    "injecting_bootstrap",
+    "waiting_for_url",
+    "linking",
+    "completed",
+    "failed",
+]
 
 
 # ── Request schemas ───────────────────────────────────────────────────────────
@@ -31,11 +49,11 @@ _ALLOWED_URL_RE = re.compile(
 class SessionCreate(AppBaseModel):
     project_id: uuid.UUID
     source_platform: SourcePlatformLiteral = "unknown"
-    title: str | None = Field(None, max_length=500)
+    bootstrap_message: str | None = Field(None, max_length=2000)
 
-    @field_validator("title")
+    @field_validator("bootstrap_message")
     @classmethod
-    def _strip_title(cls, v: str | None) -> str | None:
+    def _strip(cls, v: str | None) -> str | None:
         return v.strip() if v else None
 
 
@@ -47,9 +65,26 @@ class LinkSessionRequest(AppBaseModel):
     def _validate_platform_url(cls, v: str) -> str:
         if not _ALLOWED_URL_RE.match(v):
             raise ValueError(
-                "url must be a valid https URL on chat.openai.com, claude.ai, or gemini.google.com"
+                "url must be a valid https URL on chatgpt.com, chat.openai.com, claude.ai, or gemini.google.com"
             )
         return v
+
+
+class SessionStateUpdate(AppBaseModel):
+    """Extension → Backend: report an FSM state transition."""
+    state: Literal[
+        "creating_tab",
+        "waiting_for_ui",
+        "injecting_bootstrap",
+        "waiting_for_url",
+        "linking",
+    ]
+
+
+class SessionFailureRequest(AppBaseModel):
+    """Extension → Backend: report terminal failure."""
+    reason: FailureReasonLiteral
+    detail: str | None = Field(None, max_length=500)
 
 
 # ── Response schemas ──────────────────────────────────────────────────────────
@@ -58,11 +93,14 @@ class SessionResponse(AppBaseModel):
     id: uuid.UUID
     project_id: uuid.UUID
     source_platform: str
-    title: str | None
-    tab_url: str | None
+    session_state: str
+    bootstrap_message: str | None
+    attempt: int
     linked_url: str | None
     link_status: str
     linked_at: datetime | None
+    failed_at: datetime | None
+    failure_reason: str | None
     created_at: datetime
 
 

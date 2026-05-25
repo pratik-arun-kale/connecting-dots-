@@ -1,4 +1,4 @@
-import type { ExtensionMessage, OpenProjectSessionsPayload } from '@/types';
+import type { ExtensionMessage } from '@/types';
 
 // Set NEXT_PUBLIC_EXTENSION_ID in .env.local to the extension's chrome ID.
 // Find it at chrome://extensions after loading the extension unpacked.
@@ -54,7 +54,18 @@ export const extensionService = {
     });
   },
 
-  openProjectSessions(payload: OpenProjectSessionsPayload): Promise<{ success: boolean; error?: string }> {
-    return this.sendMessage({ type: 'OPEN_PROJECT_SESSIONS', payload });
+  createProviderSession(
+    sessionId: string,
+    projectId: string,
+    platform: string,
+    bootstrapMessage: string | null,
+  ): Promise<{ success: boolean; error?: string }> {
+    return this.sendMessage({
+      type: 'CREATE_PROVIDER_SESSION',
+      sessionId,
+      projectId,
+      platform: platform as 'chatgpt' | 'claude' | 'gemini',
+      bootstrapMessage,
+    });
   },
 };

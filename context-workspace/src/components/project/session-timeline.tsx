@@ -8,10 +8,11 @@ import {
   Bot,
   FileText,
   Sparkles,
-  Link2,
-  Clock,
-  AlertCircle,
   ExternalLink,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Globe,
 } from 'lucide-react';
 import type { ApiSession } from '@/types';
 
@@ -37,8 +38,10 @@ function platformLabel(platform: string): string {
   }
 }
 
-function LinkStatusBadge({ session }: { session: ApiSession }) {
-  if (session.link_status === 'linked' && session.linked_url) {
+function SessionStateBadge({ session }: { session: ApiSession }) {
+  const state = session.session_state;
+
+  if (state === 'completed' && session.linked_url) {
     return (
       <a
         href={session.linked_url}
@@ -47,27 +50,46 @@ function LinkStatusBadge({ session }: { session: ApiSession }) {
         onClick={(e) => e.stopPropagation()}
         className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors max-w-60 group/link"
       >
-        <Link2 className="w-3 h-3 shrink-0" />
+        <CheckCircle2 className="w-3 h-3 shrink-0" />
         <span className="truncate">{session.linked_url.replace('https://', '')}</span>
         <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-0 group-hover/link:opacity-100 transition-opacity" />
       </a>
     );
   }
 
-  if (session.link_status === 'failed') {
+  if (state === 'failed') {
     return (
       <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
-        <AlertCircle className="w-3 h-3" />
-        Link conflict
+        <XCircle className="w-3 h-3" />
+        {session.failure_reason?.replace(/_/g, ' ') ?? 'Failed'}
       </span>
     );
   }
 
-  // pending (default)
+  const IN_PROGRESS_LABELS: Record<string, string> = {
+    pending:              'Pending…',
+    creating_tab:         'Opening tab…',
+    waiting_for_ui:       'Waiting for UI…',
+    injecting_bootstrap:  'Injecting prompt…',
+    waiting_for_url:      'Waiting for URL…',
+    linking:              'Linking…',
+  };
+
+  const label = IN_PROGRESS_LABELS[state] ?? state;
+
+  if (state === 'linking') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">
+        <Globe className="w-3 h-3 animate-pulse" />
+        {label}
+      </span>
+    );
+  }
+
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-zinc-400 bg-zinc-500/10 px-2 py-0.5 rounded border border-zinc-500/20">
-      <Clock className="w-3 h-3" />
-      Waiting for URL
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+      <Loader2 className="w-3 h-3 animate-spin" />
+      {label}
     </span>
   );
 }
@@ -123,9 +145,9 @@ export function SessionTimeline({ sessions }: SessionTimelineProps) {
               </div>
             </div>
 
-            {/* Right: link status */}
+            {/* Right: session state */}
             <div className="shrink-0">
-              <LinkStatusBadge session={session} />
+              <SessionStateBadge session={session} />
             </div>
           </CardContent>
         </Card>

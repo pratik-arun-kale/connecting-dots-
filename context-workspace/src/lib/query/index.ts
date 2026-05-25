@@ -43,8 +43,27 @@ export function useCreateProjectWithSessions() {
   return useMutation({
     mutationFn: (data: CreateProjectWithSessionsRequest) =>
       projectService.createProjectWithSessions(data),
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects] });
+      queryClient.invalidateQueries({
+        queryKey: [QUERY_KEYS.projects, result.project.id, QUERY_KEYS.sessions],
+      });
+
+      // Tell the extension to drive each session through the FSM
+      const extId = process.env.NEXT_PUBLIC_EXTENSION_ID;
+      if (extId && typeof window !== 'undefined') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cr = (window as any)?.chrome?.runtime;
+        for (const session of result.sessions) {
+          cr?.sendMessage(extId, {
+            type: 'CREATE_PROVIDER_SESSION',
+            sessionId: session.id,
+            projectId: result.project.id,
+            platform:  session.source_platform,
+            bootstrapMessage: null,
+          });
+        }
+      }
     },
   });
 }
@@ -70,12 +89,20 @@ export function useSessions(projectId?: string) {
   });
 }
 
+const TERMINAL_SESSION_STATES = new Set(['completed', 'failed']);
+
 export function useProjectSessions(projectId: string) {
   return useQuery<ApiSession[]>({
     queryKey: [QUERY_KEYS.projects, projectId, QUERY_KEYS.sessions],
     queryFn: () => sessionService.getProjectSessions(projectId),
-    staleTime: DEFAULT_STALE_TIME,
+    staleTime: 0,
     enabled: !!projectId,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!Array.isArray(data) || data.length === 0) return false;
+      const hasActive = data.some((s) => !TERMINAL_SESSION_STATES.has(s.session_state));
+      return hasActive ? 3_000 : false;
+    },
   });
 }
 

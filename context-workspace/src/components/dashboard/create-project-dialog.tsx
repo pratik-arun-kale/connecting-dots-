@@ -82,20 +82,18 @@ export function CreateProjectDialog() {
 
           // ── Step 2: fire-and-forget extension messaging ───────────────────
           // Project creation is already complete. Extension failure is non-fatal.
-          extensionService
-            .openProjectSessions({
-              projectId: result.project.id,
-              sessions: result.sessions.map((s) => ({
-                sessionId: s.id,
-                platform: s.source_platform,
-              })),
-            })
-            .then((res) => {
-              console.log('[DEBUG] extension messaging result:', res);
-            })
-            .catch((err) => {
-              console.warn('[DEBUG] extension messaging failed (non-fatal):', err);
-            });
+          // The useCreateProjectWithSessions hook also sends these messages in onSuccess,
+          // but we keep this here for immediate feedback logging.
+          for (const session of result.sessions) {
+            extensionService
+              .createProviderSession(session.id, result.project.id, session.source_platform, null)
+              .then((res: { success: boolean; error?: string }) => {
+                console.log('[DEBUG] extension CREATE_PROVIDER_SESSION result:', res);
+              })
+              .catch((err: unknown) => {
+                console.warn('[DEBUG] extension messaging failed (non-fatal):', err);
+              });
+          }
         },
 
         onError: (err) => {
