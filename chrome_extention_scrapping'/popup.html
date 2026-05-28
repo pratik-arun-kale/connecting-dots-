@@ -1,267 +1,372 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="color-scheme" content="dark">
   <title>Context Workspace</title>
   <style>
+    /* ───── TOKENS ──────────────────────────────────────────── */
     :root {
-      --bg:        #0d0f14;
-      --surface:   #161921;
-      --surface2:  #1e2230;
-      --border:    #2a2f3f;
-
-      --accent:    #6366f1;
-      --accent-dim: rgba(99, 102, 241, 0.15);
-
-      --success:   #3ddc84;
-      --error:     #ff5f5f;
-
-      --text:      #e8ecf4;
-      --text-2:    #8892a4;
-      --text-3:    #4f5870;
-
-      --mono: 'JetBrains Mono', 'Fira Code', monospace;
-      --ui:   'Inter', 'Segoe UI', system-ui, sans-serif;
-
-      --r:  8px;
-      --r2: 5px;
+      --bg:              #090909;
+      --bg-elevated:     #0f0f0f;
+      --surface:         rgba(255,255,255,0.035);
+      --surface-hov:     rgba(255,255,255,0.058);
+      --surface-act:     rgba(255,255,255,0.08);
+      --border:          rgba(255,255,255,0.08);
+      --border-med:      rgba(255,255,255,0.12);
+      --border-str:      rgba(255,255,255,0.18);
+      --accent:          #8B5CF6;
+      --accent-2:        #A78BFA;
+      --accent-bg:       rgba(139,92,246,0.10);
+      --accent-brd:      rgba(139,92,246,0.22);
+      --green:           #10B981;
+      --green-bg:        rgba(16,185,129,0.10);
+      --red:             #EF4444;
+      --red-bg:          rgba(239,68,68,0.10);
+      --yellow:          #F59E0B;
+      --chatgpt:         #10A37F;
+      --chatgpt-bg:      rgba(16,163,127,0.10);
+      --claude:          #D97706;
+      --claude-bg:       rgba(217,119,6,0.10);
+      --gemini:          #3B82F6;
+      --gemini-bg:       rgba(59,130,246,0.10);
+      --perplexity:      #06B6D4;
+      --perplexity-bg:   rgba(6,182,212,0.10);
+      --txt1:            rgba(255,255,255,0.88);
+      --txt2:            rgba(255,255,255,0.48);
+      --txt3:            rgba(255,255,255,0.24);
+      --font: -apple-system,'SF Pro Display','Inter',system-ui,sans-serif;
+      --mono: 'SF Mono','JetBrains Mono',ui-monospace,monospace;
+      --r-sm: 8px;
+      --r-md: 12px;
+      --r-lg: 16px;
+      --ease: cubic-bezier(0.4,0,0.2,1);
     }
 
+    /* ───── RESETS ──────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    button { font-family: var(--font); cursor: pointer; border: none; background: none; }
 
+    /* ───── BASE ────────────────────────────────────────────── */
     body {
-      width: 340px;
+      width: 400px;
       background: var(--bg);
-      color: var(--text);
-      font-family: var(--ui);
+      color: var(--txt1);
+      font-family: var(--font);
       font-size: 13px;
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
     }
 
-    /* ── Header ───────────────────────────────────────────── */
+    /* ───── ANIMATIONS ──────────────────────────────────────── */
+    @keyframes pulse-ring {
+      0%   { opacity: 0.7; transform: scale(1); }
+      70%  { opacity: 0;   transform: scale(2.4); }
+      100% { opacity: 0;   transform: scale(2.4); }
+    }
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(5px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes shimmer {
+      0%   { background-position: -400px 0; }
+      100% { background-position: 400px 0; }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ───── HEADER ──────────────────────────────────────────── */
     .header {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 12px 14px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
+      padding: 16px 18px 14px;
     }
-
-    .logo {
-      width: 26px; height: 26px;
-      background: linear-gradient(135deg, var(--accent) 0%, #7c6dff 100%);
+    .logo-mark {
+      width: 22px; height: 22px;
       border-radius: 6px;
+      background: linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%);
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
-      box-shadow: 0 0 10px rgba(99,102,241,0.3);
+      box-shadow: 0 0 14px rgba(124,58,237,0.4);
     }
-    .logo svg { width: 14px; height: 14px; fill: none; stroke: white; stroke-width: 2; stroke-linecap: round; }
+    .logo-mark svg { width: 11px; height: 11px; fill: none; stroke: rgba(255,255,255,0.92); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .app-name { flex: 1; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; color: var(--txt1); }
 
-    .header-info { flex: 1; min-width: 0; }
-    .header-title { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; color: var(--text); }
-
-    .backend-status {
-      font-size: 10px;
-      font-family: var(--mono);
-      color: var(--text-3);
-      margin-top: 1px;
-      transition: color 0.2s;
-    }
-    .backend-status.ok  { color: var(--success); }
-    .backend-status.off { color: var(--error); }
-
-    /* ── Sections ─────────────────────────────────────────── */
-    .section { border-bottom: 1px solid var(--border); }
-
-    .section-header {
-      padding: 8px 14px 4px;
-      font-size: 9px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--text-3);
-    }
-
-    .section-body { padding: 4px 14px 10px; }
-
-    /* ── Project ──────────────────────────────────────────── */
-    .project-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-
-    .project-name {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .badge {
-      font-size: 10px;
-      font-family: var(--mono);
-      color: var(--accent);
-      background: var(--accent-dim);
-      border: 1px solid rgba(99,102,241,0.25);
+    .status-capsule {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 9px;
+      background: var(--surface);
       border-radius: 99px;
-      padding: 1px 7px;
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-
-    /* ── Empty state ──────────────────────────────────────── */
-    .empty-state { padding: 6px 0 2px; }
-    .empty-msg   { font-size: 12px; font-weight: 600; color: var(--text-2); }
-    .empty-hint  { font-size: 11px; color: var(--text-3); margin-top: 3px; line-height: 1.4; }
-
-    .link-btn {
-      display: inline-block;
-      margin-top: 8px;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--accent);
-      background: var(--accent-dim);
-      border: 1px solid rgba(99,102,241,0.3);
-      border-radius: var(--r2);
-      padding: 4px 10px;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .link-btn:hover { background: rgba(99,102,241,0.25); }
-
-    /* ── Platform rows ────────────────────────────────────── */
-    .platform-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 5px 0;
-    }
-    .platform-row + .platform-row { border-top: 1px solid var(--border); }
-
-    .dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .platform-label { flex: 1; font-size: 12px; font-weight: 500; color: var(--text); }
-
-    .tab-status {
-      font-size: 10px;
-      font-family: var(--mono);
-      color: var(--text-3);
-    }
-    .tab-status.open { color: var(--success); }
-
-    .open-tab-btn {
-      font-size: 10px;
-      font-weight: 600;
-      color: var(--text-2);
-      background: var(--surface2);
       border: 1px solid var(--border);
-      border-radius: var(--r2);
-      padding: 2px 8px;
+      font-size: 10.5px;
+      color: var(--txt3);
+      font-family: var(--mono);
+      transition: all 180ms var(--ease);
+    }
+    .status-capsule.online  { color: var(--green); border-color: rgba(16,185,129,0.2); background: var(--green-bg); }
+    .status-capsule.offline { color: var(--red);   border-color: rgba(239,68,68,0.2);  background: var(--red-bg); }
+
+    .status-dot {
+      position: relative; width: 6px; height: 6px;
+      border-radius: 50%; flex-shrink: 0;
+      background: currentColor;
+    }
+    .status-capsule.online .status-dot::before {
+      content: ''; position: absolute; inset: 0;
+      border-radius: 50%; background: currentColor;
+      animation: pulse-ring 2.4s ease-out infinite;
+    }
+
+    /* ───── SEPARATOR ───────────────────────────────────────── */
+    .sep { height: 1px; background: var(--border); }
+
+    /* ───── SCROLL AREA ─────────────────────────────────────── */
+    .content {
+      max-height: 460px;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+    .content::-webkit-scrollbar { display: none; }
+
+    /* ───── SECTION ─────────────────────────────────────────── */
+    .section { padding: 14px 18px; }
+    .section + .section { padding-top: 0; }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--txt3);
+      margin-bottom: 10px;
+    }
+
+    /* ───── PROJECT HERO CARD ───────────────────────────────── */
+    .project-card {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px;
+      background: var(--surface);
+      border-radius: var(--r-lg);
+      box-shadow: 0 0 0 1px var(--border), 0 4px 20px rgba(0,0,0,0.2);
       cursor: pointer;
-      transition: color 0.15s, border-color 0.15s;
-      flex-shrink: 0;
+      transition: all 180ms var(--ease);
+      animation: fade-in 200ms var(--ease) both;
+      width: 100%; text-align: left;
     }
-    .open-tab-btn:hover { color: var(--accent); border-color: var(--accent); }
-
-    /* ── Capture history ──────────────────────────────────── */
-    .capture-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 0;
+    .project-card:hover {
+      background: var(--surface-hov);
+      box-shadow: 0 0 0 1px var(--border-med), 0 8px 28px rgba(0,0,0,0.3);
+      transform: translateY(-1px);
     }
-    .capture-row + .capture-row { border-top: 1px solid var(--border); }
+    .project-card:active { transform: scale(0.99); transition-duration: 80ms; }
 
-    .capture-info { display: flex; flex-direction: column; gap: 1px; }
-    .capture-platform { font-size: 11px; font-weight: 600; color: var(--text); }
-    .capture-meta     { font-size: 10px; font-family: var(--mono); color: var(--text-3); }
+    .project-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--accent); }
+    .project-info { flex: 1; min-width: 0; }
+    .project-name {
+      font-size: 15px; font-weight: 600; letter-spacing: -0.02em;
+      color: var(--txt1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .project-meta { font-size: 11px; color: var(--txt2); font-family: var(--mono); margin-top: 2px; }
+    .project-arrow { color: var(--txt3); transition: all 180ms var(--ease); flex-shrink: 0; font-size: 14px; }
+    .project-card:hover .project-arrow { color: var(--txt2); transform: translateX(2px); }
 
+    /* ───── PLATFORM GRID ───────────────────────────────────── */
+    .platform-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    .platform-card {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 13px;
+      background: var(--surface);
+      border-radius: var(--r-md);
+      box-shadow: 0 0 0 1px var(--border);
+      cursor: pointer;
+      transition: all 160ms var(--ease);
+      animation: fade-in 200ms var(--ease) both;
+    }
+    .platform-card:hover {
+      background: var(--surface-hov);
+      box-shadow: 0 0 0 1px var(--border-med), 0 4px 14px rgba(0,0,0,0.2);
+      transform: translateY(-1px);
+    }
+    .platform-card:active { transform: scale(0.97); transition-duration: 80ms; }
+    .platform-card.has-tabs {
+      box-shadow: 0 0 0 1px var(--pc-brd, var(--border-med)),
+                  inset 0 0 24px var(--pc-bg, transparent);
+    }
+
+    .platform-icon-wrap {
+      width: 28px; height: 28px; border-radius: 7px;
+      background: var(--surface-act);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-size: 15px; line-height: 1;
+    }
+    .platform-info { flex: 1; min-width: 0; }
+    .platform-name { font-size: 12px; font-weight: 600; color: var(--txt1); }
+    .platform-status-row {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 10px; color: var(--txt3); font-family: var(--mono); margin-top: 1px;
+    }
+    .pdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .pdot.active { color: var(--green); }
+    .pdot.pending { color: var(--yellow); }
+
+    /* ───── SESSION STATE BADGE ─────────────────────────────── */
+    .state-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 7px; border-radius: 99px;
+      font-size: 10px; font-weight: 600; font-family: var(--mono);
+    }
+    .state-badge.completed { color: var(--green); background: var(--green-bg); }
+    .state-badge.failed    { color: var(--red);   background: var(--red-bg); }
+    .state-badge.active    { color: var(--accent-2); background: var(--accent-bg); }
+    .state-badge.pending   { color: var(--yellow); background: var(--yellow-bg); }
+    .state-spinner {
+      width: 8px; height: 8px; border: 1.5px solid currentColor;
+      border-top-color: transparent; border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    /* ───── SESSION LIST ────────────────────────────────────── */
+    .session-list { display: flex; flex-direction: column; gap: 6px; }
+
+    .session-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface);
+      border-radius: var(--r-md);
+      box-shadow: 0 0 0 1px var(--border);
+      cursor: pointer;
+      transition: all 160ms var(--ease);
+      animation: fade-in 250ms var(--ease) both;
+      width: 100%; text-align: left;
+    }
+    .session-row:hover {
+      background: var(--surface-hov);
+      transform: translateX(2px);
+    }
+    .session-pip {
+      width: 3px; height: 32px; border-radius: 99px; flex-shrink: 0;
+    }
+    .session-body { flex: 1; min-width: 0; }
+    .session-title {
+      font-size: 12px; font-weight: 500; color: var(--txt1);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .session-sub {
+      font-size: 10px; color: var(--txt3); font-family: var(--mono); margin-top: 1px;
+    }
+    .session-time { font-size: 10px; color: var(--txt3); font-family: var(--mono); flex-shrink: 0; }
+
+    /* ───── EMPTY STATE ─────────────────────────────────────── */
+    .empty {
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center; padding: 32px 24px; gap: 8px;
+    }
+    .empty-icon {
+      width: 48px; height: 48px; border-radius: 15px;
+      background: var(--surface);
+      box-shadow: 0 0 0 1px var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; margin-bottom: 4px;
+    }
+    .empty-title { font-size: 14px; font-weight: 600; color: var(--txt1); letter-spacing: -0.01em; }
+    .empty-desc  { font-size: 12px; color: var(--txt2); line-height: 1.55; max-width: 220px; }
+    .cta-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 16px; margin-top: 4px;
+      background: var(--accent); border-radius: var(--r-sm);
+      font-size: 12px; font-weight: 600; color: #fff;
+      transition: all 180ms var(--ease);
+      box-shadow: 0 4px 14px rgba(139,92,246,0.35);
+      cursor: pointer;
+    }
+    .cta-btn:hover { background: var(--accent-2); transform: translateY(-1px); box-shadow: 0 6px 18px rgba(139,92,246,0.45); }
+    .cta-btn:active { transform: scale(0.97); }
+
+    /* ───── SKELETON ────────────────────────────────────────── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface) 25%, var(--surface-hov) 50%, var(--surface) 75%);
+      background-size: 400px 100%;
+      animation: shimmer 1.4s linear infinite;
+      border-radius: var(--r-lg);
+    }
+
+    /* ───── ACTION BAR ──────────────────────────────────────── */
+    .action-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 18px 16px;
+      border-top: 1px solid var(--border);
+    }
+    .btn-primary {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 8px 12px;
+      background: var(--accent-bg); border: 1px solid var(--accent-brd);
+      border-radius: var(--r-sm);
+      font-size: 12px; font-weight: 600; color: var(--accent-2);
+      transition: all 160ms var(--ease); cursor: pointer;
+    }
+    .btn-primary:hover { background: rgba(139,92,246,0.17); border-color: rgba(139,92,246,0.32); }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-icon {
+      display: flex; align-items: center; justify-content: center;
+      width: 34px; height: 34px; flex-shrink: 0;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--txt2); font-size: 16px; line-height: 1;
+      transition: all 160ms var(--ease); cursor: pointer;
+    }
+    .btn-icon:hover { background: var(--surface-hov); border-color: var(--border-med); color: var(--txt1); }
+    .btn-icon:active { transform: scale(0.95); }
+
+    /* ───── MISC ────────────────────────────────────────────── */
     .no-data {
-      font-size: 11px;
-      color: var(--text-3);
-      padding: 2px 0 4px;
-      line-height: 1.4;
+      font-size: 11px; color: var(--txt3); font-family: var(--mono); padding: 2px 0 4px;
     }
-
-    /* ── Footer ───────────────────────────────────────────── */
-    .footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 14px;
-    }
-
-    .ghost-btn {
-      font-size: 11px;
-      color: var(--text-3);
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 2px 0;
-      font-family: var(--ui);
-      transition: color 0.15s;
-    }
-    .ghost-btn:hover { color: var(--error); }
-
-    .footer-hint { font-size: 10px; color: var(--text-3); font-family: var(--mono); }
   </style>
 </head>
 <body>
-  <div>
 
-    <!-- ── Header ─────────────────────────────────────────── -->
-    <header class="header">
-      <div class="logo" aria-hidden="true">
-        <svg viewBox="0 0 24 24">
-          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-          <path d="M2 17l10 5 10-5"/>
-          <path d="M2 12l10 5 10-5"/>
-        </svg>
-      </div>
-      <div class="header-info">
-        <div class="header-title">Context Workspace</div>
-        <div id="backendStatus" class="backend-status">Checking backend…</div>
-      </div>
-    </header>
+  <!-- ── HEADER ──────────────────────────────────────────── -->
+  <header class="header">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <span class="app-name">Context Workspace</span>
+    <div class="status-capsule" id="statusCapsule">
+      <div class="status-dot"></div>
+      <span id="statusLabel">connecting</span>
+    </div>
+  </header>
 
-    <!-- ── Project ────────────────────────────────────────── -->
-    <section class="section">
-      <div class="section-header">Active Project</div>
-      <div class="section-body" id="projectBody">
-        <div class="no-data">Loading…</div>
-      </div>
-    </section>
+  <div class="sep"></div>
 
-    <!-- ── AI Platforms ───────────────────────────────────── -->
-    <section class="section" id="platformsSection">
-      <div class="section-header">AI Platforms</div>
-      <div class="section-body" id="platformBody"></div>
-    </section>
+  <!-- ── SCROLLABLE CONTENT ──────────────────────────────── -->
+  <main class="content" id="mainContent">
+    <!-- Initial skeleton -->
+    <div class="section">
+      <div class="skeleton" style="height:72px"></div>
+    </div>
+    <div class="section" style="padding-top:0">
+      <div class="skeleton" style="height:130px; border-radius:12px"></div>
+    </div>
+  </main>
 
-    <!-- ── Recent Saves ───────────────────────────────────── -->
-    <section class="section" id="historySection">
-      <div class="section-header">Recent Saves</div>
-      <div class="section-body" id="historyBody"></div>
-    </section>
+  <!-- ── ACTION BAR ──────────────────────────────────────── -->
+  <footer class="action-bar">
+    <button class="btn-primary" id="openWorkspaceBtn">
+      <span style="font-size:13px">⚡</span>
+      Open Workspace
+    </button>
+    <button class="btn-icon" id="newProjectBtn" title="New Project">＋</button>
+    <button class="btn-icon" id="menuBtn" title="More">⋯</button>
+  </footer>
 
-    <!-- ── Footer ─────────────────────────────────────────── -->
-    <footer class="footer">
-      <button id="clearBtn" class="ghost-btn">Clear State</button>
-      <span class="footer-hint">v1.1</span>
-    </footer>
-
-  </div>
   <script type="module" src="popup.js"></script>
 </body>
 </html>
