@@ -94,7 +94,9 @@ async function doApiCapture(sessionId, platform, url, title) {
       session_id:  sessionId,
       platform,
       url,
-      raw_content: { title, url, captured_at: new Date().toISOString() },
+      // messages:[] ensures the frontend component renders a preview area
+      // rather than "No messages extracted." for popup-captured contexts.
+      raw_content: { title, url, captured_at: new Date().toISOString(), messages: [] },
     }),
   });
 }
@@ -564,11 +566,12 @@ async function init() {
   if (stored[STORAGE.selectedProject]) {
     S.selectedProjectId = stored[STORAGE.selectedProject];
   }
-  if (stored[STORAGE.activeTab]) {
-    S.currentTab = stored[STORAGE.activeTab];
-    if (S.currentTab !== 'capture') {
-      await switchTab(S.currentTab);
-    }
+  // Do NOT pre-set S.currentTab here — switchTab() has an early-return guard
+  // "if (S.currentTab === name) return" that would skip the DOM update if we
+  // pre-set it to the stored value before calling switchTab().
+  const storedTab = stored[STORAGE.activeTab];
+  if (storedTab && storedTab !== 'capture') {
+    await switchTab(storedTab);
   }
 
   // 2. Detect current tab (fast, local)

@@ -72,7 +72,10 @@ export function useProjectContexts(projectId: string) {
   return useQuery<ApiContext[]>({
     queryKey: [QUERY_KEYS.projects, projectId, QUERY_KEYS.contexts],
     queryFn: () => projectService.getProjectContexts(projectId),
-    staleTime: DEFAULT_STALE_TIME,
+    // staleTime: 0 so TanStack Query refetches on window focus.
+    // When the user captures in the popup then switches back to the browser
+    // the "Captured Context" tab will pick up the new rows automatically.
+    staleTime: 0,
     enabled: !!projectId,
   });
 }

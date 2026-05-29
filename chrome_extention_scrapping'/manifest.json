@@ -14,7 +14,9 @@
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
     "https://claude.ai/*",
-    "https://gemini.google.com/*"
+    "https://gemini.google.com/*",
+    "http://localhost:8000/*",
+    "http://localhost:3000/*"
   ],
   "externally_connectable": {
     "matches": [

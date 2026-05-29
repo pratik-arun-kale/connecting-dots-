@@ -30,19 +30,30 @@ class Settings(BaseSettings):
 
     # ── API ──────────────────────────────────────────────────────────────────
     api_v1_prefix: str = "/api/v1"
+
+    # Base origins always allowed. The extension ID changes when loaded unpacked,
+    # so set EXTENSION_ORIGIN=chrome-extension://<your-id> in .env to override.
+    # Find the ID at chrome://extensions after loading the extension unpacked.
+    extension_origin: str = "chrome-extension://klbkondckkfnmfjpgnlcbajnkofjoiab"
+
     allowed_origins: list[str] = Field(
         default=[
             "http://localhost:3000",
             "http://localhost:5173",
-            # Chrome extension — set ALLOWED_ORIGINS in .env to override with the real ID.
-            # Starlette CORSMiddleware requires exact origins; chrome-extension://* is not valid.
-            "chrome-extension://klbkondckkfnmfjpgnlcbajnkofjoiab",
             # AI platform origins — needed for content scripts that POST directly to the backend.
             "https://chat.openai.com",
+            "https://chatgpt.com",
             "https://claude.ai",
             "https://gemini.google.com",
         ]
     )
+
+    @model_validator(mode="after")
+    def _add_extension_origin(self) -> "Settings":
+        """Inject the extension origin into allowed_origins if not already present."""
+        if self.extension_origin and self.extension_origin not in self.allowed_origins:
+            self.allowed_origins = [*self.allowed_origins, self.extension_origin]
+        return self
 
     # ── PostgreSQL ───────────────────────────────────────────────────────────
     postgres_host: str = "localhost"
