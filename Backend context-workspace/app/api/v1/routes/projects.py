@@ -45,7 +45,8 @@ async def create_project_with_sessions(
     project = await project_service.create_project(ProjectCreate(name=payload.name))
     sessions = []
     for platform in payload.platforms:
-        session = await session_service.create_session(
+        # create_or_get_session is idempotent: returns (session, created_bool)
+        session, _ = await session_service.create_or_get_session(
             SessionCreate(project_id=project.id, source_platform=platform)
         )
         sessions.append(session)
