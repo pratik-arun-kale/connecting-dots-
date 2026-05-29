@@ -44,23 +44,40 @@ const S = {
 // ── API helpers ───────────────────────────────────────────────────────────────
 
 async function apiFetch(path, opts = {}) {
-  const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(6000),
-    ...opts,
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status}: ${body.slice(0, 100)}`);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const res = await fetch(API + path, {
+      headers: { 'Content-Type': 'application/json' },
+      signal: ctrl.signal,
+      ...opts,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}: ${body.slice(0, 100)}`);
+    }
+    return res.json();
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
   }
-  return res.json();
 }
 
 async function healthCheck() {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 3000);
   try {
-    const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`${API}/health`, { signal: ctrl.signal });
+    clearTimeout(timer);
     return res.ok;
-  } catch {
+  } catch (err) {
+    clearTimeout(timer);
+    // Log the real error so the developer can see it in the popup DevTools console.
+    // If this is a TypeError: Failed to fetch, the most likely cause is that the
+    // extension has not been reloaded after manifest.json was updated with
+    // host_permissions for http://localhost:8000/*.
+    console.warn('[CW] healthCheck failed:', err instanceof Error ? err.message : err);
     return false;
   }
 }
