@@ -16,7 +16,7 @@ from app.core.exceptions import NotFoundException
 from app.core.logging import get_logger
 from app.models.project import Project
 from app.repositories.project import ProjectRepository
-from app.schemas.project import ProjectCreate, ProjectUpdate
+from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 
 logger = get_logger(__name__)
 
@@ -29,10 +29,20 @@ class ProjectService:
 
     async def list_projects(
         self, *, offset: int = 0, limit: int = 100
-    ) -> tuple[list[Project], int]:
+    ) -> tuple[list[ProjectResponse], int]:
         projects, total = await self._repo.list_projects(offset=offset, limit=limit)
         logger.debug("projects_listed", total=total)
-        return projects, total
+
+        # Enrich each project with its session + context counts
+        enriched: list[ProjectResponse] = []
+        for p in projects:
+            s_count, c_count = await self._repo.get_counts(p.id)
+            resp = ProjectResponse.model_validate(p)
+            resp.session_count = s_count
+            resp.context_count = c_count
+            enriched.append(resp)
+
+        return enriched, total
 
     async def get_project(self, project_id: uuid.UUID) -> Project:
         project = await self._repo.get_by_id(project_id)

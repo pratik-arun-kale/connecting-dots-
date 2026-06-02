@@ -15,8 +15,17 @@ from app.models.session import Session
 from app.repositories.base import BaseRepository
 
 
+
+
+
 class ContextRepository(BaseRepository[Context]):
     model = Context
+
+    async def get_by_idempotency_key(self, key: str) -> Context | None:
+        result = await self.session.execute(
+            select(Context).where(Context.idempotency_key == key)
+        )
+        return result.scalar_one_or_none()
 
     async def list_by_session(
         self,

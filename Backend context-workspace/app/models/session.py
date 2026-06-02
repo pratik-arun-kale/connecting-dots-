@@ -25,12 +25,13 @@ if TYPE_CHECKING:
 class SourcePlatform:
     """Allowed values for Session.source_platform."""
 
-    CHATGPT = "chatgpt"
-    CLAUDE  = "claude"
-    GEMINI  = "gemini"
-    UNKNOWN = "unknown"
+    CHATGPT    = "chatgpt"
+    CLAUDE     = "claude"
+    GEMINI     = "gemini"
+    PERPLEXITY = "perplexity"
+    UNKNOWN    = "unknown"
 
-    ALL = {CHATGPT, CLAUDE, GEMINI, UNKNOWN}
+    ALL = {CHATGPT, CLAUDE, GEMINI, PERPLEXITY, UNKNOWN}
 
 
 class SessionState:

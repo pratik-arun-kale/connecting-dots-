@@ -2,12 +2,10 @@
 main.py
 ────────
 FastAPI application factory and entry-point.
-
-create_app() is kept as a factory function to facilitate testing (each test
-can call create_app() and get a fresh, isolated instance).
 """
 
 from contextlib import asynccontextmanager
+from typing import Callable
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,29 +22,77 @@ configure_logging()
 logger = get_logger(__name__)
 
 
+# ── Extension CORS shim ───────────────────────────────────────────────────────
+
+class ExtensionCORSMiddleware:
+    """Pure-ASGI middleware that adds CORS headers for chrome-extension:// origins.
+
+    Starlette's CORSMiddleware allow_origin_regex is silently swallowed when
+    wrapped by BaseHTTPMiddleware (used by RequestLoggingMiddleware) because
+    BaseHTTPMiddleware intercepts the ASGI send() before inner middleware can
+    write response headers. This shim runs at the outermost ASGI layer —
+    above everything — and adds headers directly into the response start message.
+    """
+
+    def __init__(self, app: Callable) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        # Read Origin header
+        headers = dict(scope.get("headers", []))
+        origin = headers.get(b"origin", b"").decode()
+
+        is_extension = origin.startswith("chrome-extension://")
+
+        # For extension origins: handle OPTIONS preflight ourselves
+        if is_extension and scope["method"] == "OPTIONS":
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"access-control-allow-origin",      origin.encode()),
+                    (b"access-control-allow-credentials", b"true"),
+                    (b"access-control-allow-methods",     b"GET, POST, PUT, PATCH, DELETE, OPTIONS"),
+                    (b"access-control-allow-headers",     b"*"),
+                    (b"access-control-max-age",           b"600"),
+                    (b"content-length",                   b"0"),
+                ],
+            })
+            await send({"type": "http.response.body", "body": b""})
+            return
+
+        if not is_extension:
+            await self.app(scope, receive, send)
+            return
+
+        # Wrap send() to inject CORS headers into the response start message
+        async def send_with_cors(message):
+            if message["type"] == "http.response.start":
+                extra = [
+                    (b"access-control-allow-origin",      origin.encode()),
+                    (b"access-control-allow-credentials", b"true"),
+                ]
+                message = {
+                    **message,
+                    "headers": list(message.get("headers", [])) + extra,
+                }
+            await send(message)
+
+        await self.app(scope, receive, send_with_cors)
+
+
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Startup / shutdown hook.
-    All long-lived resources (DB pool, Redis) are initialised here and
-    cleaned up on shutdown — not inside endpoint handlers.
-    """
-    logger.info(
-        "app_starting",
-        name=settings.app_name,
-        version=settings.app_version,
-        env=settings.app_env,
-    )
-    logger.info(
-        "cors_allowed_origins",
-        origins=settings.allowed_origins,
-    )
-
-    # Future: initialise Redis, AI SDK clients, embedding model warm-up, etc.
+    logger.info("app_starting", name=settings.app_name,
+                version=settings.app_version, env=settings.app_env)
+    logger.info("cors_allowed_origins", origins=settings.allowed_origins)
     yield
-
     logger.info("app_shutting_down")
     await dispose_engine()
     await close_redis()
@@ -69,7 +115,8 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # ── Middleware (order matters — outermost runs first) ─────────────────────
+    # ── Middleware ────────────────────────────────────────────────────────────
+    # Standard CORS for listed origins (localhost, AI platforms, known ext ID)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins,
@@ -89,4 +136,12 @@ def create_app() -> FastAPI:
     return app
 
 
-app = create_app()
+def _build_app() -> Callable:
+    """Wrap the FastAPI app with the extension CORS shim at the ASGI level."""
+    fastapi_app = create_app()
+    if settings.is_development:
+        return ExtensionCORSMiddleware(fastapi_app)
+    return fastapi_app
+
+
+app = _build_app()

@@ -1,18 +1,34 @@
 {
   "type": "module",
-  "name": "pagecapture-workspace",
+  "name": "context-workspace",
   "private": true,
-  "version": "1.2.0",
-  "description": "Context Workspace Chrome extension — project-aware AI session tracker",
+  "version": "3.0.0",
+  "description": "Context Workspace — premium AI project manager Chrome extension",
   "scripts": {
-    "build": "esbuild src/background.ts --bundle --format=esm --outfile=background.js --platform=browser",
-    "watch": "esbuild src/background.ts --bundle --format=esm --outfile=background.js --platform=browser --watch",
+    "dev": "vite build --config vite.popup.config.ts --watch",
+    "build": "vite build --config vite.popup.config.ts && vite build --config vite.sidepanel.config.ts && node scripts/postbuild.mjs",
+    "build:bg": "esbuild src/background.ts --bundle --format=esm --outfile=dist/background.js --platform=browser",
+    "build:full": "npm run build && npm run build:bg",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "framer-motion": "^11.18.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.4",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.298",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.5.2",
+    "autoprefixer": "^10.4.21",
     "esbuild": "^0.24.0",
-    "typescript": "^5.7.0"
-  },
-  "main": "pipeline/index.js"
+    "postcss": "^8.5.4",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.0",
+    "vite": "^6.3.5"
+  }
 }

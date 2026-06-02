@@ -15,6 +15,7 @@ import uuid
 from fastapi import APIRouter, Query, status
 
 from app.dependencies import ContextServiceDep, ProjectServiceDep, SessionServiceDep
+from app.schemas.capture import CaptureConversationRequest, CaptureConversationResponse
 from app.schemas.context import ContextListResponse, ContextResponse
 from app.schemas.project import (
     ProjectCreate,
@@ -80,11 +81,9 @@ async def list_projects(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> ProjectListResponse:
+    # service.list_projects now returns list[ProjectResponse] already enriched with counts
     projects, total = await service.list_projects(offset=offset, limit=limit)
-    return ProjectListResponse(
-        items=[ProjectResponse.model_validate(p) for p in projects],
-        total=total,
-    )
+    return ProjectListResponse(items=projects, total=total)
 
 
 @router.get(
@@ -124,6 +123,20 @@ async def delete_project(
     service: ProjectServiceDep,
 ) -> None:
     await service.delete_project(project_id)
+
+
+@router.post(
+    "/{project_id}/capture",
+    response_model=CaptureConversationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Capture a full AI conversation into a project (idempotent)",
+)
+async def capture_conversation(
+    project_id: uuid.UUID,
+    payload: CaptureConversationRequest,
+    context_service: ContextServiceDep,
+) -> CaptureConversationResponse:
+    return await context_service.capture_conversation(project_id, payload)
 
 
 @router.get(

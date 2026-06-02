@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,10 +38,17 @@ class Context(Base, UUIDPrimaryKeyMixin):
         index=True,
     )
 
+    # ── Capture-specific columns ─────────────────────────────────────────────
+    # Promoted out of JSONB for efficient querying and deduplication.
+    idempotency_key: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
+    title: Mapped[str | None]    = mapped_column(String(512), nullable=True)
+    messages_count: Mapped[int]  = mapped_column(Integer, nullable=False, default=0)
+    platform: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    chat_url: Mapped[str | None] = mapped_column(String(2048), nullable=True, index=True)
+
     # ── Content columns ──────────────────────────────────────────────────────
-    # raw_content  : required — the original, unprocessed payload from the
-    #                capture source (Chrome extension, pasted text, API dump…)
-    # structured_content : optional — populated asynchronously by AI pipeline
     raw_content: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False
     )

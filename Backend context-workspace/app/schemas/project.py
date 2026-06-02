@@ -41,6 +41,8 @@ class ProjectResponse(AppBaseModel):
     description: str | None
     created_at: datetime
     updated_at: datetime
+    session_count: int = 0
+    context_count: int = 0
 
 
 class ProjectListResponse(AppBaseModel):

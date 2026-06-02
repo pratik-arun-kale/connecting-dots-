@@ -50,3 +50,50 @@ export interface SessionFailedEvent {
 }
 
 export type SessionEvent = UiReadyEvent | UrlDetectedEvent | SessionFailedEvent;
+
+// ── Context Capture (Popup → Background → Content Script) ────────────────────
+
+export interface CaptureContextRequest {
+  type:            'CAPTURE_CONTEXT_REQUEST';
+  projectId:       string;
+  tabId:           number;
+  platform:        string;
+  idempotencyKey:  string;
+}
+
+export interface CaptureContextResult {
+  type: 'CAPTURE_CONTEXT_RESULT';
+  ok:   true;
+  contextId:     string;
+  sessionId:     string;
+  title:         string;
+  messageCount:  number;
+  platform:      string;
+  capturedAt:    string;
+} | {
+  type: 'CAPTURE_CONTEXT_RESULT';
+  ok:   false;
+  error: 'LOCK_HELD' | 'TAB_DEAD' | 'EXTRACT_FAILED' | 'UPLOAD_FAILED' | 'DUPLICATE' | 'PROJECT_MISMATCH';
+  detail?: string;
+}
+
+export interface ExtractConversationMessage {
+  type: 'EXTRACT_CONVERSATION';
+}
+
+export interface ExtractConversationResult {
+  ok:   true;
+  payload: {
+    title:    string;
+    messages: Array<{ role: string; content: string; timestamp: string | null; index: number }>;
+    metadata: { model: string | null; messageCount: number; charCount: number; extractorVersion: string };
+  };
+} | {
+  ok:    false;
+  error: 'NO_MESSAGES' | 'DOM_CHANGED' | 'EXTRACTION_FAILED';
+  detail: string;
+}
+
+export type InternalMessage =
+  | ContentScriptMessage
+  | CaptureContextRequest;

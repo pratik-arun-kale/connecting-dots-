@@ -15,6 +15,27 @@ export interface BackendSession {
   created_at: string;
 }
 
+export interface CapturePayload {
+  idempotency_key: string;
+  platform:        string;
+  chat_url:        string;
+  captured_at:     string;
+  title:           string;
+  messages:        Array<{ role: string; content: string; timestamp: string | null; index: number }>;
+  metadata:        Record<string, unknown> | null;
+}
+
+export interface CaptureResponse {
+  context_id:     string;
+  session_id:     string;
+  title:          string;
+  messages_count: number;
+  platform:       string;
+  chat_url:       string;
+  captured_at:    string;
+  created:        boolean;
+}
+
 export class BackendClient {
   constructor(private readonly baseUrl: string = DEFAULT_BASE) {}
 
@@ -39,6 +60,19 @@ export class BackendClient {
       throw new Error(`linkSession → ${res.status}: ${await res.text()}`);
     }
     return res.json() as Promise<BackendSession>;
+  }
+
+  async captureConversation(projectId: string, payload: CapturePayload): Promise<CaptureResponse> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/capture`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`captureConversation → ${res.status}: ${body.slice(0, 200)}`);
+    }
+    return res.json() as Promise<CaptureResponse>;
   }
 
   async failSession(sessionId: string, reason: string, detail?: string): Promise<void> {
