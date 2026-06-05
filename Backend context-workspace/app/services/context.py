@@ -96,7 +96,8 @@ class ContextService:
             platform=payload.platform,
             chat_url=payload.chat_url,
             raw_content=raw_content,
-            metadata_=payload.metadata,
+            # Always include platform + url in metadata so legacy readers still work
+            metadata_={"platform": payload.platform, "url": payload.chat_url, **(payload.metadata or {})},
         )
 
         logger.info(

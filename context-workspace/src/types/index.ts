@@ -117,6 +117,11 @@ export interface ApiContext {
   tags: string[] | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
+  // Promoted capture fields (populated by extension capture pipeline)
+  title?: string | null;
+  platform?: string | null;
+  chat_url?: string | null;
+  messages_count?: number;
 }
 
 export interface CreateProjectWithSessionsRequest {

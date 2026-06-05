@@ -69,10 +69,13 @@ class ContextResponse(AppBaseModel):
     raw_content: JsonDict
     structured_content: JsonDict | None
     tags: list[str] | None
-    # validation_alias (not alias) so ORM attribute "metadata_" is read correctly
-    # but the JSON output key remains "metadata" (FastAPI uses by_alias=True).
     metadata: JsonDict | None = Field(None, validation_alias="metadata_")
     created_at: datetime
+    # Promoted fields — populated by the capture pipeline
+    title:         str | None = None
+    platform:      str | None = None
+    chat_url:      str | None = None
+    messages_count: int = 0
 
     model_config = {
         "from_attributes": True,
