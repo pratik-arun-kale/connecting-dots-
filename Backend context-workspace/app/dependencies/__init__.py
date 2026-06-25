@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.engine import get_db_session
 from app.services.context import ContextService
 from app.services.project import ProjectService
+from app.services.rag_service import RagService
 from app.services.session import SessionService
 
 # ── Database session ──────────────────────────────────────────────────────────
@@ -35,8 +36,13 @@ def get_context_service(db: DbSession) -> ContextService:
     return ContextService(db)
 
 
+def get_rag_service() -> RagService:
+    return RagService()
+
+
 # ── Annotated aliases (convenience for route signatures) ─────────────────────
 
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
 SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
 ContextServiceDep = Annotated[ContextService, Depends(get_context_service)]
+RagServiceDep     = Annotated[RagService,     Depends(get_rag_service)]

@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
 import { QUERY_KEYS, DEFAULT_STALE_TIME } from '@/lib/constants';
 import { projectService, sessionService, contextService, searchService } from '@/lib/api/services';
-import type { ApiContext, ApiSession, CreateProjectWithSessionsRequest, Project, Session, Context, ChatMessage } from '@/types';
+import type { ApiContext, ApiSession, CreateProjectWithSessionsRequest, Project, RagQueryResponse, Session, Context, ChatMessage } from '@/types';
 
 // ──────────────────────────────────────────────
 // Project Hooks
@@ -164,6 +164,16 @@ export function useCreateContext() {
       }
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, newContext.projectId] });
     },
+  });
+}
+
+// ──────────────────────────────────────────────
+// RAG Query Hook
+// ──────────────────────────────────────────────
+
+export function useProjectQuery(projectId: string) {
+  return useMutation<RagQueryResponse, Error, string>({
+    mutationFn: (question: string) => projectService.queryProject(projectId, question),
   });
 }
 

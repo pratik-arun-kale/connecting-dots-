@@ -7,9 +7,10 @@ import { ProjectHeader } from '@/components/project/project-header';
 import { SessionTimeline } from '@/components/project/session-timeline';
 import { CapturedContextList } from '@/components/project/captured-context-list';
 import { NotesSection } from '@/components/project/notes-section';
+import { RagQueryPanel } from '@/components/project/rag-query-panel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, MessageSquare, Bookmark, StickyNote, Loader2 } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Bookmark, StickyNote, Loader2, Sparkles } from 'lucide-react';
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -89,6 +90,15 @@ export default function ProjectDetailPage() {
                 Scratchpad & Notes
               </span>
             </TabsTrigger>
+            <TabsTrigger
+              value="ask"
+              className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 rounded-none px-1 pb-2.5 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground data-[state=active]:text-foreground border-b-2 border-transparent transition-all cursor-pointer"
+            >
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" />
+                Ask AI
+              </span>
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -119,6 +129,13 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="notes" className="outline-none pt-2">
           <NotesSection projectId={project.id} />
+        </TabsContent>
+
+        <TabsContent value="ask" className="outline-none pt-2">
+          <RagQueryPanel
+            projectId={project.id}
+            chunksIndexed={contexts.length * 3}
+          />
         </TabsContent>
       </Tabs>
     </div>

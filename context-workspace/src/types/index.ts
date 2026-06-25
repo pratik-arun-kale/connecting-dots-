@@ -140,6 +140,30 @@ export interface ApiContextListResponse {
 }
 
 // ──────────────────────────────────────────────
+// RAG Query types
+// ──────────────────────────────────────────────
+
+export interface RagCitation {
+  context_id: string;
+  chunk_id: string;
+  platform: string;
+  title: string;
+  chat_url: string;
+  excerpt: string;
+  reranker_score: number;
+}
+
+export interface RagQueryResponse {
+  answer: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  citations: RagCitation[];
+  query_used: string;
+  corrective_triggered: boolean;
+  top_reranker_score: number;
+  chunks_indexed: number;
+}
+
+// ──────────────────────────────────────────────
 // Extension message types
 // ──────────────────────────────────────────────
 

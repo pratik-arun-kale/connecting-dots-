@@ -5,6 +5,7 @@ import type {
   CreateProjectWithSessionsRequest,
   CreateProjectWithSessionsResponse,
   Project,
+  RagQueryResponse,
 } from '@/types';
 import { mockProjects } from '@/mock';
 import apiClient from '../client';
@@ -92,5 +93,13 @@ export const projectService = {
 
   async deleteProject(id: string): Promise<void> {
     await apiClient.delete(`/projects/${id}`);
+  },
+
+  async queryProject(projectId: string, question: string): Promise<RagQueryResponse> {
+    const response = await apiClient.post<RagQueryResponse>(
+      `/projects/${projectId}/query`,
+      { question },
+    );
+    return response.data;
   },
 };

@@ -12,9 +12,9 @@ DELETE /projects/{id}      – delete a project
 
 import uuid
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, BackgroundTasks, Query, status
 
-from app.dependencies import ContextServiceDep, ProjectServiceDep, SessionServiceDep
+from app.dependencies import ContextServiceDep, ProjectServiceDep, RagServiceDep, SessionServiceDep
 from app.schemas.capture import CaptureConversationRequest, CaptureConversationResponse
 from app.schemas.context import ContextListResponse, ContextResponse
 from app.schemas.project import (
@@ -27,6 +27,7 @@ from app.schemas.project_sessions import (
     CreateProjectWithSessionsRequest,
     CreateProjectWithSessionsResponse,
 )
+from app.schemas.rag import RagQueryRequest, RagQueryResponse
 from app.schemas.session import SessionCreate, SessionResponse
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
@@ -135,8 +136,44 @@ async def capture_conversation(
     project_id: uuid.UUID,
     payload: CaptureConversationRequest,
     context_service: ContextServiceDep,
+    rag_service: RagServiceDep,
+    background_tasks: BackgroundTasks,
 ) -> CaptureConversationResponse:
-    return await context_service.capture_conversation(project_id, payload)
+    result = await context_service.capture_conversation(project_id, payload)
+
+    # Index into ChromaDB in the background — only for new captures (not idempotent replays)
+    if result.created:
+        raw_content = {
+            "title": payload.title,
+            "platform": payload.platform,
+            "chat_url": payload.chat_url,
+            "messages": [m.model_dump() for m in payload.messages],
+            "metadata": payload.metadata or {},
+        }
+        background_tasks.add_task(
+            rag_service.index_context,
+            result.context_id,
+            result.session_id,
+            project_id,
+            raw_content,
+        )
+
+    return result
+
+
+@router.post(
+    "/{project_id}/query",
+    response_model=RagQueryResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Ask a question about this project's captured conversations (RAG)",
+)
+async def query_project_contexts(
+    project_id: uuid.UUID,
+    payload: RagQueryRequest,
+    rag_service: RagServiceDep,
+) -> RagQueryResponse:
+    result = await rag_service.query_project(project_id, payload.question)
+    return RagQueryResponse(**result)
 
 
 @router.get(
