@@ -36,8 +36,11 @@ alembic/__pycache__/
 *.swo
 .DS_Store
 
-# Docker
+# Logs
 *.log
+
+# RAG / Vector store data (runtime-generated, not source code)
+data/chromadb/
 
 # Type checking
 .mypy_cache/
