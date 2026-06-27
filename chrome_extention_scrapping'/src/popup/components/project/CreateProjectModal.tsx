@@ -51,7 +51,7 @@ export function CreateProjectModal({ open, onClose, onCreate }: CreateProjectMod
             initial="hidden"
             animate="show"
             exit="hidden"
-            className="absolute inset-x-4 top-1/2 -translate-y-1/2 z-30 bg-surface-2 border border-white/[0.1] rounded-2xl p-5 shadow-float"
+            className="absolute inset-x-4 top-1/2 -translate-y-1/2 z-30 bg-white border border-surface-5 rounded-2xl p-5 shadow-float"
           >
             <h3 className="text-md font-semibold text-ink-1 mb-1">New Project</h3>
             <p className="text-xs text-ink-3 mb-4">Give your AI workflow a name.</p>
@@ -65,7 +65,7 @@ export function CreateProjectModal({ open, onClose, onCreate }: CreateProjectMod
                 maxLength={80}
                 className={cn(
                   'w-full h-9 px-3 rounded-lg text-sm',
-                  'bg-surface-3 border border-white/[0.08] text-ink-1',
+                  'bg-surface-2 border border-surface-5/70 text-ink-1',
                   'placeholder:text-ink-4 outline-none',
                   'focus:border-accent/50 focus:ring-1 focus:ring-accent/20',
                   'transition-all duration-150 mb-3',

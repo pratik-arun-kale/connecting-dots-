@@ -13,9 +13,9 @@ export function GlassCard({ children, className, onClick, hoverable = true }: Gl
       onClick={onClick}
       className={cn(
         'rounded-xl p-4',
-        'bg-surface-2 border border-white/[0.08]',
+        'bg-white border border-surface-5/70',
         'shadow-card',
-        hoverable && 'transition-all duration-150 hover:bg-surface-3 hover:shadow-card-hover hover:border-white/[0.12]',
+        hoverable && 'transition-all duration-150 hover:shadow-card-hover hover:border-surface-5',
         onClick && 'cursor-pointer',
         className,
       )}

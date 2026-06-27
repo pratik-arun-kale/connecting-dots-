@@ -64,9 +64,9 @@ export function ProjectsPage() {
           <motion.div variants={fadeUp} initial="hidden" animate="show"
             className="flex flex-col items-center py-10 text-center"
           >
-            <div className="w-10 h-10 rounded-xl bg-surface-3 border border-white/6 flex items-center justify-center mb-3">
+            <div className="w-10 h-10 rounded-xl bg-surface-2 border border-surface-5/70 flex items-center justify-center mb-3">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M2 5a2 2 0 012-2h2.586a1 1 0 01.707.293L8 4h4a2 2 0 012 2v5a2 2 0 01-2 2H4a2 2 0 01-2-2V5z" stroke="#52525b" strokeWidth="1.4" strokeLinejoin="round" />
+                <path d="M2 5a2 2 0 012-2h2.586a1 1 0 01.707.293L8 4h4a2 2 0 012 2v5a2 2 0 01-2 2H4a2 2 0 01-2-2V5z" stroke="#ababab" strokeWidth="1.4" strokeLinejoin="round" />
               </svg>
             </div>
             <p className="text-sm text-ink-3 mb-1">{query ? 'No matches' : 'No projects yet'}</p>

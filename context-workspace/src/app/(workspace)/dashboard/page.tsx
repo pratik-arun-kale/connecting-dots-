@@ -1,93 +1,92 @@
 'use client';
 
 import React, { useState } from 'react';
-import { PageHeader } from '@/components/shared/page-header';
 import { StatsBar } from '@/components/dashboard/stats-bar';
 import { ProjectCard } from '@/components/dashboard/project-card';
-import { RecentSessions } from '@/components/dashboard/recent-sessions';
 import { CreateProjectDialog } from '@/components/dashboard/create-project-dialog';
 import { useProjects } from '@/lib/query';
-import { Input } from '@/components/ui/input';
-import { Search, FolderKanban, Info } from 'lucide-react';
+import { Download, FolderKanban } from 'lucide-react';
 import { ProjectCardSkeleton } from '@/components/shared/loading-skeleton';
 
 export default function DashboardPage() {
   const { data: projects = [], isLoading } = useProjects();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [search, setSearch] = useState('');
 
-  // Filter projects based on local search
-  const filteredProjects = projects.filter((p) =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.description.toLowerCase().includes(searchQuery.toLowerCase())
+  const filtered = projects.filter(
+    (p) =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.description.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
-    <div className="space-y-6">
-      {/* Top Header */}
-      <PageHeader
-        title="Dashboard"
-        description="Monitor your active development sessions and captured workspace contexts."
-      >
-        <CreateProjectDialog />
-      </PageHeader>
+    <div className="space-y-7">
+      {/* Page header */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+          <h1 className="text-[28px] font-bold text-[#0f172a] tracking-tight">Dashboard</h1>
+          <p className="text-[14px] text-[#64748b] mt-1">
+            Plan, prioritize, and accomplish your AI workflow with ease.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <CreateProjectDialog />
+          <button className="flex items-center gap-2 h-9 px-4 rounded-xl border border-border bg-white text-[13px] font-medium text-[#0f172a] hover:bg-[#f8fafc] transition-colors">
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Export Data</span>
+          </button>
+        </div>
+      </div>
 
-      {/* Metrics Bar */}
+      {/* Stats row */}
       <StatsBar />
 
-      {/* Core Layout Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Projects */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <FolderKanban className="w-4 h-4 text-indigo-400" />
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Active Projects
-              </h2>
-            </div>
-            
-            {/* Project Filter */}
-            <div className="relative w-full sm:w-60">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Filter projects..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 h-8.5 bg-muted/20 border-border/80 text-xs focus:ring-1 focus:ring-indigo-500/50"
-              />
-            </div>
+      {/* Projects panel — full width */}
+      <div className="bg-white rounded-2xl border border-border overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <FolderKanban className="w-4 h-4 text-[#94a3b8]" />
+            <h2 className="text-[14px] font-semibold text-[#0f172a]">Projects</h2>
+            {!isLoading && (
+              <span className="text-[12px] text-[#94a3b8] font-normal">({filtered.length})</span>
+            )}
           </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              placeholder="Filter projects…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 px-3 rounded-lg border border-border bg-[#f8fafc] text-[13px] text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#cbd5e1] transition-all w-48"
+            />
+            <CreateProjectDialog compact />
+          </div>
+        </div>
 
+        {/* Grid list */}
+        <div className="p-6">
           {isLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[...Array(4)].map((_, i) => (
-                <ProjectCardSkeleton key={i} />
-              ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {[...Array(6)].map((_, i) => <ProjectCardSkeleton key={i} />)}
             </div>
-          ) : filteredProjects.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-8 text-center border border-dashed rounded-xl border-border bg-card/20 min-h-[220px]">
-              <Info className="w-8 h-8 text-muted-foreground/60 mb-3" />
-              <h4 className="font-medium text-sm text-foreground mb-1">No Projects Found</h4>
-              <p className="text-xs text-muted-foreground max-w-xs">
-                {searchQuery ? 'Try adjusting your search criteria.' : 'Create a project to begin mapping context sessions.'}
+          ) : filtered.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-[14px] font-medium text-[#64748b]">
+                {search ? 'No projects match your search.' : 'No projects yet.'}
               </p>
+              {!search && (
+                <p className="text-[13px] text-[#94a3b8] mt-1">
+                  Create your first project to start capturing AI conversations.
+                </p>
+              )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredProjects.map((project) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filtered.map((project) => (
                 <ProjectCard key={project.id} project={project} />
               ))}
             </div>
           )}
-        </div>
-
-        {/* Right Column: Sessions */}
-        <div className="space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <span>Context Activity</span>
-          </h2>
-          <RecentSessions />
         </div>
       </div>
     </div>

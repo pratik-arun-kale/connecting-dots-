@@ -2,71 +2,59 @@
 
 import React from 'react';
 import { useProjects, useSessions, useContexts } from '@/lib/query';
-import { Folder, MessageSquare, Bookmark, Play } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { ArrowUpRight } from 'lucide-react';
 
 export function StatsBar() {
-  const { data: projects = [], isLoading: isLoadingProjects } = useProjects();
-  const { data: sessions = [], isLoading: isLoadingSessions } = useSessions();
-  const { data: contexts = [], isLoading: isLoadingContexts } = useContexts();
+  const { data: projects = [], isLoading: lp } = useProjects();
+  const { data: sessions = [], isLoading: ls } = useSessions();
+  const { data: contexts = [], isLoading: lc } = useContexts();
+  const isLoading = lp || ls || lc;
 
   const activeSessions = sessions.filter((s) => s.status === 'active');
 
-  const stats = [
-    {
-      label: 'Total Projects',
-      value: projects.length,
-      icon: Folder,
-      color: 'text-indigo-500',
-      bg: 'bg-indigo-500/10',
-    },
-    {
-      label: 'Total Sessions',
-      value: sessions.length,
-      icon: MessageSquare,
-      color: 'text-amber-500',
-      bg: 'bg-amber-500/10',
-    },
-    {
-      label: 'Saved Contexts',
-      value: contexts.length,
-      icon: Bookmark,
-      color: 'text-emerald-500',
-      bg: 'bg-emerald-500/10',
-    },
-    {
-      label: 'Active Sessions',
-      value: activeSessions.length,
-      icon: Play,
-      color: 'text-rose-500',
-      bg: 'bg-rose-500/10',
-    },
-  ];
-
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 py-6">
-      {stats.map((stat, i) => {
-        const Icon = stat.icon;
-        return (
-          <Card key={i} className="border border-border/60 bg-card/45 hover:bg-card/75 transition-all">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">{stat.label}</p>
-                <h3 className="text-2xl font-bold tracking-tight mt-1 text-foreground">
-                  {isLoadingProjects || isLoadingSessions || isLoadingContexts ? (
-                    <span className="inline-block w-8 h-6 bg-muted rounded animate-pulse" />
-                  ) : (
-                    stat.value
-                  )}
-                </h3>
-              </div>
-              <div className={`p-2 rounded-lg ${stat.bg} ${stat.color} shrink-0`}>
-                <Icon className="w-5 h-5" />
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Featured card — dark */}
+      <div className="rounded-2xl bg-[#0f172a] p-5 text-white flex flex-col justify-between min-h-[120px]">
+        <div className="flex items-start justify-between">
+          <p className="text-[13px] font-medium text-white/60">Total Projects</p>
+          <button className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center hover:bg-white/10 transition-colors">
+            <ArrowUpRight className="w-3.5 h-3.5 text-white/70" />
+          </button>
+        </div>
+        <div>
+          {isLoading ? (
+            <div className="w-12 h-8 bg-white/10 rounded-lg animate-pulse" />
+          ) : (
+            <p className="text-[36px] font-bold leading-none">{projects.length}</p>
+          )}
+          <p className="text-[11px] text-white/40 mt-1.5">All workspace projects</p>
+        </div>
+      </div>
+
+      {/* Light cards */}
+      {[
+        { label: 'Total Sessions',   value: sessions.length,       sub: 'Across all projects' },
+        { label: 'Saved Contexts',   value: contexts.length,       sub: 'Captured conversations' },
+        { label: 'Active Sessions',  value: activeSessions.length, sub: 'Currently running' },
+      ].map((stat) => (
+        <div key={stat.label} className="rounded-2xl bg-white border border-border p-5 flex flex-col justify-between min-h-[120px]">
+          <div className="flex items-start justify-between">
+            <p className="text-[13px] font-medium text-[#64748b]">{stat.label}</p>
+            <button className="w-7 h-7 rounded-full border border-border flex items-center justify-center hover:bg-[#f8fafc] transition-colors">
+              <ArrowUpRight className="w-3.5 h-3.5 text-[#94a3b8]" />
+            </button>
+          </div>
+          <div>
+            {isLoading ? (
+              <div className="w-10 h-8 bg-[#f1f5f9] rounded-lg animate-pulse" />
+            ) : (
+              <p className="text-[36px] font-bold text-[#0f172a] leading-none">{stat.value}</p>
+            )}
+            <p className="text-[11px] text-[#94a3b8] mt-1.5">{stat.sub}</p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

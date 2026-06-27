@@ -167,6 +167,29 @@ export function useCreateContext() {
   });
 }
 
+export function useUpdateProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; description?: string } }) =>
+      projectService.updateProject(id, data),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([QUERY_KEYS.projects, updated.id], updated);
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects] });
+    },
+  });
+}
+
+export function useDeleteProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => projectService.deleteProject(id),
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: [QUERY_KEYS.projects, id] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects] });
+    },
+  });
+}
+
 // ──────────────────────────────────────────────
 // RAG Query Hook
 // ──────────────────────────────────────────────

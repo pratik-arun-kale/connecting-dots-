@@ -21,9 +21,9 @@ export function SidePanelApp() {
   return (
     <div className="w-full min-h-screen bg-surface-1 text-ink-1 font-sans flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] shrink-0">
+      <header className="flex items-center justify-between px-4 py-3 border-b border-surface-5/60 shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-md bg-accent flex items-center justify-center shadow-glow-sm">
+          <div className="w-5 h-5 rounded-md bg-ink-1 flex items-center justify-center">
             <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
               <rect x="1" y="1" width="4" height="4" rx="1" fill="white" fillOpacity="0.9" />
               <rect x="7" y="1" width="4" height="4" rx="1" fill="white" fillOpacity="0.5" />

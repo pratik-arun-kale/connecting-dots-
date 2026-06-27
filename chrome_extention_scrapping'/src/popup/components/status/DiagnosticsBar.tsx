@@ -32,7 +32,7 @@ export function DiagnosticsBar() {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="mx-4 mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-2 border border-white/[0.06]"
+      className="mx-4 mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-2 border border-surface-5/60"
     >
       {/* Status dot */}
       <div className={cn(

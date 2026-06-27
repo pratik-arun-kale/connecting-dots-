@@ -41,8 +41,8 @@ export function NavBar() {
   const { activeTab, setActiveTab } = useWorkspaceStore()
 
   return (
-    <nav className="shrink-0 px-3 pb-3 pt-2">
-      <div className="flex items-center bg-surface-2 rounded-xl p-1 gap-0.5 shadow-inset-top border border-white/[0.06]">
+    <nav className="shrink-0 px-3 pb-3 pt-2 border-t border-surface-5/50">
+      <div className="flex items-center bg-surface-2 rounded-lg p-1 gap-0.5">
         {TABS.map(tab => {
           const isActive = activeTab === tab.id
           return (
@@ -50,15 +50,15 @@ export function NavBar() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'relative flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg',
+                'relative flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md',
                 'text-xs font-medium transition-colors duration-150',
-                isActive ? 'text-ink-1' : 'text-ink-4 hover:text-ink-2',
+                isActive ? 'text-ink-1' : 'text-ink-3 hover:text-ink-2',
               )}
             >
               {isActive && (
                 <motion.div
                   layoutId="nav-pill"
-                  className="absolute inset-0 bg-surface-4 rounded-lg shadow-card"
+                  className="absolute inset-0 bg-white rounded-md shadow-card"
                   transition={SPRING}
                 />
               )}

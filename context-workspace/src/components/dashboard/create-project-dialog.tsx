@@ -32,7 +32,7 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export function CreateProjectDialog() {
+export function CreateProjectDialog({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([]);
   const [platformError, setPlatformError] = useState('');
@@ -122,9 +122,9 @@ export function CreateProjectDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else setOpen(true); }}>
-      <DialogTrigger render={<Button size="sm" className="bg-indigo-600 hover:bg-indigo-500 text-white gap-1.5 cursor-pointer" />}>
-        <Plus className="w-4 h-4" />
-        <span>New Project</span>
+      <DialogTrigger render={<Button size="sm" className={compact ? "h-7 px-2.5 text-[12px] gap-1 bg-[#f1f5f9] text-[#0f172a] hover:bg-[#e2e8f0] border border-border rounded-lg cursor-pointer" : "h-9 px-4 text-[13px] gap-1.5 bg-[#0f172a] hover:bg-[#1e293b] text-white rounded-xl cursor-pointer"} />}>
+        <Plus className="w-3.5 h-3.5" />
+        {compact ? <span>New</span> : <span>Add Project</span>}
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-110 bg-card border-border">
@@ -144,7 +144,7 @@ export function CreateProjectDialog() {
             <Input
               placeholder="e.g. RAG Research"
               {...register('name')}
-              className="bg-muted/30 border-border focus:border-indigo-500 text-sm focus:ring-1 focus:ring-indigo-500"
+              className="bg-muted/30 border-border focus:border-[#4f46e5] text-sm focus:ring-1 focus:ring-[#4f46e5]/30"
             />
             {errors.name && (
               <span className="text-xs text-rose-500">{errors.name.message}</span>
@@ -170,7 +170,7 @@ export function CreateProjectDialog() {
                     onClick={() => togglePlatform(id)}
                     className={`flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm font-medium transition-all cursor-pointer ${
                       selected
-                        ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400'
+                        ? 'border-[#4f46e5] bg-[#4f46e5]/8 text-[#4f46e5]'
                         : 'border-border/60 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground'
                     }`}
                   >
@@ -203,7 +203,7 @@ export function CreateProjectDialog() {
             </Button>
             <Button
               type="submit"
-              className="bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer"
+              className="bg-[#0f172a] hover:bg-[#1e293b] text-white cursor-pointer"
               disabled={isPending}
             >
               {isPending ? (

@@ -4,7 +4,7 @@ export function PopupShell({ children }: { children: React.ReactNode }) {
   return (
     <div className={cn(
       'w-[420px] min-h-[500px] max-h-[580px]',
-      'bg-surface-1 text-ink-1 font-sans',
+      'bg-white text-ink-1 font-sans',
       'flex flex-col overflow-hidden',
       'shadow-float',
     )}>

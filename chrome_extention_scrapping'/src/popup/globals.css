@@ -12,15 +12,14 @@
   body {
     margin: 0;
     padding: 0;
-    background: #111113;
-    color: #f4f4f5;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+    background: #ffffff;
+    color: #1d1d1f;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif;
     font-size: 13px;
     line-height: 1.5;
     overflow: hidden;
   }
 
-  /* Hide scrollbar but keep scroll */
   .scroll-hide {
     scrollbar-width: none;
   }
@@ -30,20 +29,19 @@
 }
 
 @layer components {
-  .text-display { @apply text-2xl font-bold text-ink-1 tracking-tight; }
+  .text-display { @apply text-2xl font-semibold text-ink-1 tracking-tight; }
   .text-title   { @apply text-lg font-semibold text-ink-1; }
   .text-body    { @apply text-base text-ink-2; }
   .text-caption { @apply text-xs font-medium text-ink-3; }
-  .text-micro   { @apply text-2xs font-semibold text-ink-4 uppercase tracking-widest; }
+  .text-micro   { @apply text-2xs font-medium text-ink-4 uppercase tracking-widest; }
 
-  /* Shimmer skeleton */
   .skeleton {
     @apply rounded-md;
     background: linear-gradient(
       90deg,
-      #1f1f23 25%,
-      #27272c 50%,
-      #1f1f23 75%
+      #f5f5f7 25%,
+      #ebebeb 50%,
+      #f5f5f7 75%
     );
     background-size: 400% 100%;
     animation: shimmer 2.5s linear infinite;

@@ -83,12 +83,9 @@ export const projectService = {
     return response.data.items;
   },
 
-  async updateProject(id: string, data: Partial<Project>): Promise<Project> {
-    await delay(300);
-    const index = mockProjects.findIndex((p) => p.id === id);
-    if (index === -1) throw new Error('Project not found');
-    mockProjects[index] = { ...mockProjects[index], ...data, updatedAt: new Date().toISOString() };
-    return mockProjects[index];
+  async updateProject(id: string, data: { name?: string; description?: string }): Promise<Project> {
+    const response = await apiClient.patch<ApiProject>(`/projects/${id}`, data);
+    return toFrontendProject(response.data);
   },
 
   async deleteProject(id: string): Promise<void> {

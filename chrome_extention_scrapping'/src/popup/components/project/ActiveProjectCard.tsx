@@ -17,13 +17,13 @@ export function ActiveProjectCard() {
     return (
       <motion.div variants={fadeUp} className="px-4 mb-1">
         <GlassCard
-          className="border-dashed border-white/10 cursor-pointer"
+          className="border-dashed border-surface-5 cursor-pointer"
           onClick={() => setActiveTab('projects')}
         >
           <div className="flex flex-col items-center py-2 gap-2 text-center">
-            <div className="w-8 h-8 rounded-lg bg-surface-3 border border-white/8 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-surface-2 border border-surface-5/70 flex items-center justify-center">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M7 2v10M2 7h10" stroke="#52525b" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="M7 2v10M2 7h10" stroke="#ababab" strokeWidth="1.8" strokeLinecap="round" />
               </svg>
             </div>
             <p className="text-sm text-ink-3">No active project</p>
@@ -73,7 +73,7 @@ export function ActiveProjectCard() {
         </div>
 
         {/* Action row */}
-        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/6">
+        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-surface-5/60">
           <CaptureButton
             status={status}
             canCapture={canCapture}
@@ -118,10 +118,10 @@ function CaptureButton({
         'h-8 rounded-lg text-xs font-semibold',
         'transition-all duration-150',
         isDone
-          ? 'bg-status-online/15 text-status-online border border-status-online/20'
+          ? 'bg-status-online/10 text-status-online border border-status-online/20'
           : canCapture
-          ? 'bg-accent/15 text-accent border border-accent/20 hover:bg-accent/25'
-          : 'bg-surface-3 text-ink-4 border border-white/6 cursor-not-allowed',
+          ? 'bg-accent-muted text-accent border border-accent/20 hover:bg-accent/12'
+          : 'bg-surface-2 text-ink-4 border border-surface-5/70 cursor-not-allowed',
       )}
     >
       {isCapturing ? (

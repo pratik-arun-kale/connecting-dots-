@@ -12,29 +12,29 @@ const config: Config = {
     extend: {
       colors: {
         surface: {
-          0:   '#0a0a0b',
-          1:   '#111113',
-          2:   '#18181b',
-          3:   '#1f1f23',
-          4:   '#27272c',
-          5:   '#2e2e34',
+          0: '#ffffff',
+          1: '#ffffff',
+          2: '#f5f5f7',
+          3: '#f2f2f2',
+          4: '#e8e8ed',
+          5: '#d2d2d7',
         },
         ink: {
-          1: '#f4f4f5',
-          2: '#a1a1aa',
-          3: '#71717a',
-          4: '#52525b',
+          1: '#1d1d1f',
+          2: '#6e6e73',
+          3: '#86868b',
+          4: '#ababab',
         },
         accent: {
-          DEFAULT: '#6366f1',
-          muted:   'rgba(99,102,241,0.15)',
-          glow:    'rgba(99,102,241,0.25)',
+          DEFAULT: '#0071e3',
+          muted:   'rgba(0,113,227,0.08)',
+          glow:    'rgba(0,113,227,0.15)',
         },
         status: {
-          online:  '#22c55e',
-          offline: '#ef4444',
-          syncing: '#f59e0b',
-          idle:    '#71717a',
+          online:  '#34c759',
+          offline: '#ff3b30',
+          syncing: '#ff9500',
+          idle:    '#ababab',
         },
         platform: {
           chatgpt:    '#10a37f',
@@ -45,13 +45,13 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
-          '-apple-system', 'BlinkMacSystemFont', '"SF Pro Display"',
-          '"Inter"', 'system-ui', 'sans-serif',
+          '-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"SF Pro Display"',
+          'system-ui', 'sans-serif',
         ],
-        mono: ['"SF Mono"', '"JetBrains Mono"', 'monospace'],
+        mono: ['"SF Mono"', '"Menlo"', 'monospace'],
       },
       fontSize: {
-        '2xs': ['10px', { lineHeight: '14px', letterSpacing: '0.04em' }],
+        '2xs': ['10px', { lineHeight: '14px', letterSpacing: '0.02em' }],
         'xs':  ['11px', { lineHeight: '16px', letterSpacing: '0.01em' }],
         'sm':  ['12px', { lineHeight: '18px' }],
         'base':['13px', { lineHeight: '20px' }],
@@ -63,18 +63,16 @@ const config: Config = {
       borderRadius: {
         'xs':  '6px',
         'sm':  '8px',
-        'md':  '12px',
-        'lg':  '16px',
-        'xl':  '20px',
-        '2xl': '24px',
+        'md':  '10px',
+        'lg':  '12px',
+        'xl':  '16px',
+        '2xl': '20px',
       },
       boxShadow: {
-        'glow-accent': '0 0 20px rgba(99,102,241,0.2)',
-        'glow-sm':     '0 0 10px rgba(99,102,241,0.15)',
-        'card':        '0 1px 0 rgba(255,255,255,0.04), 0 4px 16px rgba(0,0,0,0.4)',
-        'card-hover':  '0 1px 0 rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.5)',
-        'float':       '0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)',
-        'inset-top':   'inset 0 1px 0 rgba(255,255,255,0.06)',
+        'card':        '0 1px 3px rgba(0,0,0,0.06), 0 1px 8px rgba(0,0,0,0.04)',
+        'card-hover':  '0 2px 12px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
+        'float':       '0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06)',
+        'inset-top':   'inset 0 1px 0 rgba(0,0,0,0.04)',
       },
       keyframes: {
         'fade-in': {
@@ -87,7 +85,7 @@ const config: Config = {
         },
         'pulse-dot': {
           '0%, 100%': { opacity: '1' },
-          '50%':      { opacity: '0.3' },
+          '50%':      { opacity: '0.4' },
         },
         'shimmer': {
           from: { backgroundPosition: '-400% 0' },
