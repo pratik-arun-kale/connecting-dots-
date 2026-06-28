@@ -23,6 +23,7 @@ from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
 
 from app.core.rag import embedder, vector_store
+from app.core.rag.ollama_generator import generate_answer
 
 # ── Reranker singleton ─────────────────────────────────────────────────────────
 
@@ -252,7 +253,7 @@ def run_query(project_id: str, question: str) -> Dict[str, Any]:
                 corrective_triggered = True
                 break
 
-    # Assemble answer from top reranked chunk
+    # Generate answer — Ollama LLM for HIGH/MEDIUM, static message for LOW
     if confidence == "LOW" or not reranked:
         answer_text = (
             "I couldn't find sufficiently relevant information in your captured conversations. "
@@ -260,7 +261,7 @@ def run_query(project_id: str, question: str) -> Dict[str, Any]:
         )
         citations: List[Dict] = []
     else:
-        answer_text = reranked[0]["text"]
+        answer_text = generate_answer(question, reranked)
         seen_ctx: set = set()
         citations = []
         for r in reranked[:3]:

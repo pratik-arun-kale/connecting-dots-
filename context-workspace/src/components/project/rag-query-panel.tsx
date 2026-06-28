@@ -278,8 +278,8 @@ export function RagQueryPanel({ projectId, chunksIndexed = 0 }: RagQueryPanelPro
             <Bot className="w-4 h-4 text-indigo-400 absolute inset-0 m-auto" />
           </div>
           <div className="text-center space-y-1">
-            <p className="text-sm font-medium text-foreground">Searching your conversations…</p>
-            <p className="text-xs text-muted-foreground">Running hybrid BM25 + vector retrieval → reranking</p>
+            <p className="text-sm font-medium text-foreground">Thinking…</p>
+            <p className="text-xs text-muted-foreground">Retrieving · reranking · generating answer with qwen2.5:3b</p>
           </div>
         </div>
       )}

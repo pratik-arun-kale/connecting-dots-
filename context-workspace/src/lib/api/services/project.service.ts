@@ -96,6 +96,7 @@ export const projectService = {
     const response = await apiClient.post<RagQueryResponse>(
       `/projects/${projectId}/query`,
       { question },
+      { timeout: 120_000 },
     );
     return response.data;
   },
