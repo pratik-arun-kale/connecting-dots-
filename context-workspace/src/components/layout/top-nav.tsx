@@ -9,6 +9,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuGroup,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -105,10 +106,12 @@ export function TopNav({ onMobileMenuToggle }: TopNavProps) {
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56 bg-white border-border shadow-lg" align="end">
-            <DropdownMenuLabel className="font-normal">
-              <p className="text-[13px] font-semibold text-[#0f172a]">{mockUser.name}</p>
-              <p className="text-[11px] text-[#94a3b8]">{mockUser.email}</p>
-            </DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="font-normal">
+                <p className="text-[13px] font-semibold text-[#0f172a]">{mockUser.name}</p>
+                <p className="text-[11px] text-[#94a3b8]">{mockUser.email}</p>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-[13px]">Profile Settings</DropdownMenuItem>
             <DropdownMenuSeparator />
