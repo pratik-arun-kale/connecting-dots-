@@ -202,23 +202,23 @@ def _simplify_query(query: str) -> str:
     return " ".join(t for t in tokens if t not in _STOP_WORDS and len(t) > 2)
 
 
-# ── Main pipeline ─────────────────────────────────────────────────────────────
+# ── Shared retrieval core ─────────────────────────────────────────────────────
+# BM25 + vector + RRF fusion + cross-encoder reranking + corrective retrieval.
+# Used by both run_query() (QA, generates an answer) and search_conversations()
+# (conversation search, no answer generation) so this logic is defined once.
 
-def run_query(project_id: str, question: str) -> Dict[str, Any]:
+def _retrieve(
+    project_id: str, question: str, rerank_top_k: int = 5
+) -> Dict[str, Any]:
     """
-    Run the full hybrid RAG pipeline against a project's captured contexts.
+    Run the full hybrid retrieval pipeline against a project's captured contexts.
     This function is CPU-bound and should be called via asyncio.to_thread().
     """
     all_chunks = vector_store.get_all_chunks(project_id)
     if not all_chunks:
         return {
-            "answer": (
-                "No context has been captured for this project yet. "
-                "Open ChatGPT, Claude, Gemini, or Perplexity in your browser and click "
-                "'Capture Context' in the extension popup first."
-            ),
+            "reranked": [],
             "confidence": "LOW",
-            "citations": [],
             "query_used": question,
             "corrective_triggered": False,
             "top_reranker_score": 0.0,
@@ -229,7 +229,7 @@ def run_query(project_id: str, question: str) -> Dict[str, Any]:
         bm25_r = _bm25_retrieve(all_chunks, q)
         vec_r = vector_store.retrieve(project_id, embedder.embed_query(q))
         fused = _rrf(bm25_r, vec_r)
-        reranked = _rerank(q, fused)
+        reranked = _rerank(q, fused, top_k=rerank_top_k)
         return bm25_r, vec_r, fused, reranked
 
     bm25_results, vector_results, fused, reranked = _full_retrieval(question)
@@ -252,6 +252,43 @@ def run_query(project_id: str, question: str) -> Dict[str, Any]:
                 query_used = alt_q
                 corrective_triggered = True
                 break
+
+    return {
+        "reranked": reranked,
+        "confidence": confidence,
+        "query_used": query_used,
+        "corrective_triggered": corrective_triggered,
+        "top_reranker_score": float(top_score),
+        "chunks_indexed": len(all_chunks),
+    }
+
+
+# ── Main pipeline (QA — generates an answer) ─────────────────────────────────
+
+def run_query(project_id: str, question: str) -> Dict[str, Any]:
+    """
+    Run the full hybrid RAG pipeline against a project's captured contexts.
+    This function is CPU-bound and should be called via asyncio.to_thread().
+    """
+    retrieval = _retrieve(project_id, question, rerank_top_k=5)
+
+    if retrieval["chunks_indexed"] == 0:
+        return {
+            "answer": (
+                "No context has been captured for this project yet. "
+                "Open ChatGPT, Claude, Gemini, or Perplexity in your browser and click "
+                "'Capture Context' in the extension popup first."
+            ),
+            "confidence": "LOW",
+            "citations": [],
+            "query_used": question,
+            "corrective_triggered": False,
+            "top_reranker_score": 0.0,
+            "chunks_indexed": 0,
+        }
+
+    reranked = retrieval["reranked"]
+    confidence = retrieval["confidence"]
 
     # Generate answer — Ollama LLM for HIGH/MEDIUM, static message for LOW
     if confidence == "LOW" or not reranked:
@@ -284,8 +321,90 @@ def run_query(project_id: str, question: str) -> Dict[str, Any]:
         "answer": answer_text,
         "confidence": confidence,
         "citations": citations,
-        "query_used": query_used,
-        "corrective_triggered": corrective_triggered,
-        "top_reranker_score": float(top_score),
-        "chunks_indexed": len(all_chunks),
+        "query_used": retrieval["query_used"],
+        "corrective_triggered": retrieval["corrective_triggered"],
+        "top_reranker_score": retrieval["top_reranker_score"],
+        "chunks_indexed": retrieval["chunks_indexed"],
+    }
+
+
+# ── Conversation search (retrieval only — no answer generation) ─────────────
+
+def search_conversations(
+    project_id: str, query: str, top_k: int = 10
+) -> Dict[str, Any]:
+    """
+    Find which captured conversations discussed a topic.
+
+    Calls _retrieve() with its default arguments — i.e. the exact same candidate
+    set (BM25 + vector + RRF fusion + cross-encoder reranking + corrective
+    retrieval, same rerank_top_k) that run_query() (Ask AI) uses — then groups
+    those chunk-level hits by their parent conversation (context_id) instead of
+    generating an AI answer. Conversation Search never sees a chunk Ask AI
+    wouldn't also have used as a source.
+
+    Also applies the same LOW-confidence cutoff run_query() uses: when the
+    reranker can't find anything actually relevant, every candidate's score is
+    deeply negative noise (e.g. -10 to -11) rather than a real match, and
+    without this gate they were being surfaced as if they were top hits.
+
+    Groups over reranked[:3] — the exact same slice run_query()'s citations
+    loop reads from — not the full reranked list. Even when overall confidence
+    is HIGH, rank 4-5 of the reranked list can still be a much weaker, off-topic
+    chunk from a different conversation (the reranker always fills every slot
+    it's asked for); Ask AI never cites those, so Conversation Search shouldn't
+    surface them as a "matching" conversation either.
+    This function is CPU-bound and should be called via asyncio.to_thread().
+    """
+    retrieval = _retrieve(project_id, query)
+    reranked = retrieval["reranked"][:3]
+
+    if retrieval["chunks_indexed"] == 0 or retrieval["confidence"] == "LOW" or not reranked:
+        return {
+            "query_used": retrieval["query_used"],
+            "corrective_triggered": retrieval["corrective_triggered"],
+            "chunks_indexed": retrieval["chunks_indexed"],
+            "total_conversations": 0,
+            "conversations": [],
+        }
+
+    conversations: Dict[str, Dict[str, Any]] = {}
+    for r in reranked:
+        meta = r["metadata"]
+        ctx_id = meta.get("context_id", "")
+        if not ctx_id:
+            continue
+        score = r.get("reranker_score", 0.0)
+        entry = conversations.get(ctx_id)
+        if entry is None:
+            entry = {
+                "conversation_id": ctx_id,
+                "title": meta.get("title", ""),
+                "chat_url": meta.get("chat_url", ""),
+                "provider": meta.get("platform", "unknown"),
+                "relevance_score": score,
+                "summary": None,  # no conversation-level summary exists today
+                "_snippets": [],
+            }
+            conversations[ctx_id] = entry
+        else:
+            # Aggregate score across chunks belonging to the same conversation:
+            # the conversation's relevance is its single best-matching chunk.
+            entry["relevance_score"] = max(entry["relevance_score"], score)
+        entry["_snippets"].append((score, r["text"][:400]))
+
+    results: List[Dict[str, Any]] = []
+    for entry in conversations.values():
+        snippets_sorted = sorted(entry.pop("_snippets"), key=lambda s: s[0], reverse=True)
+        entry["top_relevant_snippets"] = [text for _, text in snippets_sorted[:3]]
+        results.append(entry)
+
+    results.sort(key=lambda c: c["relevance_score"], reverse=True)
+
+    return {
+        "query_used": retrieval["query_used"],
+        "corrective_triggered": retrieval["corrective_triggered"],
+        "chunks_indexed": retrieval["chunks_indexed"],
+        "total_conversations": len(results),
+        "conversations": results[:top_k],
     }

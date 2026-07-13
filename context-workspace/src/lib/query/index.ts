@@ -3,8 +3,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
 import { QUERY_KEYS, DEFAULT_STALE_TIME } from '@/lib/constants';
-import { projectService, sessionService, contextService, searchService } from '@/lib/api/services';
-import type { ApiContext, ApiSession, CreateProjectWithSessionsRequest, Project, RagQueryResponse, Session, Context, ChatMessage } from '@/types';
+import { projectService, sessionService, contextService, searchService, conversationSearchService } from '@/lib/api/services';
+import type { ApiContext, ApiSession, ConversationSearchResponse, CreateProjectWithSessionsRequest, Project, RagQueryResponse, Session, Context, ChatMessage } from '@/types';
 
 // ──────────────────────────────────────────────
 // Project Hooks
@@ -197,6 +197,16 @@ export function useDeleteProject() {
 export function useProjectQuery(projectId: string) {
   return useMutation<RagQueryResponse, Error, string>({
     mutationFn: (question: string) => projectService.queryProject(projectId, question),
+  });
+}
+
+// ──────────────────────────────────────────────
+// Conversation Search Hook (retrieval only, no LLM answer)
+// ──────────────────────────────────────────────
+
+export function useSearchConversations(projectId: string) {
+  return useMutation<ConversationSearchResponse, Error, string>({
+    mutationFn: (query: string) => conversationSearchService.searchConversations(projectId, query),
   });
 }
 

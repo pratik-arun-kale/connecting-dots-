@@ -164,6 +164,28 @@ export interface RagQueryResponse {
 }
 
 // ──────────────────────────────────────────────
+// Conversation Search types (retrieval only, no answer generation)
+// ──────────────────────────────────────────────
+
+export interface ConversationSearchResult {
+  conversation_id: string;
+  title: string;
+  chat_url: string;
+  provider: string;
+  relevance_score: number;
+  summary: string | null;
+  top_relevant_snippets: string[];
+}
+
+export interface ConversationSearchResponse {
+  query_used: string;
+  corrective_triggered: boolean;
+  chunks_indexed: number;
+  total_conversations: number;
+  conversations: ConversationSearchResult[];
+}
+
+// ──────────────────────────────────────────────
 // Extension message types
 // ──────────────────────────────────────────────
 

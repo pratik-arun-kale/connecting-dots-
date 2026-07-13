@@ -91,6 +91,26 @@ class RagService:
         )
         return result
 
+    async def search_conversations(
+        self, project_id: uuid.UUID, query: str, top_k: int = 10
+    ) -> Dict[str, Any]:
+        """
+        Find which captured conversations discussed a topic — retrieval only,
+        no Ollama / answer generation. Reuses the same hybrid retrieval core
+        as query_project(), grouped by conversation instead of a synthesized answer.
+        """
+        result = await asyncio.to_thread(
+            pipeline.search_conversations, str(project_id), query, top_k
+        )
+        logger.info(
+            "conversation_search_complete",
+            project_id=str(project_id),
+            conversations_found=len(result.get("conversations", [])),
+            total_conversations=result.get("total_conversations"),
+            chunks_indexed=result.get("chunks_indexed"),
+        )
+        return result
+
     # ── Utility ───────────────────────────────────────────────────────────────
 
     def chunks_indexed(self, project_id: uuid.UUID) -> int:

@@ -8,6 +8,7 @@ import { SessionTimeline } from '@/components/project/session-timeline';
 import { CapturedContextList } from '@/components/project/captured-context-list';
 import { NotesSection } from '@/components/project/notes-section';
 import { RagQueryPanel } from '@/components/project/rag-query-panel';
+import { ConversationSearchPanel } from '@/components/project/conversation-search-panel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, MessageSquare, Bookmark, StickyNote, Loader2, Sparkles } from 'lucide-react';
@@ -131,11 +132,15 @@ export default function ProjectDetailPage() {
           <NotesSection projectId={project.id} />
         </TabsContent>
 
-        <TabsContent value="ask" className="outline-none pt-2">
-          <RagQueryPanel
-            projectId={project.id}
-            chunksIndexed={contexts.length * 3}
-          />
+        <TabsContent value="ask" className="outline-none pt-2 space-y-8">
+          <ConversationSearchPanel projectId={project.id} />
+
+          <div className="border-t border-border/40 pt-6">
+            <RagQueryPanel
+              projectId={project.id}
+              chunksIndexed={contexts.length * 3}
+            />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
