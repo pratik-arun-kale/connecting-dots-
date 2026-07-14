@@ -33,9 +33,36 @@ class ConversationSearchResult(AppBaseModel):
     top_relevant_snippets: list[str]
 
 
+class CandidateQuery(AppBaseModel):
+    """One reformulation tried during multi-candidate retrieval (see
+    app.core.rag.query_candidates) — exposed for transparency/debugging."""
+    label: str    # "original" | "normalized" | "extracted_topic" | "spell_corrected" | "vocab_corrected"
+    query: str
+    weight: float
+
+
+class RelatedConversationSuggestion(AppBaseModel):
+    title: str
+    conversation_id: str
+    match_type: str  # "fuzzy_title" | "semantic"
+
+
+class SearchSuggestions(AppBaseModel):
+    """"Did you mean?" suggestions — populated only when retrieval (including
+    the fuzzy-title fallback) found nothing at all. No LLM: fuzzy matching
+    against the learned+protected vocabulary and indexed titles, plus semantic
+    similarity via the existing embedding model (see app.core.rag.suggestions)."""
+    closest_topics: list[str] = []
+    closest_technologies: list[str] = []
+    related_conversations: list[RelatedConversationSuggestion] = []
+    closest_projects: list[str] = []  # filled in at the service layer (needs Postgres project list)
+
+
 class ConversationSearchResponse(AppBaseModel):
-    query_used: str                  # may differ from query if corrective retrieval fired
+    query_used: str                  # the most-corrected candidate actually used for retrieval
     corrective_triggered: bool
     chunks_indexed: int
     total_conversations: int         # total distinct conversations matched (before top_k trim)
     conversations: list[ConversationSearchResult]
+    candidate_queries: list[CandidateQuery] = []  # new, additive — every reformulation tried (Part 2)
+    suggestions: SearchSuggestions | None = None  # new, additive — only set when total_conversations == 0 (Part 3)

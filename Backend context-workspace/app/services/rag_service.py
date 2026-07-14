@@ -13,7 +13,7 @@ import uuid
 from typing import Any, Dict
 
 from app.core.logging import get_logger
-from app.core.rag import chunker, embedder, pipeline, vector_store
+from app.core.rag import chunker, embedder, pipeline, vector_store, vocabulary
 
 logger = get_logger(__name__)
 
@@ -72,6 +72,12 @@ class RagService:
             project_id=project_id,
             chunks=len(enriched),
         )
+
+        # Learned vocabulary (Part 1): extract terms from this context's title
+        # + message text and merge into the project's vocabulary. Runs in the
+        # same background thread as indexing — no extra request-path latency,
+        # no additional DB queries (writes a small JSON file, see vocabulary.py).
+        vocabulary.update_vocabulary_from_context(project_id, raw_content)
 
     # ── Querying ──────────────────────────────────────────────────────────────
 
