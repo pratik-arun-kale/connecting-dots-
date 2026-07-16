@@ -3,13 +3,11 @@ import { useWorkspaceStore } from '@/store/useWorkspaceStore'
 import { PopupShell } from './components/layout/PopupShell'
 import { Header }    from './components/layout/Header'
 import { NavBar }    from './components/layout/NavBar'
-import { WorkspacePage }  from './pages/WorkspacePage'
+import { HomePage }      from './pages/HomePage'
 import { ProjectsPage }   from './pages/ProjectsPage'
-import { PlatformsPage }  from './pages/PlatformsPage'
 import { useBackendHealth }  from './hooks/useBackendHealth'
 import { usePlatformTabs }   from './hooks/usePlatformTabs'
 import { useProjects }       from './hooks/useProjects'
-import { DiagnosticsBar }    from './components/status/DiagnosticsBar'
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1]
 
@@ -24,7 +22,6 @@ export function App() {
   return (
     <PopupShell>
       <Header />
-      <DiagnosticsBar />
 
       {/* Page area */}
       <div className="relative flex-1 min-h-0">
@@ -37,9 +34,10 @@ export function App() {
             transition={{ duration: 0.16, ease: EASE }}
             className="absolute inset-0 flex flex-col"
           >
-            {activeTab === 'workspace' && <WorkspacePage />}
-            {activeTab === 'projects'  && <ProjectsPage />}
-            {activeTab === 'platforms' && <PlatformsPage />}
+            {/* Anything other than 'projects' (including a stale persisted
+                'workspace'/'platforms' value from before this redesign)
+                falls back to Home. */}
+            {activeTab === 'projects' ? <ProjectsPage /> : <HomePage />}
           </motion.div>
         </AnimatePresence>
       </div>

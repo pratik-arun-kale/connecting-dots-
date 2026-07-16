@@ -16,28 +16,22 @@ export function ActiveProjectCard() {
   if (!project) {
     return (
       <motion.div variants={fadeUp} className="px-4 mb-1">
-        <GlassCard
-          className="border-dashed border-surface-5 cursor-pointer"
-          onClick={() => setActiveTab('projects')}
-        >
+        <GlassCard className="border-dashed border-surface-5">
           <div className="flex flex-col items-center py-2 gap-2 text-center">
             <div className="w-8 h-8 rounded-lg bg-surface-2 border border-surface-5/70 flex items-center justify-center">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 2v10M2 7h10" stroke="#ababab" strokeWidth="1.8" strokeLinecap="round" />
               </svg>
             </div>
-            <p className="text-sm text-ink-3">No active project</p>
-            <p className="text-xs text-ink-4">Create or select a project to start</p>
+            <p className="text-sm text-ink-3">No active project selected</p>
+            <p className="text-xs text-ink-4">Choose or create a project to start capturing and searching</p>
+            <Button size="sm" onClick={() => setActiveTab('projects')} className="mt-1">
+              Choose Project
+            </Button>
           </div>
         </GlassCard>
       </motion.div>
     )
-  }
-
-  const handleOpenSidePanel = () => {
-    chrome.sidePanel?.open?.({ windowId: undefined as unknown as number }).catch(() => {
-      chrome.tabs.create({ url: `chrome-extension://${chrome.runtime.id}/sidepanel.html` })
-    })
   }
 
   return (
@@ -48,7 +42,7 @@ export function ActiveProjectCard() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <Dot color={project.color} />
-              <span className="text-micro text-ink-4">ACTIVE PROJECT</span>
+              <span className="text-micro text-ink-4">CURRENT PROJECT</span>
             </div>
             <h2 className="text-xl font-bold text-ink-1 tracking-tight truncate mb-1">
               {project.name}
@@ -59,17 +53,14 @@ export function ActiveProjectCard() {
               <span>{formatRelative(project.lastActive)}</span>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleOpenSidePanel}
-            className="shrink-0 mt-0.5 text-accent hover:bg-accent/10"
+          <button
+            type="button"
+            onClick={() => setActiveTab('projects')}
+            title="Switch to a different project"
+            className="shrink-0 mt-0.5 text-xs font-semibold text-accent hover:text-accent/80 transition-colors cursor-pointer"
           >
-            Open
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M2 8L8 2M8 2H4M8 2V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </Button>
+            Change
+          </button>
         </div>
 
         {/* Action row */}

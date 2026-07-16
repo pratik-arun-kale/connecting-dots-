@@ -6,7 +6,10 @@ import type { Platform, PlatformId } from '../types/platform'
 import type { Context } from '../types/context'
 import { makePlatform } from '../types/platform'
 
-export type ActiveTab = 'workspace' | 'projects' | 'platforms'
+// 'workspace' and 'platforms' collapsed into 'home' — see the popup IA
+// redesign (Home now includes a compact platform-status row instead of a
+// dedicated tab, removing the old grid+list duplication).
+export type ActiveTab = 'home' | 'projects'
 
 interface WorkspaceState {
   // Runtime (not persisted)
@@ -22,6 +25,7 @@ interface WorkspaceState {
   activeProjectId: string | null
   projects:        Project[]
   activeTab:       ActiveTab
+  hasSeenOnboarding: boolean
 
   // Actions
   setBackendOnline: (v: boolean) => void
@@ -37,6 +41,7 @@ interface WorkspaceState {
   setContexts:      (contexts: Context[]) => void
   updatePlatform:   (id: PlatformId, patch: Partial<Platform>) => void
   resetPlatforms:   () => void
+  dismissOnboarding: () => void
 }
 
 const defaultPlatforms = (): Record<PlatformId, Platform> => ({
@@ -58,7 +63,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       contexts:        [],
       activeProjectId: null,
       projects:        [],
-      activeTab:       'workspace',
+      activeTab:       'home',
+      hasSeenOnboarding: false,
 
       setBackendOnline: (v)   => set({ backendOnline: v }),
       setSyncing:       (v)   => set({ syncing: v }),
@@ -77,14 +83,20 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       updatePlatform:   (id, patch) =>
         set(s => ({ platforms: { ...s.platforms, [id]: { ...s.platforms[id], ...patch } } })),
       resetPlatforms: () => set({ platforms: defaultPlatforms() }),
+      dismissOnboarding: () => set({ hasSeenOnboarding: true }),
     }),
     {
+      // NOT bumped: activeProjectId/projects must survive this redesign. A
+      // stale persisted activeTab of 'workspace'/'platforms' from before this
+      // change is handled defensively at the render site (falls back to Home)
+      // rather than by discarding all persisted state via a key bump.
       name:    'cw_workspace_v3',
       storage: createJSONStorage(() => chromeStorage),
       partialize: (s) => ({
         activeProjectId: s.activeProjectId,
         projects:        s.projects,
         activeTab:       s.activeTab,
+        hasSeenOnboarding: s.hasSeenOnboarding,
       }),
     },
   ),

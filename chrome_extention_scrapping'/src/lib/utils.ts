@@ -18,3 +18,21 @@ export function formatRelative(ts: number): string {
 export function truncate(str: string, max: number): string {
   return str.length <= max ? str : str.slice(0, max - 1) + '…'
 }
+
+/**
+ * Opens the real docked side panel (where "Search Previous Conversations"
+ * lives) from the popup. `chrome.sidePanel.open()` requires a concrete
+ * windowId/tabId — passing none makes Chrome reject the call — so this
+ * looks up the current window first. Falls back to opening sidepanel.html
+ * as a plain tab if the Side Panel API call fails for any reason (older
+ * Chrome, API unavailable), so the feature is still reachable either way.
+ */
+export async function openSidePanel(): Promise<void> {
+  try {
+    const win = await chrome.windows.getCurrent()
+    if (win.id === undefined) throw new Error('no current window id')
+    await chrome.sidePanel.open({ windowId: win.id })
+  } catch {
+    chrome.tabs.create({ url: `chrome-extension://${chrome.runtime.id}/sidepanel.html` })
+  }
+}

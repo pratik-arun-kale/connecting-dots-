@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useProject, useProjectContexts, useProjectSessions } from '@/lib/query';
 import { ProjectHeader } from '@/components/project/project-header';
 import { SessionTimeline } from '@/components/project/session-timeline';
@@ -13,10 +13,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, MessageSquare, Bookmark, StickyNote, Loader2, Sparkles } from 'lucide-react';
 
+const VALID_TABS = new Set(['sessions', 'contexts', 'notes', 'ask']);
+
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
+
+  // Deep-link support (e.g. the extension's "Open Ask AI in Dashboard" link
+  // uses ?tab=ask) — Radix Tabs only reads defaultValue once on mount, which
+  // is all a one-shot deep link needs; no need for fully controlled state.
+  const requestedTab = searchParams.get('tab');
+  const initialTab = requestedTab && VALID_TABS.has(requestedTab) ? requestedTab : 'sessions';
 
   const { data: project, isLoading: isLoadingProject, error: projectError } = useProject(id);
   const { data: sessions = [], isLoading: isLoadingSessions } = useProjectSessions(id);
@@ -61,7 +70,7 @@ export default function ProjectDetailPage() {
       <ProjectHeader project={project} />
 
       {/* Workspace Tabs */}
-      <Tabs defaultValue="sessions" className="space-y-4">
+      <Tabs defaultValue={initialTab} className="space-y-4">
         <div className="border-b border-border/40 pb-px">
           <TabsList className="bg-transparent p-0 gap-4 h-10 w-full justify-start rounded-none border-b border-transparent">
             <TabsTrigger

@@ -5,6 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Context Workspace — Side Panel</title>
   <link rel="stylesheet" href="assets/sidepanel.css" />
+  <style>
+    /*
+      Chrome's side panel gives the document a real, bounded viewport (unlike
+      the popup, which auto-sizes to fit its content up to a max). For the
+      app's internal `flex-1 overflow-y-auto` region to actually become the
+      scroll container — instead of the whole page silently growing past the
+      visible panel and getting clipped by `body { overflow: hidden }` below,
+      with nothing left to scroll it into view — that bounded height has to
+      propagate all the way from html down to the React root. Scoped to this
+      file only: popup.html has its own sizing model (bounded max-height on
+      PopupShell) and must not be touched by this.
+    */
+    html, body, #root { height: 100%; }
+  </style>
 </head>
 <body class="m-0 p-0 overflow-hidden bg-surface-1">
   <div id="root"></div>

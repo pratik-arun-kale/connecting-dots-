@@ -7,6 +7,7 @@ const config: Config = {
     './sidepanel.html',
     './src/popup/**/*.{ts,tsx}',
     './src/sidepanel/**/*.{ts,tsx}',
+    './src/search/**/*.{ts,tsx}',
   ],
   theme: {
     extend: {

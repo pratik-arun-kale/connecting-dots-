@@ -1,10 +1,10 @@
-import { useWorkspaceStore } from '@/store/useWorkspaceStore'
-import { BackendStatus } from '../status/BackendStatus'
+import { StatusPill } from '../status/StatusPill'
 
+// The unlabeled search-icon button that used to live here is gone — it was
+// exactly the kind of hidden affordance the redesign is meant to remove.
+// "Where is search" is now answered by name on the Home screen
+// (OpenSearchAskCard), not by a tooltip on a magnifying-glass icon.
 export function Header() {
-  const backendOnline = useWorkspaceStore(s => s.backendOnline)
-  const syncing       = useWorkspaceStore(s => s.syncing)
-
   return (
     <header className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-surface-5/60 shrink-0">
       <div className="flex items-center gap-2">
@@ -21,7 +21,7 @@ export function Header() {
         </span>
       </div>
 
-      <BackendStatus online={backendOnline} syncing={syncing} />
+      <StatusPill />
     </header>
   )
 }

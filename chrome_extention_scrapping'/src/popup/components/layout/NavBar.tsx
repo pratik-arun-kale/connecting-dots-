@@ -3,16 +3,17 @@ import { useWorkspaceStore, type ActiveTab } from '@/store/useWorkspaceStore'
 import { cn } from '@/lib/utils'
 import { SPRING } from '@/lib/motion'
 
+// Collapsed from 3 tabs (Workspace/Projects/Platforms) to 2 — "Platforms"
+// duplicated data already shown compactly on Home (PlatformStatusRow), and
+// "Workspace" was a vague catch-all. Search/Ask AI are intentionally NOT
+// tabs here — see OpenSearchAskCard; they live in the side panel.
 const TABS: { id: ActiveTab; label: string; Icon: () => React.ReactElement }[] = [
   {
-    id: 'workspace',
-    label: 'Workspace',
+    id: 'home',
+    label: 'Home',
     Icon: () => (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-        <rect x="1" y="1" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
-        <rect x="8" y="1" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
-        <rect x="1" y="8" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
-        <rect x="8" y="8" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M2 6.5L7 2l5 4.5M3 5.5V12h8V5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },
@@ -22,16 +23,6 @@ const TABS: { id: ActiveTab; label: string; Icon: () => React.ReactElement }[] =
     Icon: () => (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
         <path d="M1 4a2 2 0 012-2h2.586a1 1 0 01.707.293L7 3h4a2 2 0 012 2v5a2 2 0 01-2 2H3a2 2 0 01-2-2V4z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
-  {
-    id: 'platforms',
-    label: 'Platforms',
-    Icon: () => (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-        <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.4" />
-        <path d="M7 1.5C7 1.5 5 4 5 7s2 5.5 2 5.5M7 1.5C7 1.5 9 4 9 7s-2 5.5-2 5.5M1.5 7h11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       </svg>
     ),
   },

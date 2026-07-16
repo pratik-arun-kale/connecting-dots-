@@ -9,26 +9,33 @@
     "build": "vite build --config vite.popup.config.ts && vite build --config vite.sidepanel.config.ts && node scripts/postbuild.mjs",
     "build:bg": "esbuild src/background.ts --bundle --format=esm --outfile=dist/background.js --platform=browser",
     "build:full": "npm run build && npm run build:bg",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
     "framer-motion": "^11.18.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "zustand": "^4.5.4",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^2.6.0",
+    "zustand": "^4.5.4"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/chrome": "^0.0.298",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.5.2",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.24.0",
+    "jsdom": "^25.0.1",
     "postcss": "^8.5.4",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.0",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^2.1.9"
   }
 }
