@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useProject, useProjectContexts, useProjectSessions } from '@/lib/query';
 import { ProjectHeader } from '@/components/project/project-header';
@@ -15,7 +15,24 @@ import { ArrowLeft, MessageSquare, Bookmark, StickyNote, Loader2, Sparkles } fro
 
 const VALID_TABS = new Set(['sessions', 'contexts', 'notes', 'ask']);
 
+// Next.js requires any component calling useSearchParams() to sit under a
+// Suspense boundary — without one, this route 404'd entirely in dev instead
+// of throwing a visible error (the whole page failed to compile/render, so
+// Next fell back to its default not-found handler).
 export default function ProjectDetailPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-2">
+        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+        <span className="text-xs text-muted-foreground">Loading project details...</span>
+      </div>
+    }>
+      <ProjectDetailPageInner />
+    </Suspense>
+  );
+}
+
+function ProjectDetailPageInner() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
