@@ -101,10 +101,27 @@ class Settings(BaseSettings):
     # secret_key: str = "changeme"
     # access_token_expire_minutes: int = 60
 
-    # ── Future: AI Pipeline placeholders ────────────────────────────────────
-    # openai_api_key: str | None = None
-    # anthropic_api_key: str | None = None
-    # embedding_model: str = "text-embedding-3-small"
+    # ── OpenAI — cloud LLM for RAG answer generation (Ask AI) ────────────────
+    # Never set a default for the key itself — an absent key must mean
+    # "answer generation degrades to the top chunk", never "use a real key
+    # that happens to be checked into source". Sourced from .env (gitignored)
+    # or a real environment variable in deployment; never hardcode a value.
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4o-mini"
+    openai_temperature: float = 0.1
+    openai_max_tokens: int = 512          # output token cap — bounds answer length and cost
+    openai_timeout_sec: float = 30.0      # cloud round-trip is fast; keep this short so a stuck call doesn't tie up a thread-pool worker
+    openai_context_chunks: int = 3        # max reranked chunks considered for context, before the token-budget truncation in openai_generator.py
+
+    @field_validator("openai_api_key")
+    @classmethod
+    def _no_placeholder_key(cls, v: str | None) -> str | None:
+        """Treat an accidentally-committed placeholder value as "not set" rather
+        than a real key, so a stray `OPENAI_API_KEY=your-key-here` in a shared
+        .env doesn't silently attempt (and fail) real API calls."""
+        if v and v.strip().lower() in {"your-key-here", "changeme", "sk-..."}:
+            return None
+        return v
 
     # ── Computed helpers ─────────────────────────────────────────────────────
     @property

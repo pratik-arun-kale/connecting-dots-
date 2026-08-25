@@ -24,7 +24,7 @@ from sentence_transformers import CrossEncoder
 
 from app.core.logging import get_logger
 from app.core.rag import embedder, vector_store
-from app.core.rag.ollama_generator import generate_answer
+from app.core.rag.openai_generator import generate_answer
 from app.core.rag.query_candidates import QueryCandidate, generate_query_candidates
 from app.core.rag.query_normalizer import _max_edit_distance, levenshtein_distance
 
@@ -374,7 +374,7 @@ def run_query(project_id: str, question: str) -> Dict[str, Any]:
     reranked = retrieval["reranked"]
     confidence = retrieval["confidence"]
 
-    # Generate answer — Ollama LLM for HIGH/MEDIUM, static message for LOW
+    # Generate answer — OpenAI LLM for HIGH/MEDIUM, static message for LOW
     if confidence == "LOW" or not reranked:
         answer_text = (
             "I couldn't find sufficiently relevant information in your captured conversations. "
