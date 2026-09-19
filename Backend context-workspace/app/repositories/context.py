@@ -11,12 +11,9 @@ import uuid
 from sqlalchemy import func, select
 
 from app.models.context import Context
+from app.models.project import Project
 from app.models.session import Session
 from app.repositories.base import BaseRepository
-
-
-
-
 
 class ContextRepository(BaseRepository[Context]):
     model = Context
@@ -24,6 +21,16 @@ class ContextRepository(BaseRepository[Context]):
     async def get_by_idempotency_key(self, key: str) -> Context | None:
         result = await self.session.execute(
             select(Context).where(Context.idempotency_key == key)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_id_for_owner(self, context_id: uuid.UUID, owner_id: uuid.UUID) -> Context | None:
+        """Ownership check via a two-hop JOIN: Context → Session → Project."""
+        result = await self.session.execute(
+            select(Context)
+            .join(Session, Context.session_id == Session.id)
+            .join(Project, Session.project_id == Project.id)
+            .where(Context.id == context_id, Project.user_id == owner_id)
         )
         return result.scalar_one_or_none()
 

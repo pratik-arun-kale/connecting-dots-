@@ -33,21 +33,30 @@ class ContextService:
         self,
         project_id: uuid.UUID,
         payload: CaptureConversationRequest,
+        owner_id: uuid.UUID,
     ) -> CaptureConversationResponse:
         """Main ingest path for the Chrome extension.
 
         Guarantees:
         - Idempotent: same idempotency_key returns the original context (HTTP 200).
         - Atomic: session upsert + context insert happen in one flush.
-        - Project-scoped: verifies project exists before writing anything.
+        - Owner-scoped: verifies the caller owns project_id before writing anything —
+          this is the exact IDOR the audit flagged (arbitrary project_id capture).
         """
-        # 1. Guard: project must exist
-        project = await self._project_repo.get_by_id(project_id)
+        # 1. Guard: project must exist AND belong to the caller
+        project = await self._project_repo.get_by_id_for_owner(project_id, owner_id)
         if project is None:
             raise NotFoundException(f"Project {project_id} not found.")
 
-        # 2. Idempotency check — return existing context if key already seen
+        # 2. Idempotency check — return existing context if key already seen.
+        # idempotency_key is globally unique, not project-scoped, so a
+        # replay hit is only trusted if it ALSO belongs to this same caller
+        # — otherwise a guessed/collided key could leak another user's
+        # captured content back in the response. Any other match is treated
+        # as if nothing were found, falling through to a normal capture.
         existing = await self._repo.get_by_idempotency_key(payload.idempotency_key)
+        if existing is not None and await self._repo.get_by_id_for_owner(existing.id, owner_id) is None:
+            existing = None
         if existing is not None:
             logger.info(
                 "capture_idempotent_replay",
@@ -123,11 +132,12 @@ class ContextService:
     async def list_contexts_for_session(
         self,
         session_id: uuid.UUID,
+        owner_id: uuid.UUID,
         *,
         offset: int = 0,
         limit: int = 100,
     ) -> tuple[list[Context], int]:
-        session = await self._session_repo.get_by_id(session_id)
+        session = await self._session_repo.get_by_id_for_owner(session_id, owner_id)
         if session is None:
             raise NotFoundException(f"Session {session_id} not found.")
 
@@ -137,8 +147,8 @@ class ContextService:
         logger.debug("contexts_listed", session_id=str(session_id), total=total)
         return contexts, total
 
-    async def get_context(self, context_id: uuid.UUID) -> Context:
-        context = await self._repo.get_by_id(context_id)
+    async def get_context(self, context_id: uuid.UUID, owner_id: uuid.UUID) -> Context:
+        context = await self._repo.get_by_id_for_owner(context_id, owner_id)
         if context is None:
             raise NotFoundException(f"Context {context_id} not found.")
         return context
@@ -146,18 +156,22 @@ class ContextService:
     async def list_contexts_for_project(
         self,
         project_id: uuid.UUID,
+        owner_id: uuid.UUID,
         *,
         offset: int = 0,
         limit: int = 200,
     ) -> tuple[list[Context], int]:
+        project = await self._project_repo.get_by_id_for_owner(project_id, owner_id)
+        if project is None:
+            raise NotFoundException(f"Project {project_id} not found.")
         contexts, total = await self._repo.list_by_project(
             project_id, offset=offset, limit=limit
         )
         logger.debug("project_contexts_listed", project_id=str(project_id), total=total)
         return contexts, total
 
-    async def capture_context(self, payload: ContextCapture) -> Context:
-        session = await self._session_repo.get_by_id(payload.session_id)
+    async def capture_context(self, payload: ContextCapture, owner_id: uuid.UUID) -> Context:
+        session = await self._session_repo.get_by_id_for_owner(payload.session_id, owner_id)
         if session is None:
             raise NotFoundException(f"Session {payload.session_id} not found.")
 
@@ -177,8 +191,8 @@ class ContextService:
         )
         return context
 
-    async def create_context(self, payload: ContextCreate) -> Context:
-        session = await self._session_repo.get_by_id(payload.session_id)
+    async def create_context(self, payload: ContextCreate, owner_id: uuid.UUID) -> Context:
+        session = await self._session_repo.get_by_id_for_owner(payload.session_id, owner_id)
         if session is None:
             raise NotFoundException(f"Session {payload.session_id} not found.")
 

@@ -12,12 +12,25 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
+from app.models.project import Project
 from app.models.session import LinkStatus, Session, SessionState
 from app.repositories.base import BaseRepository
 
 
 class SessionRepository(BaseRepository[Session]):
     model = Session
+
+    async def get_by_id_for_owner(self, session_id: uuid.UUID, owner_id: uuid.UUID) -> Session | None:
+        """Ownership check via JOIN through Project — sessions don't carry
+        their own user_id (per the plan: ownership lives on Project, and
+        Session/Context inherit it through the FK chain rather than
+        duplicating a user_id column onto every table)."""
+        result = await self.session.execute(
+            select(Session)
+            .join(Project, Session.project_id == Project.id)
+            .where(Session.id == session_id, Project.user_id == owner_id)
+        )
+        return result.scalar_one_or_none()
 
     async def list_by_project(
         self,

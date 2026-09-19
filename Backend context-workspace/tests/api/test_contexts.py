@@ -46,9 +46,9 @@ async def _create_context(
 # ── Create ─────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_create_context_minimal(client: AsyncClient) -> None:
-    _, session_id = await _bootstrap(client)
-    response = await client.post(
+async def test_create_context_minimal(authenticated_client: AsyncClient) -> None:
+    _, session_id = await _bootstrap(authenticated_client)
+    response = await authenticated_client.post(
         CONTEXT_BASE,
         json={
             "session_id": session_id,
@@ -59,9 +59,9 @@ async def test_create_context_minimal(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_context_full_payload(client: AsyncClient) -> None:
-    _, session_id = await _bootstrap(client)
-    response = await client.post(
+async def test_create_context_full_payload(authenticated_client: AsyncClient) -> None:
+    _, session_id = await _bootstrap(authenticated_client)
+    response = await authenticated_client.post(
         CONTEXT_BASE,
         json={
             "session_id": session_id,
@@ -88,8 +88,8 @@ async def test_create_context_full_payload(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_context_requires_session_id(client: AsyncClient) -> None:
-    response = await client.post(
+async def test_create_context_requires_session_id(authenticated_client: AsyncClient) -> None:
+    response = await authenticated_client.post(
         CONTEXT_BASE,
         json={"raw_content": {"type": "text", "body": "No session"}},
     )
@@ -97,9 +97,9 @@ async def test_create_context_requires_session_id(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_context_requires_raw_content(client: AsyncClient) -> None:
-    _, session_id = await _bootstrap(client)
-    response = await client.post(
+async def test_create_context_requires_raw_content(authenticated_client: AsyncClient) -> None:
+    _, session_id = await _bootstrap(authenticated_client)
+    response = await authenticated_client.post(
         CONTEXT_BASE,
         json={"session_id": session_id},
     )
@@ -107,9 +107,9 @@ async def test_create_context_requires_raw_content(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_context_empty_raw_content_rejected(client: AsyncClient) -> None:
-    _, session_id = await _bootstrap(client)
-    response = await client.post(
+async def test_create_context_empty_raw_content_rejected(authenticated_client: AsyncClient) -> None:
+    _, session_id = await _bootstrap(authenticated_client)
+    response = await authenticated_client.post(
         CONTEXT_BASE,
         json={"session_id": session_id, "raw_content": {}},
     )
@@ -117,9 +117,9 @@ async def test_create_context_empty_raw_content_rejected(client: AsyncClient) ->
 
 
 @pytest.mark.asyncio
-async def test_create_context_invalid_session(client: AsyncClient) -> None:
+async def test_create_context_invalid_session(authenticated_client: AsyncClient) -> None:
     fake_id = "00000000-0000-0000-0000-000000000000"
-    response = await client.post(
+    response = await authenticated_client.post(
         CONTEXT_BASE,
         json={
             "session_id": fake_id,
@@ -129,67 +129,107 @@ async def test_create_context_invalid_session(client: AsyncClient) -> None:
     assert response.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_create_context_under_another_users_session_returns_404(
+    authenticated_client: AsyncClient, second_authenticated_client: AsyncClient
+) -> None:
+    """IDOR: User B must not be able to write a context into User A's session."""
+    _, session_id = await _bootstrap(authenticated_client)
+
+    response = await second_authenticated_client.post(
+        CONTEXT_BASE,
+        json={"session_id": session_id, "raw_content": {"type": "text", "body": "injected"}},
+    )
+    assert response.status_code == 404
+
+
 # ── List ───────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_list_contexts_for_session(client: AsyncClient) -> None:
-    _, session_id = await _bootstrap(client)
-    await _create_context(client, session_id, raw_content={"type": "text", "body": "C1"})
-    await _create_context(client, session_id, raw_content={"type": "text", "body": "C2"})
-    await _create_context(client, session_id, raw_content={"type": "text", "body": "C3"})
+async def test_list_contexts_for_session(authenticated_client: AsyncClient) -> None:
+    _, session_id = await _bootstrap(authenticated_client)
+    await _create_context(authenticated_client, session_id, raw_content={"type": "text", "body": "C1"})
+    await _create_context(authenticated_client, session_id, raw_content={"type": "text", "body": "C2"})
+    await _create_context(authenticated_client, session_id, raw_content={"type": "text", "body": "C3"})
 
-    response = await client.get(f"{CONTEXT_BASE}/{session_id}")
+    response = await authenticated_client.get(f"{CONTEXT_BASE}/{session_id}")
     data = response.json()
     assert data["total"] == 3
     assert len(data["items"]) == 3
 
 
 @pytest.mark.asyncio
-async def test_list_contexts_empty_session(client: AsyncClient) -> None:
-    _, session_id = await _bootstrap(client)
-    response = await client.get(f"{CONTEXT_BASE}/{session_id}")
+async def test_list_contexts_empty_session(authenticated_client: AsyncClient) -> None:
+    _, session_id = await _bootstrap(authenticated_client)
+    response = await authenticated_client.get(f"{CONTEXT_BASE}/{session_id}")
     assert response.status_code == 200
     assert response.json()["total"] == 0
 
 
 @pytest.mark.asyncio
-async def test_list_contexts_invalid_session(client: AsyncClient) -> None:
+async def test_list_contexts_invalid_session(authenticated_client: AsyncClient) -> None:
     fake_id = "00000000-0000-0000-0000-000000000000"
-    response = await client.get(f"{CONTEXT_BASE}/{fake_id}")
+    response = await authenticated_client.get(f"{CONTEXT_BASE}/{fake_id}")
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_contexts_are_isolated_per_session(client: AsyncClient) -> None:
+async def test_contexts_are_isolated_per_session(authenticated_client: AsyncClient) -> None:
     """Contexts from session A must not appear in session B's list."""
-    project_id, session_a = await _bootstrap(client)
-    s_b_resp = await client.post(
+    project_id, session_a = await _bootstrap(authenticated_client)
+    s_b_resp = await authenticated_client.post(
         SESSION_BASE,
         json={"project_id": project_id, "source_platform": "chatgpt"},
     )
     session_b = s_b_resp.json()["id"]
 
-    await _create_context(client, session_a)
-    await _create_context(client, session_a)
+    await _create_context(authenticated_client, session_a)
+    await _create_context(authenticated_client, session_a)
 
-    response = await client.get(f"{CONTEXT_BASE}/{session_b}")
+    response = await authenticated_client.get(f"{CONTEXT_BASE}/{session_b}")
     assert response.json()["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_list_contexts_for_another_users_session_returns_404(
+    authenticated_client: AsyncClient, second_authenticated_client: AsyncClient
+) -> None:
+    """IDOR: User B must not be able to list User A's captured content."""
+    _, session_id = await _bootstrap(authenticated_client)
+    await _create_context(authenticated_client, session_id)
+
+    response = await second_authenticated_client.get(f"{CONTEXT_BASE}/{session_id}")
+    assert response.status_code == 404
 
 
 # ── Get by ID ──────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_get_context_by_id(client: AsyncClient) -> None:
-    _, session_id = await _bootstrap(client)
-    created = await _create_context(client, session_id)
+async def test_get_context_by_id(authenticated_client: AsyncClient) -> None:
+    _, session_id = await _bootstrap(authenticated_client)
+    created = await _create_context(authenticated_client, session_id)
 
-    response = await client.get(f"{CONTEXT_BASE}/detail/{created['id']}")
+    response = await authenticated_client.get(f"{CONTEXT_BASE}/detail/{created['id']}")
     assert response.status_code == 200
     assert response.json()["id"] == created["id"]
 
 
 @pytest.mark.asyncio
-async def test_get_context_not_found(client: AsyncClient) -> None:
+async def test_get_context_not_found(authenticated_client: AsyncClient) -> None:
     fake_id = "00000000-0000-0000-0000-000000000000"
-    response = await client.get(f"{CONTEXT_BASE}/detail/{fake_id}")
+    response = await authenticated_client.get(f"{CONTEXT_BASE}/detail/{fake_id}")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_another_users_context_returns_404(
+    authenticated_client: AsyncClient, second_authenticated_client: AsyncClient
+) -> None:
+    """IDOR: User B must not be able to read User A's captured conversation
+    content by context id, even via the two-hop Context->Session->Project
+    ownership chain (no user_id column on Context itself)."""
+    _, session_id = await _bootstrap(authenticated_client)
+    created = await _create_context(authenticated_client, session_id)
+
+    response = await second_authenticated_client.get(f"{CONTEXT_BASE}/detail/{created['id']}")
     assert response.status_code == 404

@@ -14,7 +14,7 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Query, status
 
-from app.dependencies import ContextServiceDep, ProjectServiceDep, RagServiceDep, SessionServiceDep
+from app.dependencies import ContextServiceDep, CurrentUserDep, ProjectServiceDep, RagServiceDep, SessionServiceDep
 from app.schemas.capture import CaptureConversationRequest, CaptureConversationResponse
 from app.schemas.context import ContextListResponse, ContextResponse
 from app.schemas.project import (
@@ -43,13 +43,14 @@ async def create_project_with_sessions(
     payload: CreateProjectWithSessionsRequest,
     project_service: ProjectServiceDep,
     session_service: SessionServiceDep,
+    current_user: CurrentUserDep,
 ) -> CreateProjectWithSessionsResponse:
-    project = await project_service.create_project(ProjectCreate(name=payload.name))
+    project = await project_service.create_project(ProjectCreate(name=payload.name), current_user.id)
     sessions = []
     for platform in payload.platforms:
         # create_or_get_session is idempotent: returns (session, created_bool)
         session, _ = await session_service.create_or_get_session(
-            SessionCreate(project_id=project.id, source_platform=platform)
+            SessionCreate(project_id=project.id, source_platform=platform), current_user.id
         )
         sessions.append(session)
     return CreateProjectWithSessionsResponse(
@@ -67,23 +68,25 @@ async def create_project_with_sessions(
 async def create_project(
     payload: ProjectCreate,
     service: ProjectServiceDep,
+    current_user: CurrentUserDep,
 ) -> ProjectResponse:
-    project = await service.create_project(payload)
+    project = await service.create_project(payload, current_user.id)
     return ProjectResponse.model_validate(project)
 
 
 @router.get(
     "",
     response_model=ProjectListResponse,
-    summary="List all projects",
+    summary="List the current user's projects",
 )
 async def list_projects(
     service: ProjectServiceDep,
+    current_user: CurrentUserDep,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> ProjectListResponse:
     # service.list_projects now returns list[ProjectResponse] already enriched with counts
-    projects, total = await service.list_projects(offset=offset, limit=limit)
+    projects, total = await service.list_projects(current_user.id, offset=offset, limit=limit)
     return ProjectListResponse(items=projects, total=total)
 
 
@@ -95,8 +98,9 @@ async def list_projects(
 async def get_project(
     project_id: uuid.UUID,
     service: ProjectServiceDep,
+    current_user: CurrentUserDep,
 ) -> ProjectResponse:
-    project = await service.get_project(project_id)
+    project = await service.get_project(project_id, current_user.id)
     return ProjectResponse.model_validate(project)
 
 
@@ -109,8 +113,9 @@ async def update_project(
     project_id: uuid.UUID,
     payload: ProjectUpdate,
     service: ProjectServiceDep,
+    current_user: CurrentUserDep,
 ) -> ProjectResponse:
-    project = await service.update_project(project_id, payload)
+    project = await service.update_project(project_id, payload, current_user.id)
     return ProjectResponse.model_validate(project)
 
 
@@ -122,8 +127,9 @@ async def update_project(
 async def delete_project(
     project_id: uuid.UUID,
     service: ProjectServiceDep,
+    current_user: CurrentUserDep,
 ) -> None:
-    await service.delete_project(project_id)
+    await service.delete_project(project_id, current_user.id)
 
 
 @router.post(
@@ -138,8 +144,11 @@ async def capture_conversation(
     context_service: ContextServiceDep,
     rag_service: RagServiceDep,
     background_tasks: BackgroundTasks,
+    current_user: CurrentUserDep,
 ) -> CaptureConversationResponse:
-    result = await context_service.capture_conversation(project_id, payload)
+    # capture_conversation() itself verifies project_id belongs to current_user
+    # before writing anything — see app/services/context.py.
+    result = await context_service.capture_conversation(project_id, payload, current_user.id)
 
     # Index into ChromaDB in the background — only for new captures (not idempotent replays)
     if result.created:
@@ -171,7 +180,15 @@ async def query_project_contexts(
     project_id: uuid.UUID,
     payload: RagQueryRequest,
     rag_service: RagServiceDep,
+    project_service: ProjectServiceDep,
+    current_user: CurrentUserDep,
 ) -> RagQueryResponse:
+    # Ownership MUST be validated before RagService is ever called — it's
+    # stateless (no DB access) and has no way to check ownership itself, so
+    # this is the only place the check can happen. Without it, any caller
+    # who knows a project_id could RAG-query another user's captured
+    # conversations straight through Ask AI.
+    await project_service.get_project(project_id, current_user.id)
     result = await rag_service.query_project(project_id, payload.question)
     return RagQueryResponse(**result)
 
@@ -184,11 +201,12 @@ async def query_project_contexts(
 async def get_project_contexts(
     project_id: uuid.UUID,
     context_service: ContextServiceDep,
+    current_user: CurrentUserDep,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=200, ge=1, le=500),
 ) -> ContextListResponse:
     contexts, total = await context_service.list_contexts_for_project(
-        project_id, offset=offset, limit=limit
+        project_id, current_user.id, offset=offset, limit=limit
     )
     return ContextListResponse(
         items=[ContextResponse.model_validate(c) for c in contexts],

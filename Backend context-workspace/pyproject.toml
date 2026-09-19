@@ -1,5 +1,17 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Deliberately NOT set: this project mixes a session-scoped async fixture
+# (_test_schema) with function-scoped ones (db_session) in tests/conftest.py.
+# Setting asyncio_default_fixture_loop_scope to "session" deferred
+# async-generator fixture teardown (db_session's post-yield rollback/
+# dispose) until the whole test session ended instead of after each test,
+# leaving every test's DB connection "idle in transaction" server-side and
+# eventually deadlocking on table locks (confirmed live via
+# pg_stat_activity). Setting it to "function" instead breaks because
+# _test_schema itself needs session scope. Leaving it unset triggers a
+# pytest-asyncio deprecation warning (harmless — this project already
+# tolerates one from Starlette) but is the configuration that actually
+# works correctly today.
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_functions = ["test_*"]

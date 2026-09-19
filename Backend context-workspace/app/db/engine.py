@@ -39,7 +39,12 @@ def get_engine() -> AsyncEngine:
             # future-ready: pass json_serializer / json_deserializer here
             # when JSONB columns carry domain objects.
         )
-        logger.info("database_engine_created", url=settings.database_url)
+        # Log only host/db, never the full URL — it embeds the DB password.
+        logger.info(
+            "database_engine_created",
+            host=settings.postgres_host,
+            db=settings.postgres_db,
+        )
     return _engine
 
 

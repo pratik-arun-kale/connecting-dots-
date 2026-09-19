@@ -15,7 +15,7 @@ import uuid
 
 from fastapi import APIRouter, Query, status
 
-from app.dependencies import SessionServiceDep
+from app.dependencies import CurrentUserDep, SessionServiceDep
 from app.schemas.session import (
     LinkSessionRequest,
     SessionCreate,
@@ -38,8 +38,9 @@ router = APIRouter(prefix="/sessions", tags=["Sessions"])
 async def create_session(
     payload: SessionCreate,
     service: SessionServiceDep,
+    current_user: CurrentUserDep,
 ) -> SessionResponse:
-    session, created = await service.create_or_get_session(payload)
+    session, created = await service.create_or_get_session(payload, current_user.id)
     return SessionResponse.model_validate(session)
 
 
@@ -51,11 +52,12 @@ async def create_session(
 async def list_sessions(
     project_id: uuid.UUID,
     service: SessionServiceDep,
+    current_user: CurrentUserDep,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> SessionListResponse:
     sessions, total = await service.list_sessions_for_project(
-        project_id, offset=offset, limit=limit
+        project_id, current_user.id, offset=offset, limit=limit
     )
     return SessionListResponse(
         items=[SessionResponse.model_validate(s) for s in sessions],
@@ -71,8 +73,9 @@ async def list_sessions(
 async def get_session(
     session_id: uuid.UUID,
     service: SessionServiceDep,
+    current_user: CurrentUserDep,
 ) -> SessionResponse:
-    session = await service.get_session(session_id)
+    session = await service.get_session(session_id, current_user.id)
     return SessionResponse.model_validate(session)
 
 
@@ -89,8 +92,9 @@ async def update_session_state(
     session_id: uuid.UUID,
     payload: SessionStateUpdate,
     service: SessionServiceDep,
+    current_user: CurrentUserDep,
 ) -> SessionResponse:
-    session = await service.transition_state(session_id, payload)
+    session = await service.transition_state(session_id, payload, current_user.id)
     return SessionResponse.model_validate(session)
 
 
@@ -107,8 +111,9 @@ async def link_session(
     session_id: uuid.UUID,
     payload: LinkSessionRequest,
     service: SessionServiceDep,
+    current_user: CurrentUserDep,
 ) -> SessionResponse:
-    session = await service.link_session(session_id, payload)
+    session = await service.link_session(session_id, payload, current_user.id)
     return SessionResponse.model_validate(session)
 
 
@@ -121,6 +126,7 @@ async def fail_session(
     session_id: uuid.UUID,
     payload: SessionFailureRequest,
     service: SessionServiceDep,
+    current_user: CurrentUserDep,
 ) -> SessionResponse:
-    session = await service.fail_session(session_id, payload)
+    session = await service.fail_session(session_id, payload, current_user.id)
     return SessionResponse.model_validate(session)

@@ -38,32 +38,36 @@ class SessionService:
     async def list_sessions_for_project(
         self,
         project_id: uuid.UUID,
+        owner_id: uuid.UUID,
         *,
         offset: int = 0,
         limit: int = 100,
     ) -> tuple[list[Session], int]:
-        project = await self._project_repo.get_by_id(project_id)
+        project = await self._project_repo.get_by_id_for_owner(project_id, owner_id)
         if project is None:
             raise NotFoundException(f"Project {project_id} not found.")
         sessions, total = await self._repo.list_by_project(project_id, offset=offset, limit=limit)
         logger.debug("sessions_listed", project_id=str(project_id), total=total)
         return sessions, total
 
-    async def get_session(self, session_id: uuid.UUID) -> Session:
-        session = await self._repo.get_by_id(session_id)
+    async def get_session(self, session_id: uuid.UUID, owner_id: uuid.UUID) -> Session:
+        session = await self._repo.get_by_id_for_owner(session_id, owner_id)
         if session is None:
             raise NotFoundException(f"Session {session_id} not found.")
         return session
 
     # ── Create ────────────────────────────────────────────────────────────────
 
-    async def create_or_get_session(self, payload: SessionCreate) -> tuple[Session, bool]:
+    async def create_or_get_session(self, payload: SessionCreate, owner_id: uuid.UUID) -> tuple[Session, bool]:
         """Idempotent create.
 
         Returns (session, created) where created=False means an existing
         non-terminal session was returned instead of creating a duplicate.
+        The client-supplied payload.project_id must belong to owner_id —
+        never trusted on its own (this is exactly the "create a session
+        under any project_id" IDOR the audit flagged).
         """
-        project = await self._project_repo.get_by_id(payload.project_id)
+        project = await self._project_repo.get_by_id_for_owner(payload.project_id, owner_id)
         if project is None:
             raise NotFoundException(f"Project {payload.project_id} not found.")
 
@@ -96,10 +100,10 @@ class SessionService:
     # ── Lifecycle transitions ─────────────────────────────────────────────────
 
     async def transition_state(
-        self, session_id: uuid.UUID, payload: SessionStateUpdate
+        self, session_id: uuid.UUID, payload: SessionStateUpdate, owner_id: uuid.UUID
     ) -> Session:
         """Record an FSM state transition reported by the extension."""
-        session = await self._repo.get_by_id(session_id)
+        session = await self._repo.get_by_id_for_owner(session_id, owner_id)
         if session is None:
             raise NotFoundException(f"Session {session_id} not found.")
 
@@ -123,10 +127,10 @@ class SessionService:
         return session
 
     async def fail_session(
-        self, session_id: uuid.UUID, payload: SessionFailureRequest
+        self, session_id: uuid.UUID, payload: SessionFailureRequest, owner_id: uuid.UUID
     ) -> Session:
         """Record terminal failure with reason."""
-        session = await self._repo.get_by_id(session_id)
+        session = await self._repo.get_by_id_for_owner(session_id, owner_id)
         if session is None:
             raise NotFoundException(f"Session {session_id} not found.")
 
@@ -150,10 +154,10 @@ class SessionService:
         return session
 
     async def link_session(
-        self, session_id: uuid.UUID, payload: LinkSessionRequest
+        self, session_id: uuid.UUID, payload: LinkSessionRequest, owner_id: uuid.UUID
     ) -> Session:
         """Bind the captured conversation URL (called by extension after URL_DETECTED)."""
-        session = await self._repo.get_by_id(session_id)
+        session = await self._repo.get_by_id_for_owner(session_id, owner_id)
         if session is None:
             raise NotFoundException(f"Session {session_id} not found.")
 

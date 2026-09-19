@@ -97,9 +97,31 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_format: Literal["json", "console"] = "json"
 
-    # ── Future: Auth placeholders ────────────────────────────────────────────
-    # secret_key: str = "changeme"
-    # access_token_expire_minutes: int = 60
+    # ── Auth (JWT access/refresh tokens) ─────────────────────────────────────
+    # jwt_secret_key has NO default on purpose — the app must fail to start
+    # rather than silently sign tokens with a well-known value. Generate one
+    # with `python -c "import secrets; print(secrets.token_urlsafe(64))"`.
+    jwt_secret_key: str
+    jwt_access_token_expire_minutes: int = 15
+    jwt_refresh_token_expire_days: int = 30
+
+    @field_validator("jwt_secret_key")
+    @classmethod
+    def _reject_placeholder_secret(cls, v: str) -> str:
+        if not v or v.strip().lower() in {"changeme", "your-secret-key-here", "secret"}:
+            raise ValueError(
+                "JWT_SECRET_KEY must be set to a real random value — generate one with: "
+                'python -c "import secrets; print(secrets.token_urlsafe(64))"'
+            )
+        return v
+
+    # ── Auth: bootstrapped admin (absorbs pre-auth legacy data) ──────────────
+    # Only used by the 0007 migration to create/reuse one admin user and
+    # assign any orphaned (pre-auth) projects to them. Optional: if unset,
+    # that migration creates the admin with a generated email/password and
+    # logs it once (see migration docstring) rather than failing.
+    admin_email: str | None = None
+    admin_password: str | None = None
 
     # ── OpenAI — cloud LLM for RAG answer generation (Ask AI) ────────────────
     # Never set a default for the key itself — an absent key must mean

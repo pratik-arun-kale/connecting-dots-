@@ -12,7 +12,7 @@ import uuid
 
 from fastapi import APIRouter, Query, status
 
-from app.dependencies import ContextServiceDep
+from app.dependencies import ContextServiceDep, CurrentUserDep
 from app.schemas.context import ContextCapture, ContextCreate, ContextListResponse, ContextResponse
 
 router = APIRouter(prefix="/contexts", tags=["Contexts"])
@@ -27,8 +27,9 @@ router = APIRouter(prefix="/contexts", tags=["Contexts"])
 async def capture_context(
     payload: ContextCapture,
     service: ContextServiceDep,
+    current_user: CurrentUserDep,
 ) -> ContextResponse:
-    context = await service.capture_context(payload)
+    context = await service.capture_context(payload, current_user.id)
     return ContextResponse.model_validate(context)
 
 
@@ -41,8 +42,9 @@ async def capture_context(
 async def create_context(
     payload: ContextCreate,
     service: ContextServiceDep,
+    current_user: CurrentUserDep,
 ) -> ContextResponse:
-    context = await service.create_context(payload)
+    context = await service.create_context(payload, current_user.id)
     return ContextResponse.model_validate(context)
 
 
@@ -54,11 +56,12 @@ async def create_context(
 async def list_contexts(
     session_id: uuid.UUID,
     service: ContextServiceDep,
+    current_user: CurrentUserDep,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> ContextListResponse:
     contexts, total = await service.list_contexts_for_session(
-        session_id, offset=offset, limit=limit
+        session_id, current_user.id, offset=offset, limit=limit
     )
     return ContextListResponse(
         items=[ContextResponse.model_validate(c) for c in contexts],
@@ -74,6 +77,7 @@ async def list_contexts(
 async def get_context(
     context_id: uuid.UUID,
     service: ContextServiceDep,
+    current_user: CurrentUserDep,
 ) -> ContextResponse:
-    context = await service.get_context(context_id)
+    context = await service.get_context(context_id, current_user.id)
     return ContextResponse.model_validate(context)

@@ -8,10 +8,12 @@ Reuses the existing hybrid RAG retrieval pipeline (BM25 + vector + reranker);
 does NOT invoke Ollama or generate an AI answer.
 """
 
+import uuid
+
 from fastapi import APIRouter, status
 
 from app.core.rag.query_normalizer import _max_edit_distance, levenshtein_distance
-from app.dependencies import ProjectServiceDep, RagServiceDep
+from app.dependencies import CurrentUserDep, ProjectServiceDep, RagServiceDep
 from app.schemas.search import ConversationSearchRequest, ConversationSearchResponse
 
 router = APIRouter(prefix="/search", tags=["Search"])
@@ -24,7 +26,7 @@ PROJECT_SUGGESTION_SLACK = 2
 
 
 async def _closest_project_names(
-    topic: str, exclude_project_id: str, project_service: ProjectServiceDep
+    topic: str, exclude_project_id: str, owner_id: uuid.UUID, project_service: ProjectServiceDep
 ) -> list[str]:
     """
     "Closest projects" (Part 3) — layered in here rather than in
@@ -32,9 +34,14 @@ async def _closest_project_names(
     which that CPU-bound, DB-free module deliberately doesn't have access to.
     Only called on the already-rare "zero results" path, and reuses the
     existing ProjectService.list_projects() call — no new query pattern.
+
+    Scoped to the CALLER's own projects only (owner_id) — this also closes
+    what the audit flagged as a second leak on this same endpoint: an
+    unauthenticated/cross-user caller could previously see OTHER users'
+    project names surfaced as suggestions here.
     """
     topic_lower = topic.lower()
-    projects, _total = await project_service.list_projects(limit=200)
+    projects, _total = await project_service.list_projects(owner_id, limit=200)
     scored: list[tuple[int, str]] = []
     for p in projects:
         if str(p.id) == exclude_project_id:
@@ -56,7 +63,14 @@ async def search_conversations(
     payload: ConversationSearchRequest,
     rag_service: RagServiceDep,
     project_service: ProjectServiceDep,
+    current_user: CurrentUserDep,
 ) -> ConversationSearchResponse:
+    # Same reasoning as /projects/{id}/query: RagService has no DB access to
+    # check ownership itself, so it must be validated here, before the
+    # client-supplied project_id (it's in the request BODY, not the path —
+    # easy to overlook) is ever used to search ChromaDB.
+    await project_service.get_project(payload.project_id, current_user.id)
+
     result = await rag_service.search_conversations(
         payload.project_id, payload.query, payload.top_k
     )
@@ -64,7 +78,7 @@ async def search_conversations(
     if result.get("total_conversations", 0) == 0:
         topic = result.get("query_used") or payload.query
         closest_projects = await _closest_project_names(
-            topic, str(payload.project_id), project_service
+            topic, str(payload.project_id), current_user.id, project_service
         )
         if closest_projects:
             suggestions = result.get("suggestions") or {

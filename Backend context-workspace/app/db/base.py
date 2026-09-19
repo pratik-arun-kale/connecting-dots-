@@ -18,4 +18,4 @@ class Base(DeclarativeBase):
 
 # Import all models so Alembic's autogenerate can see them.
 # Keep this list in sync when adding new model modules.
-from app.models import context, project, session  # noqa: E402, F401
+from app.models import auth_session, context, project, session, user  # noqa: E402, F401

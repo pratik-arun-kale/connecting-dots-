@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -82,6 +83,31 @@ class ServiceUnavailableException(AppBaseException):
     message = "A downstream service is temporarily unavailable."
 
 
+class UnauthorizedException(AppBaseException):
+    """Missing/invalid/expired credentials — the caller isn't authenticated
+    at all. Object-level ownership mismatches use NotFoundException (404)
+    instead, so a request doesn't leak whether another user's resource
+    exists — see app/services/project.py etc."""
+    status_code = status.HTTP_401_UNAUTHORIZED
+    code = "unauthorized"
+    message = "Invalid or expired credentials."
+
+
+class ForbiddenException(AppBaseException):
+    """Authenticated, but the account itself isn't allowed to act (e.g.
+    is_active=False) — distinct from an object-ownership mismatch, which is
+    always a 404, never a 403."""
+    status_code = status.HTTP_403_FORBIDDEN
+    code = "forbidden"
+    message = "This account is not permitted to perform this action."
+
+
+class TooManyRequestsException(AppBaseException):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "too_many_requests"
+    message = "Too many requests — please try again later."
+
+
 # ── FastAPI Exception Handlers ───────────────────────────────────────────────
 
 async def _app_exception_handler(
@@ -100,11 +126,21 @@ async def _app_exception_handler(
 async def _validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    details = {"validation_errors": exc.errors()}
+    # jsonable_encoder is required, not cosmetic: Pydantic v2 puts the
+    # actual exception object in ctx.error for a validator's raised
+    # ValueError (e.g. ContextCreate's "raw_content must not be empty"),
+    # and raw exception instances aren't JSON-serializable — passing
+    # exc.errors() straight to JSONResponse crashes with "Object of type
+    # ValueError is not JSON serializable" instead of returning the 422.
+    # Pre-existing, previously undetected because this app's test suite
+    # never had a working test database to actually exercise this path
+    # until now.
+    safe_errors = jsonable_encoder(exc.errors())
+    details = {"validation_errors": safe_errors}
     logger.info(
         "validation_error",
         path=str(request.url),
-        errors=exc.errors(),
+        errors=safe_errors,
     )
     return _error_response(
         status.HTTP_422_UNPROCESSABLE_ENTITY,
