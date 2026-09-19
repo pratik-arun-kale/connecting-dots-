@@ -94,6 +94,35 @@ export interface ExtractConversationResult {
   detail: string;
 }
 
+// ── Note capture (Note content script → Background) ──────────────────────────
+
+export interface NoteGetProjectsRequest {
+  type: 'NOTE_GET_PROJECTS';
+}
+
+export interface NoteProjectSummary {
+  id:   string;
+  name: string;
+}
+
+export type NoteGetProjectsResult =
+  | { type: 'NOTE_GET_PROJECTS_RESULT'; ok: true; projects: NoteProjectSummary[] }
+  | { type: 'NOTE_GET_PROJECTS_RESULT'; ok: false; error: string };
+
+export interface NoteSaveRequest {
+  type:      'NOTE_SAVE_REQUEST';
+  projectId: string;
+  text:      string;
+  url:       string;
+  pageTitle: string;
+}
+
+export type NoteSaveResult =
+  | { type: 'NOTE_SAVE_RESULT'; ok: true; contextId: string }
+  | { type: 'NOTE_SAVE_RESULT'; ok: false; error: string };
+
 export type InternalMessage =
   | ContentScriptMessage
-  | CaptureContextRequest;
+  | CaptureContextRequest
+  | NoteGetProjectsRequest
+  | NoteSaveRequest;

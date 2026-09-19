@@ -36,6 +36,11 @@ export interface CaptureResponse {
   created:        boolean;
 }
 
+export interface ProjectSummary {
+  id:   string;
+  name: string;
+}
+
 export class BackendClient {
   constructor(private readonly baseUrl: string = DEFAULT_BASE) {}
 
@@ -60,6 +65,16 @@ export class BackendClient {
       throw new Error(`linkSession → ${res.status}: ${await res.text()}`);
     }
     return res.json() as Promise<BackendSession>;
+  }
+
+  async listProjects(): Promise<ProjectSummary[]> {
+    const res = await fetch(`${this.baseUrl}/projects`);
+    if (!res.ok) {
+      throw new Error(`listProjects → ${res.status}: ${await res.text()}`);
+    }
+    // Backend returns { items, total } — unwrap .items (see src/lib/api.ts for the same fix).
+    const body = (await res.json()) as { items: ProjectSummary[] };
+    return body.items;
   }
 
   async captureConversation(projectId: string, payload: CapturePayload): Promise<CaptureResponse> {

@@ -70,7 +70,7 @@ export interface User {
 // Backend API types (snake_case matching FastAPI responses)
 // ──────────────────────────────────────────────
 
-export type Platform = 'chatgpt' | 'claude' | 'gemini';
+export type Platform = 'chatgpt' | 'claude' | 'gemini' | 'note';
 
 export interface ApiProject {
   id: string;

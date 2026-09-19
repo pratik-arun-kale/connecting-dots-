@@ -11,7 +11,7 @@ interface CapturedContextListProps {
 
 const PLATFORM_LABELS: Record<string, string> = {
   chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini',
-  perplexity: 'Perplexity', unknown: 'Page',
+  perplexity: 'Perplexity', note: 'Note', unknown: 'Page',
 };
 
 const PLATFORM_COLORS: Record<string, string> = {
@@ -19,6 +19,7 @@ const PLATFORM_COLORS: Record<string, string> = {
   claude:     'bg-amber-500/15 text-amber-400 border-amber-500/20',
   gemini:     'bg-sky-500/15 text-sky-400 border-sky-500/20',
   perplexity: 'bg-violet-500/15 text-violet-400 border-violet-500/20',
+  note:       'bg-rose-500/15 text-rose-400 border-rose-500/20',
 };
 
 interface Msg { role: string; content: string }

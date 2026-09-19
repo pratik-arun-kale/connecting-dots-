@@ -28,7 +28,7 @@ class CaptureConversationRequest(AppBaseModel):
     """Full conversation payload sent by the Chrome extension."""
 
     idempotency_key: str = Field(..., min_length=8, max_length=64)
-    platform: str         = Field(..., description="chatgpt | claude | gemini | perplexity")
+    platform: str         = Field(..., description="chatgpt | claude | gemini | perplexity | note")
     chat_url: str         = Field(..., max_length=2048)
     captured_at: datetime
     title: str            = Field(default="Untitled Conversation", max_length=512)
@@ -45,7 +45,7 @@ class CaptureConversationRequest(AppBaseModel):
     @field_validator("platform")
     @classmethod
     def _validate_platform(cls, v: str) -> str:
-        allowed = {"chatgpt", "claude", "gemini", "perplexity", "unknown"}
+        allowed = {"chatgpt", "claude", "gemini", "perplexity", "note", "unknown"}
         if v not in allowed:
             raise ValueError(f"platform must be one of {allowed}")
         return v

@@ -26,7 +26,7 @@ const CONFIDENCE_STYLES: Record<string, string> = {
 
 export const PLATFORM_LABELS: Record<string, string> = {
   chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini',
-  perplexity: 'Perplexity', unknown: 'Page',
+  perplexity: 'Perplexity', note: 'Note', unknown: 'Page',
 };
 
 export const PLATFORM_COLORS: Record<string, string> = {
@@ -34,6 +34,7 @@ export const PLATFORM_COLORS: Record<string, string> = {
   claude:     'bg-amber-500/10 text-amber-400 border-amber-500/20',
   gemini:     'bg-sky-500/10 text-sky-400 border-sky-500/20',
   perplexity: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
+  note:       'bg-rose-500/10 text-rose-400 border-rose-500/20',
   unknown:    'bg-muted/20 text-muted-foreground border-border/30',
 };
 

@@ -52,6 +52,17 @@
       "matches": ["https://gemini.google.com/*"],
       "js": ["content-scripts/gemini-cs.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*"
+      ],
+      "js": ["content-scripts/note-cs.js"],
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ],
   "icons": {

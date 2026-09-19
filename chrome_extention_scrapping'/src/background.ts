@@ -16,7 +16,10 @@ import { SessionOrchestrator } from './core/SessionOrchestrator';
 import { CaptureQueue }        from './core/CaptureQueue';
 import { BackendClient }       from './api/BackendClient';
 import { ProviderRegistry }    from './providers/ProviderRegistry';
-import type { ExternalRequest, ContentScriptMessage, CaptureContextRequest } from './types/messages';
+import type {
+  ExternalRequest, ContentScriptMessage, CaptureContextRequest,
+  NoteGetProjectsRequest, NoteSaveRequest, NoteSaveResult,
+} from './types/messages';
 import type { ProviderSession, FailureReason } from './types/session';
 
 // ── Singletons ────────────────────────────────────────────────────────────────
@@ -280,6 +283,64 @@ chrome.runtime.onMessage.addListener(
     }
   },
 );
+
+// ── Note capture (Note content script → Background) ──────────────────────────
+// Selection-triggered quick notes. Unlike full conversation capture, the
+// content script already has the text it needs (no tab-injection/extraction
+// step) — background's job here is just "list projects" and "upload one
+// note", both answered directly rather than via the retry-oriented
+// CaptureQueue (the floating UI is waiting synchronously for a result).
+
+chrome.runtime.onMessage.addListener(
+  (message: NoteGetProjectsRequest | NoteSaveRequest, _sender, sendResponse) => {
+    if (message.type === 'NOTE_GET_PROJECTS') {
+      api.listProjects()
+        .then(projects => sendResponse({ type: 'NOTE_GET_PROJECTS_RESULT', ok: true, projects }))
+        .catch((err: unknown) => sendResponse({
+          type: 'NOTE_GET_PROJECTS_RESULT', ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        }));
+      return true; // keep response channel open for async fetch
+    }
+
+    if (message.type === 'NOTE_SAVE_REQUEST') {
+      handleNoteSave(message)
+        .then(sendResponse)
+        .catch((err: unknown) => sendResponse({
+          type: 'NOTE_SAVE_RESULT', ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        }));
+      return true;
+    }
+
+    return undefined;
+  },
+);
+
+async function handleNoteSave(msg: NoteSaveRequest): Promise<NoteSaveResult> {
+  const text = msg.text.trim().slice(0, 50_000); // matches backend CapturedMessage.content max_length
+  if (!text) {
+    return { type: 'NOTE_SAVE_RESULT', ok: false, error: 'Note text is empty.' };
+  }
+
+  const titlePreview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+  const idempotencyKey = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `note_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+  const payload = {
+    idempotency_key: idempotencyKey,
+    platform:    'note',
+    chat_url:    msg.url,
+    captured_at: new Date().toISOString(),
+    title:       `[Note] ${titlePreview}`,
+    messages:    [{ role: 'user', content: text, timestamp: new Date().toISOString(), index: 0 }],
+    metadata:    { source: 'note', page_title: msg.pageTitle },
+  };
+
+  const result = await api.captureConversation(msg.projectId, payload);
+  return { type: 'NOTE_SAVE_RESULT', ok: true, contextId: result.context_id };
+}
 
 // ── webNavigation — conversation URL capture ──────────────────────────────────
 

@@ -29,9 +29,10 @@ class SourcePlatform:
     CLAUDE     = "claude"
     GEMINI     = "gemini"
     PERPLEXITY = "perplexity"
+    NOTE       = "note"       # manual text-selection note, not a full conversation capture
     UNKNOWN    = "unknown"
 
-    ALL = {CHATGPT, CLAUDE, GEMINI, PERPLEXITY, UNKNOWN}
+    ALL = {CHATGPT, CLAUDE, GEMINI, PERPLEXITY, NOTE, UNKNOWN}
 
 
 class SessionState:

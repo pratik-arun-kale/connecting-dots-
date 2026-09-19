@@ -15,7 +15,7 @@ from pydantic import Field, field_validator
 
 from app.schemas.base import AppBaseModel
 
-SourcePlatformLiteral = Literal["chatgpt", "claude", "gemini", "unknown"]
+SourcePlatformLiteral = Literal["chatgpt", "claude", "gemini", "note", "unknown"]
 
 _ALLOWED_URL_RE = re.compile(
     r"^https://(chatgpt\.com|chat\.openai\.com|claude\.ai|gemini\.google\.com)/"
