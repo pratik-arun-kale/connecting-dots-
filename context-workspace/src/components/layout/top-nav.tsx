@@ -2,9 +2,10 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Menu, Search, Bell, RefreshCw } from 'lucide-react';
+import { Menu, Search, Bell, RefreshCw, Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSearchStore, useWorkspaceStore, useAuthStore } from '@/store';
+import { useThemeStore } from '@/store/theme-store';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +30,8 @@ export function TopNav({ onMobileMenuToggle }: TopNavProps) {
   const user = useAuthStore((state) => state.user);
   const refreshToken = useAuthStore((state) => state.refreshToken);
   const clearSession = useAuthStore((state) => state.clearSession);
+  const theme = useThemeStore((state) => state.theme);
+  const toggleTheme = useThemeStore((state) => state.toggleTheme);
 
   const displayName = user?.email?.split('@')[0] ?? 'Account';
   const initials = displayName.slice(0, 2).toUpperCase();
@@ -61,13 +64,13 @@ export function TopNav({ onMobileMenuToggle }: TopNavProps) {
   }, [setOpenSearch]);
 
   return (
-    <header className="h-16 border-b border-border bg-white flex items-center justify-between px-6 shrink-0">
+    <header className="h-16 border-b border-border bg-card flex items-center justify-between px-6 shrink-0">
       {/* Left: Mobile toggle */}
       <div className="flex items-center gap-3">
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden h-8 w-8 text-[#64748b]"
+          className="md:hidden h-8 w-8 text-muted-foreground"
           onClick={onMobileMenuToggle}
         >
           <Menu className="w-4 h-4" />
@@ -78,13 +81,13 @@ export function TopNav({ onMobileMenuToggle }: TopNavProps) {
       <div className="flex-1 max-w-xs mx-6">
         <button
           onClick={() => setOpenSearch(true)}
-          className="w-full flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl border border-border bg-[#f8fafc] hover:border-[#cbd5e1] text-[#94a3b8] hover:text-[#64748b] text-[13px] transition-all"
+          className="w-full flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl border border-border bg-muted/40 hover:border-muted-foreground/30 text-muted-foreground hover:text-foreground text-[13px] transition-all"
         >
           <div className="flex items-center gap-2.5">
             <Search className="w-3.5 h-3.5 shrink-0" />
             <span>Search notes…</span>
           </div>
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 h-5 px-1.5 text-[10px] font-medium text-[#94a3b8] bg-white border border-border rounded pointer-events-none">
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 h-5 px-1.5 text-[10px] font-medium text-muted-foreground bg-card border border-border rounded pointer-events-none">
             ⌘K
           </kbd>
         </button>
@@ -94,43 +97,52 @@ export function TopNav({ onMobileMenuToggle }: TopNavProps) {
       <div className="flex items-center gap-3">
         {/* Sync indicator */}
         {syncStatus === 'syncing' && (
-          <span className="hidden sm:flex items-center gap-1.5 text-[12px] text-[#d97706] font-medium">
+          <span className="hidden sm:flex items-center gap-1.5 text-[12px] text-amber-500 font-medium">
             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
             Syncing
           </span>
         )}
 
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="w-9 h-9 rounded-xl border border-border bg-card hover:bg-muted/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+        >
+          {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+        </button>
+
         {/* Notification bell */}
-        <button className="relative w-9 h-9 rounded-xl border border-border bg-white hover:bg-[#f8fafc] flex items-center justify-center text-[#64748b] hover:text-[#0f172a] transition-all">
+        <button className="relative w-9 h-9 rounded-xl border border-border bg-card hover:bg-muted/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all">
           <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#4f46e5] border-2 border-white" />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-indigo-500 border-2 border-card" />
         </button>
 
         {/* User */}
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={<button className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-xl border border-border bg-white hover:bg-[#f8fafc] transition-all" />}
+            render={<button className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-xl border border-border bg-card hover:bg-muted/40 transition-all" />}
           >
             <Avatar className="h-7 w-7">
-              <AvatarFallback className="bg-[#0f172a] text-white text-[11px] font-bold">
+              <AvatarFallback className="bg-primary text-primary-foreground text-[11px] font-bold">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="hidden sm:block text-left">
-              <p className="text-[12px] font-semibold text-[#0f172a] leading-tight">{displayName}</p>
-              <p className="text-[10px] text-[#94a3b8] leading-tight">{user?.email ?? ''}</p>
+              <p className="text-[12px] font-semibold text-foreground leading-tight">{displayName}</p>
+              <p className="text-[10px] text-muted-foreground leading-tight">{user?.email ?? ''}</p>
             </div>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56 bg-white border-border shadow-lg" align="end">
+          <DropdownMenuContent className="w-56 bg-popover border-border shadow-lg" align="end">
             <DropdownMenuGroup>
               <DropdownMenuLabel className="font-normal">
-                <p className="text-[13px] font-semibold text-[#0f172a]">{displayName}</p>
-                <p className="text-[11px] text-[#94a3b8]">{user?.email ?? ''}</p>
+                <p className="text-[13px] font-semibold text-foreground">{displayName}</p>
+                <p className="text-[11px] text-muted-foreground">{user?.email ?? ''}</p>
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              className="text-[13px] text-[#ef4444] focus:text-[#ef4444]"
+              className="text-[13px] text-destructive focus:text-destructive"
               onClick={handleLogout}
             >
               Log out

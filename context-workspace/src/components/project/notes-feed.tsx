@@ -1,12 +1,16 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { cn } from '@/lib/utils';
 import { ExternalLink, StickyNote } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
 import { MarkdownContent } from '@/components/markdown/markdown-content';
 import { getContextPlatform, getSourceChip } from '@/lib/context-platform';
 import { useCreateNote } from '@/lib/query';
+import { projectService } from '@/lib/api/services';
+import { QUERY_KEYS } from '@/lib/constants';
 import type { ApiContext } from '@/types';
 
 interface NotesFeedProps {
@@ -51,6 +55,15 @@ function getPreviewText(context: ApiContext): string {
   return text.replace(/\s*\n+\s*/g, ' ').replace(/[*_`#>-]/g, '').trim();
 }
 
+/** Notes have no real title ("[Note] <preview>" isn't meant for display) —
+ *  derive one from the body. Captured conversations already have a real
+ *  title (the page's actual title, cleaned up at capture time). */
+function getDisplayTitle(context: ApiContext): string {
+  if (getContextPlatform(context) !== 'note' && context.title) return context.title;
+  const preview = getPreviewText(context);
+  return preview.slice(0, 60) || 'Untitled';
+}
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
@@ -71,16 +84,60 @@ function dayLabel(iso: string): string {
 
 // ── Composer ("Take a note…" bar — Google Keep style) ───────────────────────
 
+const AUTOSAVE_DEBOUNCE_MS = 800;
+
 function NoteComposer({ projectId }: { projectId: string }) {
   const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState('');
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const createNote = useCreateNote(projectId);
+  const queryClient = useQueryClient();
 
-  const commit = () => {
-    const trimmed = text.trim();
-    setExpanded(false);
-    setText('');
-    if (trimmed) createNote.mutate(trimmed);
+  // A note is created on the FIRST debounced pause; every pause after that
+  // PATCHes the same context's content_md instead of creating a new one.
+  const noteIdRef = useRef<string | null>(null);
+  const lastSavedRef = useRef('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const persist = useCallback(
+    async (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed || trimmed === lastSavedRef.current) return;
+      setStatus('saving');
+      try {
+        if (!noteIdRef.current) {
+          const { contextId } = await createNote.mutateAsync(trimmed);
+          noteIdRef.current = contextId;
+        } else {
+          await projectService.updateNoteContent(noteIdRef.current, trimmed);
+          queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, projectId, QUERY_KEYS.contexts] });
+        }
+        lastSavedRef.current = trimmed;
+        setStatus('saved');
+      } catch {
+        setStatus('idle'); // stays in the textarea untouched — next pause/blur retries
+      }
+    },
+    [createNote, projectId, queryClient],
+  );
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setText(value);
+    setStatus('idle');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => void persist(value), AUTOSAVE_DEBOUNCE_MS);
+  };
+
+  const collapse = () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    void persist(text).finally(() => {
+      setExpanded(false);
+      setText('');
+      setStatus('idle');
+      noteIdRef.current = null;
+      lastSavedRef.current = '';
+    });
   };
 
   return (
@@ -99,12 +156,14 @@ function NoteComposer({ projectId }: { projectId: string }) {
           <Textarea
             autoFocus
             value={text}
-            onChange={(e) => setText(e.target.value)}
-            onBlur={commit}
+            onChange={handleChange}
+            onBlur={collapse}
             placeholder="Write a note… (Markdown supported)"
             className="min-h-20 resize-none border-none bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
           />
-          <p className="text-[10px] text-muted-foreground">Click away to save — no Save button needed.</p>
+          <p className="text-[10px] text-muted-foreground">
+            {status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved ✓' : 'Autosaves as you type — click away when done.'}
+          </p>
         </div>
       )}
     </div>
@@ -140,8 +199,44 @@ function NoteCard({ context, onOpen }: { context: ApiContext; onOpen: () => void
         <time className="shrink-0 text-[10px] text-muted-foreground/70">{formatTime(context.created_at)}</time>
       </div>
 
-      <p className="line-clamp-4 text-sm leading-relaxed text-foreground">
-        {preview || <span className="italic text-muted-foreground">Empty</span>}
+      <p className="mb-1 text-[15px] font-semibold leading-snug text-foreground line-clamp-1">
+        {getDisplayTitle(context)}
+      </p>
+      <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+        {preview || <span className="italic">Empty</span>}
+      </p>
+    </button>
+  );
+}
+
+// ── Left sidebar list item (compact) ────────────────────────────────────
+
+function NoteListItem({
+  context, isActive, onClick,
+}: { context: ApiContext; isActive: boolean; onClick: () => void }) {
+  const chip = getSourceChip(context);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'block w-full rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer',
+        isActive ? 'bg-accent' : 'hover:bg-muted/50',
+      )}
+    >
+      <div className="mb-0.5 flex items-center gap-2">
+        <span
+          className={cn(
+            'h-1.5 w-1.5 shrink-0 rounded-full',
+            chip.isNote ? 'bg-rose-500' : 'bg-indigo-500',
+          )}
+          aria-hidden
+        />
+        <p className="truncate text-[13px] font-semibold text-foreground">{getDisplayTitle(context)}</p>
+      </div>
+      <p className="line-clamp-1 pl-3.5 text-[11px] text-muted-foreground">
+        {getPreviewText(context) || 'Empty'}
       </p>
     </button>
   );
@@ -236,7 +331,51 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
   ];
 
   return (
-    <div className="flex flex-col items-start gap-6 lg:flex-row">
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      {/* Left: filters + a compact, day-grouped list of every note — click
+          any item to open it in the detail drawer (same drawer the center
+          stream's cards open). */}
+      <aside className="w-full shrink-0 lg:sticky lg:top-4 lg:w-64">
+        <div className="mb-3 flex gap-1.5">
+          {filterOptions.map(({ mode, label }) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setFilter(mode)}
+              className={cn(
+                'rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer',
+                filter === mode
+                  ? 'bg-indigo-500/10 text-indigo-500'
+                  : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="max-h-[calc(100vh-14rem)] space-y-4 overflow-y-auto pr-1 lg:max-h-[calc(100vh-10rem)]">
+          {groups.map((group) => (
+            <div key={group.label}>
+              <h4 className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                {group.label}
+              </h4>
+              <div className="space-y-0.5">
+                {group.items.map((ctx) => (
+                  <NoteListItem
+                    key={ctx.id}
+                    context={ctx}
+                    isActive={activeContext?.id === ctx.id}
+                    onClick={() => setActiveContext(ctx)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      {/* Center: composer + the continuous passage stream. */}
       <div className="mx-auto w-full min-w-0 flex-1 lg:mx-0 lg:max-w-[720px]">
         <NoteComposer projectId={projectId} />
 
@@ -262,28 +401,6 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
           ))
         )}
       </div>
-
-      <aside className="w-full shrink-0 lg:sticky lg:top-4 lg:w-44">
-        <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-          Filters
-        </h4>
-        <div className="flex gap-1.5 lg:flex-col">
-          {filterOptions.map(({ mode, label }) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setFilter(mode)}
-              className={`rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors cursor-pointer ${
-                filter === mode
-                  ? 'bg-indigo-500/10 text-indigo-600'
-                  : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </aside>
 
       <NoteDetailDrawer context={activeContext} onClose={() => setActiveContext(null)} />
     </div>

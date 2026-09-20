@@ -29,14 +29,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Drawer (visible on mobile only) */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-65 p-0 bg-[#f5f5f7] border-r border-border">
-          <div className="h-14 flex items-center px-4 border-b border-border">
+        <SheetContent side="left" className="w-65 p-0 bg-sidebar border-r border-sidebar-border">
+          <div className="h-14 flex items-center px-4 border-b border-sidebar-border">
             <Link
               href="/dashboard"
               className="flex items-center gap-2.5"
               onClick={() => setMobileOpen(false)}
             >
-              <div className="w-6 h-6 rounded-md bg-[#1d1d1f] flex items-center justify-center shrink-0">
+              <div className="w-6 h-6 rounded-md bg-sidebar-primary flex items-center justify-center shrink-0">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                   <rect x="1" y="1" width="4" height="4" rx="1" fill="white" fillOpacity="0.95" />
                   <rect x="7" y="1" width="4" height="4" rx="1" fill="white" fillOpacity="0.45" />
@@ -58,8 +58,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   className={cn(
                     'flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all',
                     isActive
-                      ? 'bg-white text-foreground shadow-sm border border-border'
-                      : 'text-muted-foreground hover:bg-white/70 hover:text-foreground'
+                      ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm border border-sidebar-border'
+                      : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'
                   )}
                   onClick={() => setMobileOpen(false)}
                 >

@@ -45,12 +45,12 @@ export function Sidebar() {
         className={cn(
           'flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 group relative',
           active
-            ? 'bg-[#0f172a] text-white shadow-sm'
-            : 'text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]',
+            ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
+            : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
           isCollapsed && 'justify-center px-0'
         )}
       >
-        <Icon className={cn('w-4 h-4 shrink-0', active ? 'text-white' : 'text-[#94a3b8] group-hover:text-[#0f172a]')} />
+        <Icon className={cn('w-4 h-4 shrink-0', active ? 'text-sidebar-primary-foreground' : 'text-muted-foreground/70 group-hover:text-sidebar-accent-foreground')} />
         {!isCollapsed && <span>{item.label}</span>}
       </Link>
     );
@@ -59,22 +59,22 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'hidden md:flex flex-col border-r border-border bg-white transition-all duration-300 ease-in-out',
+        'hidden md:flex flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300 ease-in-out',
         isCollapsed ? 'w-[64px]' : 'w-[220px]'
       )}
     >
       {/* Brand */}
       <div className={cn(
-        'h-16 flex items-center border-b border-border px-4 shrink-0',
+        'h-16 flex items-center border-b border-sidebar-border px-4 shrink-0',
         isCollapsed ? 'justify-center' : 'gap-3'
       )}>
-        <div className="w-8 h-8 rounded-xl bg-[#0f172a] flex items-center justify-center shrink-0">
-          <Brain className="w-4 h-4 text-white" />
+        <div className="w-8 h-8 rounded-xl bg-sidebar-primary flex items-center justify-center shrink-0">
+          <Brain className="w-4 h-4 text-sidebar-primary-foreground" />
         </div>
         {!isCollapsed && (
           <div>
-            <p className="text-[13px] font-bold text-[#0f172a] leading-tight">Context</p>
-            <p className="text-[11px] text-[#94a3b8] leading-tight">Workspace</p>
+            <p className="text-[13px] font-bold text-sidebar-foreground leading-tight">Context</p>
+            <p className="text-[11px] text-muted-foreground leading-tight">Workspace</p>
           </div>
         )}
       </div>
@@ -84,7 +84,7 @@ export function Sidebar() {
         {/* MENU section */}
         <div className="space-y-1">
           {!isCollapsed && (
-            <p className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-widest px-3 mb-2">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-2">
               Menu
             </p>
           )}
@@ -94,7 +94,7 @@ export function Sidebar() {
         {/* GENERAL section */}
         <div className="space-y-1">
           {!isCollapsed && (
-            <p className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-widest px-3 mb-2">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-2">
               General
             </p>
           )}
@@ -105,19 +105,19 @@ export function Sidebar() {
       {/* Bottom CTA card */}
       {!isCollapsed && (
         <div className="p-3 shrink-0">
-          <div className="rounded-2xl bg-[#0f172a] p-4 text-white">
-            <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center mb-3">
-              <Sparkles className="w-4 h-4 text-white" />
+          <div className="rounded-2xl bg-sidebar-primary p-4 text-sidebar-primary-foreground">
+            <div className="w-8 h-8 rounded-xl bg-sidebar-primary-foreground/10 flex items-center justify-center mb-3">
+              <Sparkles className="w-4 h-4 text-sidebar-primary-foreground" />
             </div>
             <p className="text-[13px] font-semibold leading-snug mb-1">
               Ask AI about your sessions
             </p>
-            <p className="text-[11px] text-white/60 leading-relaxed mb-3">
+            <p className="text-[11px] text-sidebar-primary-foreground/60 leading-relaxed mb-3">
               Query all captured context with the Ask AI tab.
             </p>
             <Link
               href="/projects"
-              className="block text-center text-[12px] font-semibold bg-white text-[#0f172a] rounded-lg py-1.5 hover:bg-white/90 transition-colors"
+              className="block text-center text-[12px] font-semibold bg-sidebar-primary-foreground text-sidebar-primary rounded-lg py-1.5 hover:opacity-90 transition-opacity"
             >
               Open Projects
             </Link>
@@ -126,10 +126,10 @@ export function Sidebar() {
       )}
 
       {/* Collapse toggle */}
-      <div className="p-3 border-t border-border shrink-0">
+      <div className="p-3 border-t border-sidebar-border shrink-0">
         <button
           onClick={() => isCollapsed ? expand() : collapse()}
-          className="w-full flex justify-center items-center gap-2 p-2 rounded-lg text-[#94a3b8] hover:bg-[#f1f5f9] hover:text-[#0f172a] transition-all text-[12px] font-medium"
+          className="w-full flex justify-center items-center gap-2 p-2 rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all text-[12px] font-medium"
         >
           {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <><ChevronLeft className="w-4 h-4" /><span>Collapse</span></>}
         </button>
