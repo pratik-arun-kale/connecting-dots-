@@ -6,6 +6,8 @@ Context endpoints.
 POST   /contexts                       – capture a context
 GET    /contexts/{session_id}          – list contexts for a session
 GET    /contexts/detail/{context_id}   – get a single context
+PATCH  /contexts/detail/{context_id}   – update user_note and/or content_md
+DELETE /contexts/detail/{context_id}   – delete a note/context
 """
 
 import uuid
@@ -13,7 +15,13 @@ import uuid
 from fastapi import APIRouter, Query, status
 
 from app.dependencies import ContextServiceDep, CurrentUserDep
-from app.schemas.context import ContextCapture, ContextCreate, ContextListResponse, ContextResponse
+from app.schemas.context import (
+    ContextCapture,
+    ContextCreate,
+    ContextListResponse,
+    ContextResponse,
+    NoteUpdateRequest,
+)
 
 router = APIRouter(prefix="/contexts", tags=["Contexts"])
 
@@ -81,3 +89,31 @@ async def get_context(
 ) -> ContextResponse:
     context = await service.get_context(context_id, current_user.id)
     return ContextResponse.model_validate(context)
+
+
+@router.patch(
+    "/detail/{context_id}",
+    response_model=ContextResponse,
+    summary="Update a note's annotation (user_note) and/or a written note's body (content_md)",
+)
+async def update_note(
+    context_id: uuid.UUID,
+    payload: NoteUpdateRequest,
+    service: ContextServiceDep,
+    current_user: CurrentUserDep,
+) -> ContextResponse:
+    context = await service.update_note(context_id, payload, current_user.id)
+    return ContextResponse.model_validate(context)
+
+
+@router.delete(
+    "/detail/{context_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a note/context",
+)
+async def delete_note(
+    context_id: uuid.UUID,
+    service: ContextServiceDep,
+    current_user: CurrentUserDep,
+) -> None:
+    await service.delete_note(context_id, current_user.id)

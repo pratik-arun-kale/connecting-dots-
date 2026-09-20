@@ -25,6 +25,11 @@ export interface CapturePayload {
   title:           string;
   messages:        Array<{ role: string; content: string; timestamp: string | null; index: number }>;
   metadata:        Record<string, unknown> | null;
+  // Notebook fields (0008) — optional so full-conversation captures (which
+  // don't set these) keep compiling unchanged.
+  kind?:        'captured' | 'written';
+  page_title?:  string | null;
+  prompt_text?: string | null;
 }
 
 export interface CaptureResponse {

@@ -826,6 +826,48 @@
     }, withinAnyOwnUi = function(target) {
       if (!(target instanceof Node)) return false;
       return !!barHostEl && (target === barHostEl || barHostEl.contains(target)) || !!launcherHostEl && (target === launcherHostEl || launcherHostEl.contains(target));
+    }, detectPlatform = function() {
+      const host = location.hostname;
+      if (host.includes("chatgpt.com") || host.includes("chat.openai.com")) return "chatgpt";
+      if (host.includes("claude.ai")) return "claude";
+      if (host.includes("gemini.google.com")) return "gemini";
+      return null;
+    }, findPrecedingPrompt = function(selection) {
+      try {
+        const anchorNode = selection.anchorNode;
+        if (!anchorNode) return null;
+        const anchorEl = anchorNode.nodeType === Node.ELEMENT_NODE ? anchorNode : anchorNode.parentElement;
+        if (!anchorEl) return null;
+        const platform = detectPlatform();
+        if (!platform) return null;
+        let turnSelector;
+        let isUserTurn;
+        if (platform === "chatgpt") {
+          turnSelector = "[data-message-author-role]";
+          isUserTurn = (el) => el.getAttribute("data-message-author-role") === "user";
+        } else if (platform === "claude") {
+          turnSelector = '[data-testid="human-turn"],[data-testid="ai-turn"]';
+          isUserTurn = (el) => el.getAttribute("data-testid") === "human-turn";
+        } else {
+          turnSelector = "user-query,model-response";
+          isUserTurn = (el) => el.tagName.toLowerCase() === "user-query";
+        }
+        const turns = Array.from(document.querySelectorAll(turnSelector));
+        if (!turns.length) return null;
+        const containingTurn = anchorEl.closest(turnSelector);
+        const containingIndex = containingTurn ? turns.indexOf(containingTurn) : -1;
+        const startIndex = containingIndex >= 0 ? containingIndex : turns.length;
+        for (let i = startIndex - 1; i >= 0; i--) {
+          if (isUserTurn(turns[i])) {
+            const text = turns[i].innerText?.trim();
+            return text ? truncate(text, PROMPT_LOOKUP_MAX_CHARS) : null;
+          }
+        }
+        return null;
+      } catch (err) {
+        console.error("[note-cs] findPrecedingPrompt failed (non-fatal, no prompt_text this time):", err);
+        return null;
+      }
     }, ensureBar = function() {
       if (barHostEl) return;
       barHostEl = document.createElement("div");
@@ -894,11 +936,12 @@
         setSelectOptions(bar.select, projects.map((p) => ({ value: p.id, label: p.name })));
         applyLastProject(bar.select, projects);
       });
-    }, showBar = function(markdownText, previewText) {
+    }, showBar = function(markdownText, previewText, promptText) {
       ensureBar();
       if (!bar) return;
       barMode = "selection";
       pendingText = markdownText;
+      pendingPromptText = promptText;
       bar.preview.hidden = false;
       bar.preview.textContent = truncate(previewText, PREVIEW_MAX_CHARS);
       bar.manualInput.hidden = true;
@@ -912,6 +955,7 @@
       if (!bar) return;
       barMode = "manual";
       pendingText = "";
+      pendingPromptText = null;
       bar.preview.hidden = true;
       bar.manualInput.hidden = false;
       bar.manualInput.value = "";
@@ -934,7 +978,15 @@
       bar.saveBtn.textContent = "Saving\u2026";
       setBarStatus("");
       chrome.runtime.sendMessage(
-        { type: "NOTE_SAVE_REQUEST", projectId, text, url: location.href, pageTitle: document.title || "" },
+        {
+          type: "NOTE_SAVE_REQUEST",
+          projectId,
+          text,
+          url: location.href,
+          pageTitle: document.title || "",
+          kind: barMode === "manual" ? "written" : "captured",
+          promptText: barMode === "manual" ? null : pendingPromptText
+        },
         (response) => {
           if (!bar) return;
           if (chrome.runtime.lastError || !response?.ok) {
@@ -1095,7 +1147,8 @@
       try {
         const cleanPlainText = cleanupText(plainText);
         const markdown = getSelectionMarkdown(selection, cleanPlainText);
-        showBar(markdown, cleanPlainText);
+        const promptText = findPrecedingPrompt(selection);
+        showBar(markdown, cleanPlainText, promptText);
       } catch (err) {
         console.error("[note-cs] failed to show note bar:", err);
       }
@@ -1103,7 +1156,7 @@
       if (selectionTimer) clearTimeout(selectionTimer);
       selectionTimer = setTimeout(() => evaluateSelection(event), SELECTION_DEBOUNCE_MS);
     };
-    getSelectionHtml2 = getSelectionHtml, getSelectionMarkdown2 = getSelectionMarkdown, stripOrphanEdgeQuotes2 = stripOrphanEdgeQuotes, cleanupText2 = cleanupText, isEditableContext2 = isEditableContext, truncate2 = truncate, setSelectOptions2 = setSelectOptions, fetchProjects2 = fetchProjects, applyLastProject2 = applyLastProject, withinAnyOwnUi2 = withinAnyOwnUi, ensureBar2 = ensureBar, setBarStatus2 = setBarStatus, loadProjectsIntoBar2 = loadProjectsIntoBar, showBar2 = showBar, showManualNoteBar2 = showManualNoteBar, hideBar2 = hideBar, onSaveNote2 = onSaveNote, buildLogoMark2 = buildLogoMark, ensureLauncher2 = ensureLauncher, setMenuStatus2 = setMenuStatus, loadProjectsIntoLauncher2 = loadProjectsIntoLauncher, toggleLauncherMenu2 = toggleLauncherMenu, closeLauncherMenu2 = closeLauncherMenu, onLauncherCapture2 = onLauncherCapture, evaluateSelection2 = evaluateSelection, onSelectionMaybeChanged2 = onSelectionMaybeChanged;
+    getSelectionHtml2 = getSelectionHtml, getSelectionMarkdown2 = getSelectionMarkdown, stripOrphanEdgeQuotes2 = stripOrphanEdgeQuotes, cleanupText2 = cleanupText, isEditableContext2 = isEditableContext, truncate2 = truncate, setSelectOptions2 = setSelectOptions, fetchProjects2 = fetchProjects, applyLastProject2 = applyLastProject, withinAnyOwnUi2 = withinAnyOwnUi, detectPlatform2 = detectPlatform, findPrecedingPrompt2 = findPrecedingPrompt, ensureBar2 = ensureBar, setBarStatus2 = setBarStatus, loadProjectsIntoBar2 = loadProjectsIntoBar, showBar2 = showBar, showManualNoteBar2 = showManualNoteBar, hideBar2 = hideBar, onSaveNote2 = onSaveNote, buildLogoMark2 = buildLogoMark, ensureLauncher2 = ensureLauncher, setMenuStatus2 = setMenuStatus, loadProjectsIntoLauncher2 = loadProjectsIntoLauncher, toggleLauncherMenu2 = toggleLauncherMenu, closeLauncherMenu2 = closeLauncherMenu, onLauncherCapture2 = onLauncherCapture, evaluateSelection2 = evaluateSelection, onSelectionMaybeChanged2 = onSelectionMaybeChanged;
     window.__CW_NOTE_CS__ = true;
     const MIN_SELECTION_LENGTH = 2;
     const SELECTION_DEBOUNCE_MS = 150;
@@ -1262,7 +1315,9 @@
     let bar = null;
     let barMode = "selection";
     let pendingText = "";
+    let pendingPromptText = null;
     let projectsLoadedInBar = false;
+    const PROMPT_LOOKUP_MAX_CHARS = 2e3;
     let launcherHostEl = null;
     let launcher = null;
     let launcherProjectsLoaded = false;
@@ -1292,6 +1347,8 @@
   var fetchProjects2;
   var applyLastProject2;
   var withinAnyOwnUi2;
+  var detectPlatform2;
+  var findPrecedingPrompt2;
   var ensureBar2;
   var setBarStatus2;
   var loadProjectsIntoBar2;

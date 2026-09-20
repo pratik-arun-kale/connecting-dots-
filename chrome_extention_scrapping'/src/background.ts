@@ -352,6 +352,9 @@ async function handleNoteSave(msg: NoteSaveRequest): Promise<NoteSaveResult> {
     title:       `[Note] ${titlePreview}`,
     messages:    [{ role: 'user', content: text, timestamp: new Date().toISOString(), index: 0 }],
     metadata:    { source: 'note', page_title: msg.pageTitle },
+    kind:        msg.kind,
+    page_title:  msg.pageTitle || null,
+    prompt_text: msg.promptText,
   };
 
   const result = await api.captureConversation(msg.projectId, payload);

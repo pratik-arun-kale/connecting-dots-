@@ -323,7 +323,69 @@ if (!window.__CW_NOTE_CS__) {
   let bar: BarEls | null = null;
   let barMode: 'selection' | 'manual' = 'selection';
   let pendingText = '';
+  let pendingPromptText: string | null = null;
   let projectsLoadedInBar = false;
+
+  // ── Preceding-question lookup (best-effort, defensive) ───────────────────
+  // Per-platform DOM structure, exactly matching the selectors background.ts
+  // already uses for full-conversation extraction. Never throws outward —
+  // any failure (unrecognized platform, DOM shape changed, selection not
+  // inside a turn) just means no prompt_text, never blocks saving the note.
+
+  const PROMPT_LOOKUP_MAX_CHARS = 2000;
+
+  function detectPlatform(): 'chatgpt' | 'claude' | 'gemini' | null {
+    const host = location.hostname;
+    if (host.includes('chatgpt.com') || host.includes('chat.openai.com')) return 'chatgpt';
+    if (host.includes('claude.ai')) return 'claude';
+    if (host.includes('gemini.google.com')) return 'gemini';
+    return null;
+  }
+
+  function findPrecedingPrompt(selection: Selection): string | null {
+    try {
+      const anchorNode = selection.anchorNode;
+      if (!anchorNode) return null;
+      const anchorEl: Element | null =
+        anchorNode.nodeType === Node.ELEMENT_NODE ? (anchorNode as Element) : anchorNode.parentElement;
+      if (!anchorEl) return null;
+
+      const platform = detectPlatform();
+      if (!platform) return null;
+
+      let turnSelector: string;
+      let isUserTurn: (el: Element) => boolean;
+
+      if (platform === 'chatgpt') {
+        turnSelector = '[data-message-author-role]';
+        isUserTurn = (el) => el.getAttribute('data-message-author-role') === 'user';
+      } else if (platform === 'claude') {
+        turnSelector = '[data-testid="human-turn"],[data-testid="ai-turn"]';
+        isUserTurn = (el) => el.getAttribute('data-testid') === 'human-turn';
+      } else {
+        turnSelector = 'user-query,model-response';
+        isUserTurn = (el) => el.tagName.toLowerCase() === 'user-query';
+      }
+
+      const turns = Array.from(document.querySelectorAll(turnSelector));
+      if (!turns.length) return null;
+
+      const containingTurn = anchorEl.closest(turnSelector);
+      const containingIndex = containingTurn ? turns.indexOf(containingTurn) : -1;
+      const startIndex = containingIndex >= 0 ? containingIndex : turns.length;
+
+      for (let i = startIndex - 1; i >= 0; i--) {
+        if (isUserTurn(turns[i])) {
+          const text = (turns[i] as HTMLElement).innerText?.trim();
+          return text ? truncate(text, PROMPT_LOOKUP_MAX_CHARS) : null;
+        }
+      }
+      return null;
+    } catch (err) {
+      console.error('[note-cs] findPrecedingPrompt failed (non-fatal, no prompt_text this time):', err);
+      return null;
+    }
+  }
 
   function ensureBar(): void {
     if (barHostEl) return;
@@ -413,11 +475,12 @@ if (!window.__CW_NOTE_CS__) {
   }
 
   /** markdownText is what gets saved; previewText is what the (truncated, plain-text) bar preview shows. */
-  function showBar(markdownText: string, previewText: string): void {
+  function showBar(markdownText: string, previewText: string, promptText: string | null): void {
     ensureBar();
     if (!bar) return;
     barMode = 'selection';
     pendingText = markdownText;
+    pendingPromptText = promptText;
     bar.preview.hidden = false;
     bar.preview.textContent = truncate(previewText, PREVIEW_MAX_CHARS);
     bar.manualInput.hidden = true;
@@ -433,6 +496,7 @@ if (!window.__CW_NOTE_CS__) {
     if (!bar) return;
     barMode = 'manual';
     pendingText = '';
+    pendingPromptText = null;
     bar.preview.hidden = true;
     bar.manualInput.hidden = false;
     bar.manualInput.value = '';
@@ -461,7 +525,15 @@ if (!window.__CW_NOTE_CS__) {
     setBarStatus('');
 
     chrome.runtime.sendMessage(
-      { type: 'NOTE_SAVE_REQUEST', projectId, text, url: location.href, pageTitle: document.title || '' },
+      {
+        type: 'NOTE_SAVE_REQUEST',
+        projectId,
+        text,
+        url: location.href,
+        pageTitle: document.title || '',
+        kind: barMode === 'manual' ? 'written' : 'captured',
+        promptText: barMode === 'manual' ? null : pendingPromptText,
+      },
       (response: NoteSaveResult | undefined) => {
         if (!bar) return;
         if (chrome.runtime.lastError || !response?.ok) {
@@ -682,7 +754,8 @@ if (!window.__CW_NOTE_CS__) {
     try {
       const cleanPlainText = cleanupText(plainText);
       const markdown = getSelectionMarkdown(selection, cleanPlainText);
-      showBar(markdown, cleanPlainText);
+      const promptText = findPrecedingPrompt(selection);
+      showBar(markdown, cleanPlainText, promptText);
     } catch (err) {
       console.error('[note-cs] failed to show note bar:', err);
     }

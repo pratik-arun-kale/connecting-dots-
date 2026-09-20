@@ -35,6 +35,22 @@ class CaptureConversationRequest(AppBaseModel):
     messages: list[CapturedMessage] = Field(..., max_length=500)
     metadata: dict[str, Any] | None = None
 
+    # ── Notebook fields (0008) — all optional so existing callers (full
+    # conversation captures) keep working unmodified. Only the caller (the
+    # extension/dashboard) can know these; content_md and source are instead
+    # computed server-side in ContextService (see _infer_source /
+    # _build_content_md) rather than trusted verbatim from the client.
+    kind: Literal["captured", "written"] = Field(
+        default="captured",
+        description="'captured' = a highlighted passage or full conversation; "
+                    "'written' = composed directly (extension manual note or dashboard composer).",
+    )
+    prompt_text: str | None = Field(
+        default=None, max_length=10_000,
+        description="The user's question that preceded a captured answer, when found (best-effort).",
+    )
+    page_title: str | None = Field(default=None, max_length=512)
+
     @field_validator("messages")
     @classmethod
     def _require_messages(cls, v: list[CapturedMessage]) -> list[CapturedMessage]:

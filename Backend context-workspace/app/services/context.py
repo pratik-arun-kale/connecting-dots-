@@ -7,6 +7,7 @@ ContextService – business logic for the Context resource.
 from __future__ import annotations
 
 import uuid
+from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,9 +19,43 @@ from app.repositories.context import ContextRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.session import SessionRepository
 from app.schemas.capture import CaptureConversationRequest, CaptureConversationResponse
-from app.schemas.context import ContextCapture, ContextCreate
+from app.schemas.context import ContextCapture, ContextCreate, NoteUpdateRequest
 
 logger = get_logger(__name__)
+
+_PLATFORM_HOST_PATTERNS: dict[str, tuple[str, ...]] = {
+    "chatgpt": ("chatgpt.com", "chat.openai.com"),
+    "claude": ("claude.ai",),
+    "gemini": ("gemini.google.com",),
+    "perplexity": ("perplexity.ai",),
+}
+
+
+def _infer_source(platform: str, chat_url: str) -> str | None:
+    """The actual AI platform content came FROM — distinct from `platform`,
+    which is "note"/"unknown" for manually-captured notes and would
+    otherwise hide which site a note was taken from. Inferred from the
+    chat_url's hostname rather than trusted from the client, since the
+    client already sends `platform` and a mismatched/lied-about `source`
+    would just be confusing metadata with no integrity purpose served by
+    trusting it."""
+    if platform not in ("note", "unknown"):
+        return platform
+    host = (urlparse(chat_url).hostname or "").lower()
+    for source, patterns in _PLATFORM_HOST_PATTERNS.items():
+        if any(host == p or host.endswith(f".{p}") for p in patterns):
+            return source
+    return None
+
+
+def _build_content_md(messages: list) -> str | None:
+    """The canonical passage body for the notebook reading view — joined
+    message contents, computed server-side so it can't drift from
+    raw_content. Most captures (notes) are a single message; a joined
+    multi-message transcript is still a reasonable flattened body for a
+    full conversation capture."""
+    parts = [m.content for m in messages if m.content]
+    return "\n\n".join(parts).strip() or None
 
 
 class ContextService:
@@ -107,6 +142,11 @@ class ContextService:
             raw_content=raw_content,
             # Always include platform + url in metadata so legacy readers still work
             metadata_={"platform": payload.platform, "url": payload.chat_url, **(payload.metadata or {})},
+            content_md=_build_content_md(payload.messages),
+            source=_infer_source(payload.platform, payload.chat_url),
+            page_title=payload.page_title,
+            prompt_text=payload.prompt_text,
+            kind=payload.kind,
         )
 
         logger.info(
@@ -209,3 +249,28 @@ class ContextService:
             session_id=str(payload.session_id),
         )
         return context
+
+    async def update_note(
+        self, context_id: uuid.UUID, payload: NoteUpdateRequest, owner_id: uuid.UUID
+    ) -> Context:
+        """PATCH — set the reader's own annotation (user_note), or edit a
+        written note's body (content_md). Editing content_md is intentionally
+        allowed for ANY context here (the route/schema don't special-case
+        kind="written") since there's no harm in letting an owner correct a
+        captured passage's text too — the raw_content JSONB stays the
+        untouched original record regardless."""
+        context = await self._repo.get_by_id_for_owner(context_id, owner_id)
+        if context is None:
+            raise NotFoundException(f"Note {context_id} not found.")
+
+        updates = payload.model_dump(exclude_unset=True)
+        context = await self._repo.update(context, **updates)
+        logger.info("note_updated", context_id=str(context_id), fields=list(updates.keys()))
+        return context
+
+    async def delete_note(self, context_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+        context = await self._repo.get_by_id_for_owner(context_id, owner_id)
+        if context is None:
+            raise NotFoundException(f"Note {context_id} not found.")
+        await self._repo.delete(context)
+        logger.info("note_deleted", context_id=str(context_id))

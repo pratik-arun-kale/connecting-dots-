@@ -122,6 +122,15 @@ export interface ApiContext {
   platform?: string | null;
   chat_url?: string | null;
   messages_count?: number;
+  // Notebook fields (backend migration 0008) — see app/models/context.py
+  updated_at?: string | null;
+  content_md?: string | null;
+  source?: string | null;
+  page_title?: string | null;
+  prompt_text?: string | null;
+  user_note?: string | null;
+  kind?: 'captured' | 'written';
+  chapter_id?: string | null;
 }
 
 export interface CreateProjectWithSessionsRequest {

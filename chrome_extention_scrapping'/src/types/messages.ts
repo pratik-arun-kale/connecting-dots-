@@ -110,11 +110,15 @@ export type NoteGetProjectsResult =
   | { type: 'NOTE_GET_PROJECTS_RESULT'; ok: false; error: string };
 
 export interface NoteSaveRequest {
-  type:      'NOTE_SAVE_REQUEST';
-  projectId: string;
-  text:      string;
-  url:       string;
-  pageTitle: string;
+  type:       'NOTE_SAVE_REQUEST';
+  projectId:  string;
+  text:       string;
+  url:        string;
+  pageTitle:  string;
+  /** 'written' = typed directly (launcher's manual note); 'captured' = a page selection. */
+  kind:       'captured' | 'written';
+  /** The preceding user question, when found (selection mode only — always null for 'written'). */
+  promptText: string | null;
 }
 
 export type NoteSaveResult =

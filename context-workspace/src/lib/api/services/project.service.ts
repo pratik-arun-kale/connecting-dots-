@@ -108,12 +108,12 @@ export const projectService = {
   // dashboard-authored note, so chat_url is left empty (the schema allows
   // an empty string; getSourceChip() in lib/context-platform.ts falls back
   // to a plain "Note" label with no link when chat_url is empty).
-  async createNote(projectId: string, text: string): Promise<void> {
+  async createNote(projectId: string, text: string): Promise<{ contextId: string }> {
     const trimmed = text.trim();
     const idempotencyKey =
       typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `note_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-    await apiClient.post(`/projects/${projectId}/capture`, {
+    const response = await apiClient.post<{ context_id: string }>(`/projects/${projectId}/capture`, {
       idempotency_key: idempotencyKey,
       platform: 'note',
       chat_url: '',
@@ -121,6 +121,24 @@ export const projectService = {
       title: `[Note] ${trimmed.slice(0, 80)}`,
       messages: [{ role: 'user', content: trimmed, timestamp: new Date().toISOString(), index: 0 }],
       metadata: { source: 'dashboard-note' },
+      kind: 'written',
+      page_title: 'Dashboard',
     });
+    return { contextId: response.data.context_id };
+  },
+
+  // Debounced autosave (see NoteComposer in notes-feed.tsx) PATCHes the same
+  // note's content_md as the user keeps typing, rather than creating a new
+  // context per keystroke-pause.
+  async updateNoteContent(contextId: string, contentMd: string): Promise<void> {
+    await apiClient.patch(`/contexts/detail/${contextId}`, { content_md: contentMd });
+  },
+
+  async updateNoteAnnotation(contextId: string, userNote: string | null): Promise<void> {
+    await apiClient.patch(`/contexts/detail/${contextId}`, { user_note: userNote });
+  },
+
+  async deleteNote(contextId: string): Promise<void> {
+    await apiClient.delete(`/contexts/detail/${contextId}`);
   },
 };

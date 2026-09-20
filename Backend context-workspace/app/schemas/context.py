@@ -71,11 +71,20 @@ class ContextResponse(AppBaseModel):
     tags: list[str] | None
     metadata: JsonDict | None = Field(None, validation_alias="metadata_")
     created_at: datetime
+    updated_at: datetime | None = None
     # Promoted fields — populated by the capture pipeline
     title:         str | None = None
     platform:      str | None = None
     chat_url:      str | None = None
     messages_count: int = 0
+    # Notebook fields (0008) — see app/models/context.py for what each means
+    content_md:  str | None = None
+    source:      str | None = None
+    page_title:  str | None = None
+    prompt_text: str | None = None
+    user_note:   str | None = None
+    kind:        str = "captured"
+    chapter_id:  uuid.UUID | None = None
 
     model_config = {
         "from_attributes": True,
@@ -86,3 +95,22 @@ class ContextResponse(AppBaseModel):
 class ContextListResponse(AppBaseModel):
     items: list[ContextResponse]
     total: int
+
+
+class NoteUpdateRequest(AppBaseModel):
+    """PATCH /contexts/{id} — the only two things a reader can change after
+    capture: their own annotation, or (for a "written" note only) the body
+    itself. Editing a captured passage's content_md is deliberately not
+    supported here — captures are meant to stay a faithful record of what
+    was actually said; annotate instead via user_note."""
+
+    user_note: str | None = Field(default=None, max_length=20_000)
+    content_md: str | None = Field(default=None, max_length=100_000)
+
+    @model_validator(mode="after")
+    def _require_at_least_one_field(self) -> "NoteUpdateRequest":
+        # model_fields_set (not "is None") so PATCHing user_note explicitly
+        # to null — clearing an annotation — isn't mistaken for "nothing sent".
+        if not self.model_fields_set:
+            raise ValueError("Provide at least one of user_note or content_md.")
+        return self
