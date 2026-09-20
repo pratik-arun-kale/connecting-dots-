@@ -121,8 +121,20 @@ export type NoteSaveResult =
   | { type: 'NOTE_SAVE_RESULT'; ok: true; contextId: string }
   | { type: 'NOTE_SAVE_RESULT'; ok: false; error: string };
 
+// ── Launcher capture (on-page floating button → Background) ──────────────────
+
+export interface LauncherCaptureRequest {
+  type:      'LAUNCHER_CAPTURE_REQUEST';
+  projectId: string;
+}
+
+export type LauncherCaptureResult =
+  | { type: 'LAUNCHER_CAPTURE_RESULT'; ok: true; contextId: string; title: string; messageCount: number }
+  | { type: 'LAUNCHER_CAPTURE_RESULT'; ok: false; error: string };
+
 export type InternalMessage =
   | ContentScriptMessage
   | CaptureContextRequest
   | NoteGetProjectsRequest
-  | NoteSaveRequest;
+  | NoteSaveRequest
+  | LauncherCaptureRequest;

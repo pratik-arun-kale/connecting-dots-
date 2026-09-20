@@ -1,282 +1,1311 @@
-/**
- * note-cs.js — Content script for quick text-selection notes.
- *
- * Runs on chatgpt.com/chat.openai.com/claude.ai/gemini.google.com (see
- * manifest.json / manifest.dist.json). Independent of chatgpt-cs.js /
- * claude-cs.js / gemini-cs.js — those extract whole conversations on
- * request; this one watches for the user selecting text and offers to save
- * just that selection as a note into a chosen project.
- *
- * Flow:
- *  1. User selects text on the page.
- *  2. A small floating bar appears fixed to the top of the viewport, built
- *     inside a shadow root so the host page's CSS can't distort it (and ours
- *     can't leak out).
- *  3. Bar shows a preview of the selection + a project <select> (populated
- *     via a message to background, which owns all backend calls) + Save.
- *  4. Save sends the text to background, which uploads it as a one-message
- *     "note" capture (platform: "note") into the chosen project.
- */
-
-if (!window.__CW_NOTE_CS__) {
-  window.__CW_NOTE_CS__ = true;
-
-  const MIN_SELECTION_LENGTH = 2;
-  const SELECTION_DEBOUNCE_MS = 150;
-  const PREVIEW_MAX_CHARS = 100;
-  const LAST_PROJECT_KEY = 'cw_note_last_project';
-
-  let hostEl = null;
-  let shadow = null;
-  let els = {};
-  let pendingText = '';
-  let selectionTimer = null;
-  let projectsLoaded = false;
-
-  // ── Helpers ──────────────────────────────────────────────────────────────
-
-  function isEditableContext(node) {
-    let el = node && node.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
-    while (el) {
-      if (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return true;
-      el = el.parentElement;
+"use strict";
+(() => {
+  // node_modules/turndown/lib/turndown.browser.es.js
+  function extend(destination) {
+    for (var i = 1; i < arguments.length; i++) {
+      var source = arguments[i];
+      for (var key in source) {
+        if (Object.prototype.hasOwnProperty.call(source, key)) destination[key] = source[key];
+      }
     }
-    return false;
+    return destination;
   }
-
-  function withinOwnUi(target) {
-    return !!hostEl && target instanceof Node && (target === hostEl || hostEl.contains(target));
+  function repeat(character, count) {
+    return Array(count + 1).join(character);
   }
-
-  function truncate(text, max) {
-    return text.length > max ? `${text.slice(0, max)}…` : text;
+  function trimLeadingNewlines(string) {
+    return string.replace(/^\n*/, "");
   }
-
-  // ── Shadow-DOM UI ────────────────────────────────────────────────────────
-
-  function ensureUi() {
-    if (hostEl) return;
-
-    hostEl = document.createElement('div');
-    hostEl.id = 'cw-note-host';
-    hostEl.style.all = 'initial';
-    hostEl.style.position = 'fixed';
-    hostEl.style.top = '0';
-    hostEl.style.left = '0';
-    hostEl.style.width = '100%';
-    hostEl.style.zIndex = '2147483647';
-    hostEl.style.pointerEvents = 'none';
-
-    shadow = hostEl.attachShadow({ mode: 'open' });
-    shadow.innerHTML = `
-      <style>
-        :host { all: initial; }
-        .bar {
-          box-sizing: border-box;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin: 10px auto 0;
-          padding: 8px 10px;
-          max-width: 640px;
-          width: calc(100% - 32px);
-          background: #1c1c1e;
-          color: #f2f2f2;
-          border: 1px solid rgba(255,255,255,0.12);
-          border-radius: 12px;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-          font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          pointer-events: auto;
-          opacity: 0;
-          transform: translateY(-8px);
-          transition: opacity 120ms ease, transform 120ms ease;
-        }
-        .bar.visible { opacity: 1; transform: translateY(0); }
-        .preview {
-          flex: 1 1 auto;
-          min-width: 0;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          color: #c9c9cc;
-        }
-        select {
-          flex: 0 0 auto;
-          max-width: 160px;
-          background: #2c2c2e;
-          color: #f2f2f2;
-          border: 1px solid rgba(255,255,255,0.16);
-          border-radius: 7px;
-          padding: 5px 6px;
-          font: inherit;
-        }
-        button {
-          flex: 0 0 auto;
-          border: none;
-          border-radius: 7px;
-          padding: 6px 12px;
-          font: inherit;
-          font-weight: 600;
-          cursor: pointer;
-        }
-        .save {
-          background: #4f8cff;
-          color: white;
-        }
-        .save:disabled { opacity: 0.5; cursor: default; }
-        .close {
-          background: transparent;
-          color: #9a9a9e;
-          font-weight: 400;
-          padding: 4px 6px;
-        }
-        .status {
-          flex: 0 0 auto;
-          color: #9a9a9e;
-        }
-        .status.error { color: #ff8080; }
-        .status.success { color: #63d68a; }
-      </style>
-      <div class="bar" part="bar">
-        <span class="preview"></span>
-        <select aria-label="Project"><option value="">Loading projects…</option></select>
-        <span class="status" hidden></span>
-        <button class="save" type="button">Save Note</button>
-        <button class="close" type="button" aria-label="Dismiss">✕</button>
-      </div>
-    `;
-
-    document.documentElement.appendChild(hostEl);
-
-    els = {
-      bar: shadow.querySelector('.bar'),
-      preview: shadow.querySelector('.preview'),
-      select: shadow.querySelector('select'),
-      status: shadow.querySelector('.status'),
-      saveBtn: shadow.querySelector('.save'),
-      closeBtn: shadow.querySelector('.close'),
-    };
-
-    els.saveBtn.addEventListener('click', onSave);
-    els.closeBtn.addEventListener('click', hideBar);
+  function trimTrailingNewlines(string) {
+    var indexEnd = string.length;
+    while (indexEnd > 0 && string[indexEnd - 1] === "\n") indexEnd--;
+    return string.substring(0, indexEnd);
   }
-
-  function setStatus(text, kind) {
-    els.status.textContent = text || '';
-    els.status.className = `status${kind ? ` ${kind}` : ''}`;
-    els.status.hidden = !text;
+  function trimNewlines(string) {
+    return trimTrailingNewlines(trimLeadingNewlines(string));
   }
-
-  function showBar(text) {
-    ensureUi();
-    pendingText = text;
-    els.preview.textContent = truncate(text, PREVIEW_MAX_CHARS);
-    setStatus('');
-    els.saveBtn.disabled = false;
-    els.saveBtn.textContent = 'Save Note';
-    els.bar.classList.add('visible');
-    if (!projectsLoaded) loadProjects();
+  var blockElements = ["ADDRESS", "ARTICLE", "ASIDE", "AUDIO", "BLOCKQUOTE", "BODY", "CANVAS", "CENTER", "DD", "DIR", "DIV", "DL", "DT", "FIELDSET", "FIGCAPTION", "FIGURE", "FOOTER", "FORM", "FRAMESET", "H1", "H2", "H3", "H4", "H5", "H6", "HEADER", "HGROUP", "HR", "HTML", "ISINDEX", "LI", "MAIN", "MENU", "NAV", "NOFRAMES", "NOSCRIPT", "OL", "OUTPUT", "P", "PRE", "SECTION", "TABLE", "TBODY", "TD", "TFOOT", "TH", "THEAD", "TR", "UL"];
+  function isBlock(node) {
+    return is(node, blockElements);
   }
-
-  function hideBar() {
-    if (els.bar) els.bar.classList.remove('visible');
-    pendingText = '';
+  var voidElements = ["AREA", "BASE", "BR", "COL", "COMMAND", "EMBED", "HR", "IMG", "INPUT", "KEYGEN", "LINK", "META", "PARAM", "SOURCE", "TRACK", "WBR"];
+  function isVoid(node) {
+    return is(node, voidElements);
   }
-
-  // ── Backend calls (routed through background — it owns fetch/CORS/errors) ─
-
-  function loadProjects() {
-    els.select.innerHTML = '<option value="">Loading projects…</option>';
-    chrome.runtime.sendMessage({ type: 'NOTE_GET_PROJECTS' }, (response) => {
-      if (chrome.runtime.lastError || !response?.ok) {
-        els.select.innerHTML = '<option value="">Backend unavailable</option>';
-        els.saveBtn.disabled = true;
-        return;
-      }
-      projectsLoaded = true;
-      const projects = response.projects || [];
-      if (!projects.length) {
-        els.select.innerHTML = '<option value="">Create a project first</option>';
-        els.saveBtn.disabled = true;
-        return;
-      }
-      els.saveBtn.disabled = false;
-      els.select.innerHTML = projects
-        .map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`)
-        .join('');
-      chrome.storage.local.get(LAST_PROJECT_KEY, (stored) => {
-        const lastId = stored?.[LAST_PROJECT_KEY];
-        if (lastId && projects.some(p => p.id === lastId)) {
-          els.select.value = lastId;
-        }
-      });
+  function hasVoid(node) {
+    return has(node, voidElements);
+  }
+  var meaningfulWhenBlankElements = ["A", "TABLE", "THEAD", "TBODY", "TFOOT", "TH", "TD", "IFRAME", "SCRIPT", "AUDIO", "VIDEO"];
+  function isMeaningfulWhenBlank(node) {
+    return is(node, meaningfulWhenBlankElements);
+  }
+  function hasMeaningfulWhenBlank(node) {
+    return has(node, meaningfulWhenBlankElements);
+  }
+  function is(node, tagNames) {
+    return tagNames.indexOf(node.nodeName) >= 0;
+  }
+  function has(node, tagNames) {
+    return node.getElementsByTagName && tagNames.some(function(tagName) {
+      return node.getElementsByTagName(tagName).length;
     });
   }
-
-  function escapeHtml(s) {
-    return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  var markdownEscapes = [[/\\/g, "\\\\"], [/\*/g, "\\*"], [/^-/g, "\\-"], [/^\+ /g, "\\+ "], [/^(=+)/g, "\\$1"], [/^(#{1,6}) /g, "\\$1 "], [/`/g, "\\`"], [/^~~~/g, "\\~~~"], [/\[/g, "\\["], [/\]/g, "\\]"], [/^>/g, "\\>"], [/_/g, "\\_"], [/^(\d+)\. /g, "$1\\. "]];
+  function escapeMarkdown(string) {
+    return markdownEscapes.reduce(function(accumulator, escape) {
+      return accumulator.replace(escape[0], escape[1]);
+    }, string);
+  }
+  var rules = {};
+  rules.paragraph = {
+    filter: "p",
+    replacement: function(content) {
+      return "\n\n" + content + "\n\n";
+    }
+  };
+  rules.lineBreak = {
+    filter: "br",
+    replacement: function(content, node, options) {
+      return options.br + "\n";
+    }
+  };
+  rules.heading = {
+    filter: ["h1", "h2", "h3", "h4", "h5", "h6"],
+    replacement: function(content, node, options) {
+      var hLevel = Number(node.nodeName.charAt(1));
+      if (options.headingStyle === "setext" && hLevel < 3) {
+        var underline = repeat(hLevel === 1 ? "=" : "-", content.length);
+        return "\n\n" + content + "\n" + underline + "\n\n";
+      } else {
+        return "\n\n" + repeat("#", hLevel) + " " + content + "\n\n";
+      }
+    }
+  };
+  rules.blockquote = {
+    filter: "blockquote",
+    replacement: function(content) {
+      content = trimNewlines(content).replace(/^/gm, "> ");
+      return "\n\n" + content + "\n\n";
+    }
+  };
+  rules.list = {
+    filter: ["ul", "ol"],
+    replacement: function(content, node) {
+      var parent = node.parentNode;
+      if (parent.nodeName === "LI" && parent.lastElementChild === node) {
+        return "\n" + content;
+      } else {
+        return "\n\n" + content + "\n\n";
+      }
+    }
+  };
+  rules.listItem = {
+    filter: "li",
+    replacement: function(content, node, options) {
+      var prefix = options.bulletListMarker + "   ";
+      var parent = node.parentNode;
+      if (parent.nodeName === "OL") {
+        var start = parent.getAttribute("start");
+        var index = Array.prototype.indexOf.call(parent.children, node);
+        prefix = (start ? Number(start) + index : index + 1) + ".  ";
+      }
+      var isParagraph = /\n$/.test(content);
+      content = trimNewlines(content) + (isParagraph ? "\n" : "");
+      content = content.replace(/\n/gm, "\n" + " ".repeat(prefix.length));
+      return prefix + content + (node.nextSibling ? "\n" : "");
+    }
+  };
+  rules.indentedCodeBlock = {
+    filter: function(node, options) {
+      return options.codeBlockStyle === "indented" && node.nodeName === "PRE" && node.firstChild && node.firstChild.nodeName === "CODE";
+    },
+    replacement: function(content, node, options) {
+      return "\n\n    " + node.firstChild.textContent.replace(/\n/g, "\n    ") + "\n\n";
+    }
+  };
+  rules.fencedCodeBlock = {
+    filter: function(node, options) {
+      return options.codeBlockStyle === "fenced" && node.nodeName === "PRE" && node.firstChild && node.firstChild.nodeName === "CODE";
+    },
+    replacement: function(content, node, options) {
+      var className = node.firstChild.getAttribute("class") || "";
+      var language = (className.match(/language-(\S+)/) || [null, ""])[1];
+      var code = node.firstChild.textContent;
+      var fenceChar = options.fence.charAt(0);
+      var fenceSize = 3;
+      var fenceInCodeRegex = new RegExp("^" + fenceChar + "{3,}", "gm");
+      var match;
+      while (match = fenceInCodeRegex.exec(code)) {
+        if (match[0].length >= fenceSize) {
+          fenceSize = match[0].length + 1;
+        }
+      }
+      var fence = repeat(fenceChar, fenceSize);
+      return "\n\n" + fence + language + "\n" + code.replace(/\n$/, "") + "\n" + fence + "\n\n";
+    }
+  };
+  rules.horizontalRule = {
+    filter: "hr",
+    replacement: function(content, node, options) {
+      return "\n\n" + options.hr + "\n\n";
+    }
+  };
+  rules.inlineLink = {
+    filter: function(node, options) {
+      return options.linkStyle === "inlined" && node.nodeName === "A" && node.getAttribute("href");
+    },
+    replacement: function(content, node) {
+      var href = escapeLinkDestination(node.getAttribute("href"));
+      var title = escapeLinkTitle(cleanAttribute(node.getAttribute("title")));
+      var titlePart = title ? ' "' + title + '"' : "";
+      return "[" + content + "](" + href + titlePart + ")";
+    }
+  };
+  rules.referenceLink = {
+    filter: function(node, options) {
+      return options.linkStyle === "referenced" && node.nodeName === "A" && node.getAttribute("href");
+    },
+    replacement: function(content, node, options) {
+      var href = escapeLinkDestination(node.getAttribute("href"));
+      var title = cleanAttribute(node.getAttribute("title"));
+      if (title) title = ' "' + escapeLinkTitle(title) + '"';
+      var replacement;
+      var reference;
+      switch (options.linkReferenceStyle) {
+        case "collapsed":
+          replacement = "[" + content + "][]";
+          reference = "[" + content + "]: " + href + title;
+          break;
+        case "shortcut":
+          replacement = "[" + content + "]";
+          reference = "[" + content + "]: " + href + title;
+          break;
+        default:
+          var id = this.references.length + 1;
+          replacement = "[" + content + "][" + id + "]";
+          reference = "[" + id + "]: " + href + title;
+      }
+      this.references.push(reference);
+      return replacement;
+    },
+    references: [],
+    append: function(options) {
+      var references = "";
+      if (this.references.length) {
+        references = "\n\n" + this.references.join("\n") + "\n\n";
+        this.references = [];
+      }
+      return references;
+    }
+  };
+  rules.emphasis = {
+    filter: ["em", "i"],
+    replacement: function(content, node, options) {
+      if (!content.trim()) return "";
+      return options.emDelimiter + content + options.emDelimiter;
+    }
+  };
+  rules.strong = {
+    filter: ["strong", "b"],
+    replacement: function(content, node, options) {
+      if (!content.trim()) return "";
+      return options.strongDelimiter + content + options.strongDelimiter;
+    }
+  };
+  rules.code = {
+    filter: function(node) {
+      var hasSiblings = node.previousSibling || node.nextSibling;
+      var isCodeBlock = node.parentNode.nodeName === "PRE" && !hasSiblings;
+      return node.nodeName === "CODE" && !isCodeBlock;
+    },
+    replacement: function(content) {
+      if (!content) return "";
+      content = content.replace(/\r?\n|\r/g, " ");
+      var extraSpace = /^`|^ .*?[^ ].* $|`$/.test(content) ? " " : "";
+      var delimiter = "`";
+      var matches = content.match(/`+/gm) || [];
+      while (matches.indexOf(delimiter) !== -1) delimiter = delimiter + "`";
+      return delimiter + extraSpace + content + extraSpace + delimiter;
+    }
+  };
+  rules.image = {
+    filter: "img",
+    replacement: function(content, node) {
+      var alt = escapeMarkdown(cleanAttribute(node.getAttribute("alt")));
+      var src = escapeLinkDestination(node.getAttribute("src") || "");
+      var title = cleanAttribute(node.getAttribute("title"));
+      var titlePart = title ? ' "' + escapeLinkTitle(title) + '"' : "";
+      return src ? "![" + alt + "](" + src + titlePart + ")" : "";
+    }
+  };
+  function cleanAttribute(attribute) {
+    return attribute ? attribute.replace(/(\n+\s*)+/g, "\n") : "";
+  }
+  function escapeLinkDestination(destination) {
+    var escaped = destination.replace(/([<>()])/g, "\\$1");
+    return escaped.indexOf(" ") >= 0 ? "<" + escaped + ">" : escaped;
+  }
+  function escapeLinkTitle(title) {
+    return title.replace(/"/g, '\\"');
+  }
+  function Rules(options) {
+    this.options = options;
+    this._keep = [];
+    this._remove = [];
+    this.blankRule = {
+      replacement: options.blankReplacement
+    };
+    this.keepReplacement = options.keepReplacement;
+    this.defaultRule = {
+      replacement: options.defaultReplacement
+    };
+    this.array = [];
+    for (var key in options.rules) this.array.push(options.rules[key]);
+  }
+  Rules.prototype = {
+    add: function(key, rule) {
+      this.array.unshift(rule);
+    },
+    keep: function(filter) {
+      this._keep.unshift({
+        filter,
+        replacement: this.keepReplacement
+      });
+    },
+    remove: function(filter) {
+      this._remove.unshift({
+        filter,
+        replacement: function() {
+          return "";
+        }
+      });
+    },
+    forNode: function(node) {
+      if (node.isBlank) return this.blankRule;
+      var rule;
+      if (rule = findRule(this.array, node, this.options)) return rule;
+      if (rule = findRule(this._keep, node, this.options)) return rule;
+      if (rule = findRule(this._remove, node, this.options)) return rule;
+      return this.defaultRule;
+    },
+    forEach: function(fn) {
+      for (var i = 0; i < this.array.length; i++) fn(this.array[i], i);
+    }
+  };
+  function findRule(rules3, node, options) {
+    for (var i = 0; i < rules3.length; i++) {
+      var rule = rules3[i];
+      if (filterValue(rule, node, options)) return rule;
+    }
+    return void 0;
+  }
+  function filterValue(rule, node, options) {
+    var filter = rule.filter;
+    if (typeof filter === "string") {
+      if (filter === node.nodeName.toLowerCase()) return true;
+    } else if (Array.isArray(filter)) {
+      if (filter.indexOf(node.nodeName.toLowerCase()) > -1) return true;
+    } else if (typeof filter === "function") {
+      if (filter.call(rule, node, options)) return true;
+    } else {
+      throw new TypeError("`filter` needs to be a string, array, or function");
+    }
+  }
+  function collapseWhitespace(options) {
+    var element = options.element;
+    var isBlock2 = options.isBlock;
+    var isVoid2 = options.isVoid;
+    var isPre = options.isPre || function(node2) {
+      return node2.nodeName === "PRE";
+    };
+    if (!element.firstChild || isPre(element)) return;
+    var prevText = null;
+    var keepLeadingWs = false;
+    var prev = null;
+    var node = next(prev, element, isPre);
+    while (node !== element) {
+      if (node.nodeType === 3 || node.nodeType === 4) {
+        var text = node.data.replace(/[ \r\n\t]+/g, " ");
+        if ((!prevText || / $/.test(prevText.data)) && !keepLeadingWs && text[0] === " ") {
+          text = text.substr(1);
+        }
+        if (!text) {
+          node = remove(node);
+          continue;
+        }
+        node.data = text;
+        prevText = node;
+      } else if (node.nodeType === 1) {
+        if (isBlock2(node) || node.nodeName === "BR") {
+          if (prevText) {
+            prevText.data = prevText.data.replace(/ $/, "");
+          }
+          prevText = null;
+          keepLeadingWs = false;
+        } else if (isVoid2(node) || isPre(node)) {
+          prevText = null;
+          keepLeadingWs = true;
+        } else if (prevText) {
+          keepLeadingWs = false;
+        }
+      } else {
+        node = remove(node);
+        continue;
+      }
+      var nextNode = next(prev, node, isPre);
+      prev = node;
+      node = nextNode;
+    }
+    if (prevText) {
+      prevText.data = prevText.data.replace(/ $/, "");
+      if (!prevText.data) {
+        remove(prevText);
+      }
+    }
+  }
+  function remove(node) {
+    var next2 = node.nextSibling || node.parentNode;
+    node.parentNode.removeChild(node);
+    return next2;
+  }
+  function next(prev, current, isPre) {
+    if (prev && prev.parentNode === current || isPre(current)) {
+      return current.nextSibling || current.parentNode;
+    }
+    return current.firstChild || current.nextSibling || current.parentNode;
+  }
+  var root = typeof window !== "undefined" ? window : {};
+  function canParseHTMLNatively() {
+    var Parser = root.DOMParser;
+    var canParse = false;
+    try {
+      if (new Parser().parseFromString("", "text/html")) {
+        canParse = true;
+      }
+    } catch (e) {
+    }
+    return canParse;
+  }
+  function createHTMLParser() {
+    var Parser = function() {
+    };
+    {
+      if (shouldUseActiveX()) {
+        Parser.prototype.parseFromString = function(string) {
+          var doc = new window.ActiveXObject("htmlfile");
+          doc.designMode = "on";
+          doc.open();
+          doc.write(string);
+          doc.close();
+          return doc;
+        };
+      } else {
+        Parser.prototype.parseFromString = function(string) {
+          var doc = document.implementation.createHTMLDocument("");
+          doc.open();
+          doc.write(string);
+          doc.close();
+          return doc;
+        };
+      }
+    }
+    return Parser;
+  }
+  function shouldUseActiveX() {
+    var useActiveX = false;
+    try {
+      document.implementation.createHTMLDocument("").open();
+    } catch (e) {
+      if (root.ActiveXObject) useActiveX = true;
+    }
+    return useActiveX;
+  }
+  var HTMLParser = canParseHTMLNatively() ? root.DOMParser : createHTMLParser();
+  function RootNode(input, options) {
+    var root2;
+    if (typeof input === "string") {
+      var doc = htmlParser().parseFromString(
+        // DOM parsers arrange elements in the <head> and <body>.
+        // Wrapping in a custom element ensures elements are reliably arranged in
+        // a single element.
+        '<x-turndown id="turndown-root">' + input + "</x-turndown>",
+        "text/html"
+      );
+      root2 = doc.getElementById("turndown-root");
+    } else {
+      root2 = input.cloneNode(true);
+    }
+    collapseWhitespace({
+      element: root2,
+      isBlock,
+      isVoid,
+      isPre: options.preformattedCode ? isPreOrCode : null
+    });
+    return root2;
+  }
+  var _htmlParser;
+  function htmlParser() {
+    _htmlParser = _htmlParser || new HTMLParser();
+    return _htmlParser;
+  }
+  function isPreOrCode(node) {
+    return node.nodeName === "PRE" || node.nodeName === "CODE";
+  }
+  function Node2(node, options) {
+    node.isBlock = isBlock(node);
+    node.isCode = node.nodeName === "CODE" || node.parentNode.isCode;
+    node.isBlank = isBlank(node);
+    node.flankingWhitespace = flankingWhitespace(node, options);
+    return node;
+  }
+  function isBlank(node) {
+    return !isVoid(node) && !isMeaningfulWhenBlank(node) && /^\s*$/i.test(node.textContent) && !hasVoid(node) && !hasMeaningfulWhenBlank(node);
+  }
+  function flankingWhitespace(node, options) {
+    if (node.isBlock || options.preformattedCode && node.isCode) {
+      return {
+        leading: "",
+        trailing: ""
+      };
+    }
+    var edges = edgeWhitespace(node.textContent);
+    if (edges.leadingAscii && isFlankedByWhitespace("left", node, options)) {
+      edges.leading = edges.leadingNonAscii;
+    }
+    if (edges.trailingAscii && isFlankedByWhitespace("right", node, options)) {
+      edges.trailing = edges.trailingNonAscii;
+    }
+    return {
+      leading: edges.leading,
+      trailing: edges.trailing
+    };
+  }
+  function edgeWhitespace(string) {
+    var m = string.match(/^(([ \t\r\n]*)(\s*))(?:(?=\S)[\s\S]*\S)?((\s*?)([ \t\r\n]*))$/);
+    return {
+      leading: m[1],
+      // whole string for whitespace-only strings
+      leadingAscii: m[2],
+      leadingNonAscii: m[3],
+      trailing: m[4],
+      // empty for whitespace-only strings
+      trailingNonAscii: m[5],
+      trailingAscii: m[6]
+    };
+  }
+  function isFlankedByWhitespace(side, node, options) {
+    var sibling;
+    var regExp;
+    var isFlanked;
+    if (side === "left") {
+      sibling = node.previousSibling;
+      regExp = / $/;
+    } else {
+      sibling = node.nextSibling;
+      regExp = /^ /;
+    }
+    if (sibling) {
+      if (sibling.nodeType === 3) {
+        isFlanked = regExp.test(sibling.nodeValue);
+      } else if (options.preformattedCode && sibling.nodeName === "CODE") {
+        isFlanked = false;
+      } else if (sibling.nodeType === 1 && !isBlock(sibling)) {
+        isFlanked = regExp.test(sibling.textContent);
+      }
+    }
+    return isFlanked;
+  }
+  var reduce = Array.prototype.reduce;
+  function TurndownService(options) {
+    if (!(this instanceof TurndownService)) return new TurndownService(options);
+    var defaults = {
+      rules,
+      headingStyle: "setext",
+      hr: "* * *",
+      bulletListMarker: "*",
+      codeBlockStyle: "indented",
+      fence: "```",
+      emDelimiter: "_",
+      strongDelimiter: "**",
+      linkStyle: "inlined",
+      linkReferenceStyle: "full",
+      br: "  ",
+      preformattedCode: false,
+      blankReplacement: function(content, node) {
+        return node.isBlock ? "\n\n" : "";
+      },
+      keepReplacement: function(content, node) {
+        return node.isBlock ? "\n\n" + node.outerHTML + "\n\n" : node.outerHTML;
+      },
+      defaultReplacement: function(content, node) {
+        return node.isBlock ? "\n\n" + content + "\n\n" : content;
+      }
+    };
+    this.options = extend({}, defaults, options);
+    this.rules = new Rules(this.options);
+  }
+  TurndownService.prototype = {
+    /**
+     * The entry point for converting a string or DOM node to Markdown
+     * @public
+     * @param {String|HTMLElement} input The string or DOM node to convert
+     * @returns A Markdown representation of the input
+     * @type String
+     */
+    turndown: function(input) {
+      if (!canConvert(input)) {
+        throw new TypeError(input + " is not a string, or an element/document/fragment node.");
+      }
+      if (input === "") return "";
+      var output = process.call(this, new RootNode(input, this.options));
+      return postProcess.call(this, output);
+    },
+    /**
+     * Add one or more plugins
+     * @public
+     * @param {Function|Array} plugin The plugin or array of plugins to add
+     * @returns The Turndown instance for chaining
+     * @type Object
+     */
+    use: function(plugin) {
+      if (Array.isArray(plugin)) {
+        for (var i = 0; i < plugin.length; i++) this.use(plugin[i]);
+      } else if (typeof plugin === "function") {
+        plugin(this);
+      } else {
+        throw new TypeError("plugin must be a Function or an Array of Functions");
+      }
+      return this;
+    },
+    /**
+     * Adds a rule
+     * @public
+     * @param {String} key The unique key of the rule
+     * @param {Object} rule The rule
+     * @returns The Turndown instance for chaining
+     * @type Object
+     */
+    addRule: function(key, rule) {
+      this.rules.add(key, rule);
+      return this;
+    },
+    /**
+     * Keep a node (as HTML) that matches the filter
+     * @public
+     * @param {String|Array|Function} filter The unique key of the rule
+     * @returns The Turndown instance for chaining
+     * @type Object
+     */
+    keep: function(filter) {
+      this.rules.keep(filter);
+      return this;
+    },
+    /**
+     * Remove a node that matches the filter
+     * @public
+     * @param {String|Array|Function} filter The unique key of the rule
+     * @returns The Turndown instance for chaining
+     * @type Object
+     */
+    remove: function(filter) {
+      this.rules.remove(filter);
+      return this;
+    },
+    /**
+     * Escapes Markdown syntax
+     * @public
+     * @param {String} string The string to escape
+     * @returns A string with Markdown syntax escaped
+     * @type String
+     */
+    escape: function(string) {
+      return escapeMarkdown(string);
+    }
+  };
+  function process(parentNode) {
+    var self = this;
+    return reduce.call(parentNode.childNodes, function(output, node) {
+      node = new Node2(node, self.options);
+      var replacement = "";
+      if (node.nodeType === 3) {
+        replacement = node.isCode ? node.nodeValue : self.escape(node.nodeValue);
+      } else if (node.nodeType === 1) {
+        replacement = replacementForNode.call(self, node);
+      }
+      return join(output, replacement);
+    }, "");
+  }
+  function postProcess(output) {
+    var self = this;
+    this.rules.forEach(function(rule) {
+      if (typeof rule.append === "function") {
+        output = join(output, rule.append(self.options));
+      }
+    });
+    return output.replace(/^[\t\r\n]+/, "").replace(/[\t\r\n\s]+$/, "");
+  }
+  function replacementForNode(node) {
+    var rule = this.rules.forNode(node);
+    var content = process.call(this, node);
+    var whitespace = node.flankingWhitespace;
+    if (whitespace.leading || whitespace.trailing) content = content.trim();
+    return whitespace.leading + rule.replacement(content, node, this.options) + whitespace.trailing;
+  }
+  function join(output, replacement) {
+    var s1 = trimTrailingNewlines(output);
+    var s2 = trimLeadingNewlines(replacement);
+    var nls = Math.max(output.length - s1.length, replacement.length - s2.length);
+    var separator = "\n\n".substring(0, nls);
+    return s1 + separator + s2;
+  }
+  function canConvert(input) {
+    return input != null && (typeof input === "string" || input.nodeType && (input.nodeType === 1 || input.nodeType === 9 || input.nodeType === 11));
   }
 
-  function onSave() {
-    const projectId = els.select.value;
-    if (!projectId || !pendingText.trim()) return;
-
-    chrome.storage.local.set({ [LAST_PROJECT_KEY]: projectId });
-    els.saveBtn.disabled = true;
-    els.saveBtn.textContent = 'Saving…';
-    setStatus('');
-
-    chrome.runtime.sendMessage(
-      {
-        type: 'NOTE_SAVE_REQUEST',
-        projectId,
-        text: pendingText,
-        url: location.href,
-        pageTitle: document.title || '',
+  // node_modules/turndown-plugin-gfm/lib/turndown-plugin-gfm.es.js
+  var highlightRegExp = /highlight-(?:text|source)-([a-z0-9]+)/;
+  function highlightedCodeBlock(turndownService) {
+    turndownService.addRule("highlightedCodeBlock", {
+      filter: function(node) {
+        var firstChild = node.firstChild;
+        return node.nodeName === "DIV" && highlightRegExp.test(node.className) && firstChild && firstChild.nodeName === "PRE";
       },
-      (response) => {
-        if (chrome.runtime.lastError || !response?.ok) {
-          setStatus(response?.error || 'Save failed.', 'error');
-          els.saveBtn.disabled = false;
-          els.saveBtn.textContent = 'Save Note';
+      replacement: function(content, node, options) {
+        var className = node.className || "";
+        var language = (className.match(highlightRegExp) || [null, ""])[1];
+        return "\n\n" + options.fence + language + "\n" + node.firstChild.textContent + "\n" + options.fence + "\n\n";
+      }
+    });
+  }
+  function strikethrough(turndownService) {
+    turndownService.addRule("strikethrough", {
+      filter: ["del", "s", "strike"],
+      replacement: function(content) {
+        return "~" + content + "~";
+      }
+    });
+  }
+  var indexOf = Array.prototype.indexOf;
+  var every = Array.prototype.every;
+  var rules2 = {};
+  rules2.tableCell = {
+    filter: ["th", "td"],
+    replacement: function(content, node) {
+      return cell(content, node);
+    }
+  };
+  rules2.tableRow = {
+    filter: "tr",
+    replacement: function(content, node) {
+      var borderCells = "";
+      var alignMap = { left: ":--", right: "--:", center: ":-:" };
+      if (isHeadingRow(node)) {
+        for (var i = 0; i < node.childNodes.length; i++) {
+          var border = "---";
+          var align = (node.childNodes[i].getAttribute("align") || "").toLowerCase();
+          if (align) border = alignMap[align] || border;
+          borderCells += cell(border, node.childNodes[i]);
+        }
+      }
+      return "\n" + content + (borderCells ? "\n" + borderCells : "");
+    }
+  };
+  rules2.table = {
+    // Only convert tables with a heading row.
+    // Tables with no heading row are kept using `keep` (see below).
+    filter: function(node) {
+      return node.nodeName === "TABLE" && isHeadingRow(node.rows[0]);
+    },
+    replacement: function(content) {
+      content = content.replace("\n\n", "\n");
+      return "\n\n" + content + "\n\n";
+    }
+  };
+  rules2.tableSection = {
+    filter: ["thead", "tbody", "tfoot"],
+    replacement: function(content) {
+      return content;
+    }
+  };
+  function isHeadingRow(tr) {
+    var parentNode = tr.parentNode;
+    return parentNode.nodeName === "THEAD" || parentNode.firstChild === tr && (parentNode.nodeName === "TABLE" || isFirstTbody(parentNode)) && every.call(tr.childNodes, function(n) {
+      return n.nodeName === "TH";
+    });
+  }
+  function isFirstTbody(element) {
+    var previousSibling = element.previousSibling;
+    return element.nodeName === "TBODY" && (!previousSibling || previousSibling.nodeName === "THEAD" && /^\s*$/i.test(previousSibling.textContent));
+  }
+  function cell(content, node) {
+    var index = indexOf.call(node.parentNode.childNodes, node);
+    var prefix = " ";
+    if (index === 0) prefix = "| ";
+    return prefix + content + " |";
+  }
+  function tables(turndownService) {
+    turndownService.keep(function(node) {
+      return node.nodeName === "TABLE" && !isHeadingRow(node.rows[0]);
+    });
+    for (var key in rules2) turndownService.addRule(key, rules2[key]);
+  }
+  function taskListItems(turndownService) {
+    turndownService.addRule("taskListItems", {
+      filter: function(node) {
+        return node.type === "checkbox" && node.parentNode.nodeName === "LI";
+      },
+      replacement: function(content, node) {
+        return (node.checked ? "[x]" : "[ ]") + " ";
+      }
+    });
+  }
+  function gfm(turndownService) {
+    turndownService.use([
+      highlightedCodeBlock,
+      strikethrough,
+      tables,
+      taskListItems
+    ]);
+  }
+
+  // src/content/note-cs.ts
+  if (!window.__CW_NOTE_CS__) {
+    let getSelectionHtml = function(selection) {
+      const container = document.createElement("div");
+      for (let i = 0; i < selection.rangeCount; i++) {
+        container.appendChild(selection.getRangeAt(i).cloneContents());
+      }
+      return container.innerHTML;
+    }, getSelectionMarkdown = function(selection, plainTextFallback) {
+      const html = getSelectionHtml(selection);
+      if (!html.trim()) return cleanupText(plainTextFallback);
+      try {
+        const markdown = turndownService.turndown(html).trim();
+        return cleanupText(markdown) || cleanupText(plainTextFallback);
+      } catch (err) {
+        console.error("[note-cs] Turndown conversion failed, falling back to plain text:", err);
+        return cleanupText(plainTextFallback);
+      }
+    }, stripOrphanEdgeQuotes = function(text) {
+      let result = text;
+      for (const [open, close] of QUOTE_PAIRS) {
+        if (result.startsWith(open) && !result.slice(open.length).includes(close)) {
+          result = result.slice(open.length);
+        }
+        if (result.endsWith(close) && !result.slice(0, -close.length).includes(open)) {
+          result = result.slice(0, -close.length);
+        }
+      }
+      return result;
+    }, cleanupText = function(text) {
+      return stripOrphanEdgeQuotes(text.trim()).trim();
+    }, isEditableContext = function(node) {
+      let el = node && node.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement ?? null;
+      while (el) {
+        if (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA") return true;
+        el = el.parentElement;
+      }
+      return false;
+    }, truncate = function(text, max) {
+      return text.length > max ? `${text.slice(0, max)}\u2026` : text;
+    }, setSelectOptions = function(select, options) {
+      while (select.firstChild) select.removeChild(select.firstChild);
+      for (const { value, label } of options) {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = label;
+        select.appendChild(opt);
+      }
+    }, fetchProjects = function(callback) {
+      chrome.runtime.sendMessage({ type: "NOTE_GET_PROJECTS" }, callback);
+    }, applyLastProject = function(select, projects) {
+      chrome.storage.local.get(LAST_PROJECT_KEY, (stored) => {
+        const lastId = stored?.[LAST_PROJECT_KEY];
+        if (lastId && projects.some((p) => p.id === lastId)) select.value = lastId;
+      });
+    }, withinAnyOwnUi = function(target) {
+      if (!(target instanceof Node)) return false;
+      return !!barHostEl && (target === barHostEl || barHostEl.contains(target)) || !!launcherHostEl && (target === launcherHostEl || launcherHostEl.contains(target));
+    }, ensureBar = function() {
+      if (barHostEl) return;
+      barHostEl = document.createElement("div");
+      barHostEl.id = "cw-note-bar-host";
+      barHostEl.style.cssText = "all: initial; position: fixed; top: 0; left: 0; width: 100%; z-index: 2147483647; pointer-events: none;";
+      const shadow = barHostEl.attachShadow({ mode: "open" });
+      const style = document.createElement("style");
+      style.textContent = CSS_BAR;
+      shadow.appendChild(style);
+      const barEl = document.createElement("div");
+      barEl.className = "bar";
+      const preview = document.createElement("div");
+      preview.className = "preview";
+      const manualInput = document.createElement("textarea");
+      manualInput.className = "manual-input";
+      manualInput.placeholder = "Type your note\u2026";
+      manualInput.hidden = true;
+      const row = document.createElement("div");
+      row.className = "bar-row";
+      const select = document.createElement("select");
+      select.setAttribute("aria-label", "Project");
+      setSelectOptions(select, [{ value: "", label: "Loading projects\u2026" }]);
+      const status = document.createElement("span");
+      status.className = "status";
+      status.hidden = true;
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "primary";
+      saveBtn.textContent = "Save Note";
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "subtle";
+      closeBtn.setAttribute("aria-label", "Dismiss");
+      closeBtn.textContent = "\u2715";
+      row.append(select, status, saveBtn, closeBtn);
+      barEl.append(preview, manualInput, row);
+      shadow.appendChild(barEl);
+      document.body.appendChild(barHostEl);
+      bar = { el: barEl, preview, manualInput, select, status, saveBtn, closeBtn };
+      bar.saveBtn.addEventListener("click", onSaveNote);
+      bar.closeBtn.addEventListener("click", hideBar);
+    }, setBarStatus = function(text, kind) {
+      if (!bar) return;
+      bar.status.textContent = text || "";
+      bar.status.className = `status${kind ? ` ${kind}` : ""}`;
+      bar.status.hidden = !text;
+    }, loadProjectsIntoBar = function() {
+      if (!bar) return;
+      setSelectOptions(bar.select, [{ value: "", label: "Loading projects\u2026" }]);
+      fetchProjects((response) => {
+        if (chrome.runtime.lastError || !response?.ok || !bar) {
+          if (bar) {
+            setSelectOptions(bar.select, [{ value: "", label: "Backend unavailable" }]);
+            bar.saveBtn.disabled = true;
+          }
           return;
         }
-        setStatus('Saved ✓', 'success');
-        els.saveBtn.textContent = 'Saved ✓';
-        setTimeout(hideBar, 1100);
-      },
-    );
-  }
-
-  // ── Selection tracking ───────────────────────────────────────────────────
-
-  function evaluateSelection(event) {
-    if (event && withinOwnUi(event.target)) return; // interacting with our own bar
-
-    const selection = window.getSelection();
-    const text = selection ? selection.toString().trim() : '';
-
-    if (text.length < MIN_SELECTION_LENGTH) {
-      // Only auto-hide if the bar isn't mid-save; don't yank it away from
-      // under a user who's about to click Save (selection can visually
-      // collapse on some sites during click-down before mouseup fires).
-      if (hostEl && els.saveBtn && els.saveBtn.textContent === 'Save Note') hideBar();
-      return;
+        projectsLoadedInBar = true;
+        const projects = response.projects;
+        if (!projects.length) {
+          setSelectOptions(bar.select, [{ value: "", label: "Create a project first" }]);
+          bar.saveBtn.disabled = true;
+          return;
+        }
+        bar.saveBtn.disabled = false;
+        setSelectOptions(bar.select, projects.map((p) => ({ value: p.id, label: p.name })));
+        applyLastProject(bar.select, projects);
+      });
+    }, showBar = function(markdownText, previewText) {
+      ensureBar();
+      if (!bar) return;
+      barMode = "selection";
+      pendingText = markdownText;
+      bar.preview.hidden = false;
+      bar.preview.textContent = truncate(previewText, PREVIEW_MAX_CHARS);
+      bar.manualInput.hidden = true;
+      setBarStatus("");
+      bar.saveBtn.disabled = false;
+      bar.saveBtn.textContent = "Save Note";
+      bar.el.classList.add("visible");
+      if (!projectsLoadedInBar) loadProjectsIntoBar();
+    }, showManualNoteBar = function() {
+      ensureBar();
+      if (!bar) return;
+      barMode = "manual";
+      pendingText = "";
+      bar.preview.hidden = true;
+      bar.manualInput.hidden = false;
+      bar.manualInput.value = "";
+      setBarStatus("");
+      bar.saveBtn.disabled = false;
+      bar.saveBtn.textContent = "Save Note";
+      bar.el.classList.add("visible");
+      if (!projectsLoadedInBar) loadProjectsIntoBar();
+      bar.manualInput.focus();
+    }, hideBar = function() {
+      if (bar?.el) bar.el.classList.remove("visible");
+      pendingText = "";
+    }, onSaveNote = function() {
+      if (!bar) return;
+      const projectId = bar.select.value;
+      const text = (barMode === "manual" ? bar.manualInput.value : pendingText).trim();
+      if (!projectId || !text) return;
+      chrome.storage.local.set({ [LAST_PROJECT_KEY]: projectId });
+      bar.saveBtn.disabled = true;
+      bar.saveBtn.textContent = "Saving\u2026";
+      setBarStatus("");
+      chrome.runtime.sendMessage(
+        { type: "NOTE_SAVE_REQUEST", projectId, text, url: location.href, pageTitle: document.title || "" },
+        (response) => {
+          if (!bar) return;
+          if (chrome.runtime.lastError || !response?.ok) {
+            setBarStatus(response && !response.ok && response.error || "Save failed.", "error");
+            bar.saveBtn.disabled = false;
+            bar.saveBtn.textContent = "Save Note";
+            return;
+          }
+          setBarStatus("Saved \u2713", "success");
+          bar.saveBtn.textContent = "Saved \u2713";
+          setTimeout(hideBar, 1100);
+        }
+      );
+    }, buildLogoMark = function() {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("width", "16");
+      svg.setAttribute("height", "16");
+      svg.setAttribute("viewBox", "0 0 12 12");
+      svg.setAttribute("fill", "none");
+      const opacities = [0.95, 0.5, 0.5, 0.95];
+      const coords = [[1, 1], [7, 1], [1, 7], [7, 7]];
+      coords.forEach(([x, y], i) => {
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("x", String(x));
+        rect.setAttribute("y", String(y));
+        rect.setAttribute("width", "4");
+        rect.setAttribute("height", "4");
+        rect.setAttribute("rx", "1");
+        rect.setAttribute("fill", "white");
+        rect.setAttribute("fill-opacity", String(opacities[i]));
+        svg.appendChild(rect);
+      });
+      return svg;
+    }, ensureLauncher = function() {
+      if (launcherHostEl) return;
+      launcherHostEl = document.createElement("div");
+      launcherHostEl.id = "cw-launcher-host";
+      launcherHostEl.style.cssText = "all: initial; position: fixed; bottom: 20px; right: 20px; z-index: 2147483646; pointer-events: none;";
+      const shadow = launcherHostEl.attachShadow({ mode: "open" });
+      const style = document.createElement("style");
+      style.textContent = CSS_LAUNCHER;
+      shadow.appendChild(style);
+      const root2 = document.createElement("div");
+      root2.className = "root";
+      const fab = document.createElement("button");
+      fab.type = "button";
+      fab.className = "fab";
+      fab.setAttribute("aria-label", "Context Workspace quick actions");
+      fab.appendChild(buildLogoMark());
+      const menu = document.createElement("div");
+      menu.className = "menu";
+      const projectSelect = document.createElement("select");
+      projectSelect.className = "menu-project";
+      setSelectOptions(projectSelect, [{ value: "", label: "Loading projects\u2026" }]);
+      const menuStatus = document.createElement("div");
+      menuStatus.className = "menu-status";
+      menuStatus.hidden = true;
+      const saveNoteItem = document.createElement("button");
+      saveNoteItem.type = "button";
+      saveNoteItem.className = "menu-item";
+      saveNoteItem.textContent = "\u{1F4DD} Save a note";
+      const captureItem = document.createElement("button");
+      captureItem.type = "button";
+      captureItem.className = "menu-item";
+      captureItem.textContent = "\u{1F4E5} Capture this conversation";
+      const dashboardItem = document.createElement("button");
+      dashboardItem.type = "button";
+      dashboardItem.className = "menu-item";
+      dashboardItem.textContent = "\u2197 Open dashboard";
+      menu.append(projectSelect, menuStatus, saveNoteItem, captureItem, dashboardItem);
+      root2.append(fab, menu);
+      shadow.appendChild(root2);
+      document.body.appendChild(launcherHostEl);
+      launcher = { fab, menu, projectSelect, menuStatus, saveNoteItem, captureItem, dashboardItem };
+      fab.addEventListener("click", toggleLauncherMenu);
+      saveNoteItem.addEventListener("click", () => {
+        closeLauncherMenu();
+        showManualNoteBar();
+      });
+      captureItem.addEventListener("click", onLauncherCapture);
+      dashboardItem.addEventListener("click", () => {
+        window.open(DASHBOARD_URL, "_blank", "noopener,noreferrer");
+        closeLauncherMenu();
+      });
+      document.addEventListener("click", (e) => {
+        if (launcher?.menu.classList.contains("open") && !withinAnyOwnUi(e.target)) closeLauncherMenu();
+      });
+    }, setMenuStatus = function(text, kind) {
+      if (!launcher) return;
+      launcher.menuStatus.textContent = text || "";
+      launcher.menuStatus.className = `menu-status${kind ? ` ${kind}` : ""}`;
+      launcher.menuStatus.hidden = !text;
+    }, loadProjectsIntoLauncher = function() {
+      if (!launcher) return;
+      setSelectOptions(launcher.projectSelect, [{ value: "", label: "Loading projects\u2026" }]);
+      fetchProjects((response) => {
+        if (chrome.runtime.lastError || !response?.ok || !launcher) {
+          if (launcher) {
+            setSelectOptions(launcher.projectSelect, [{ value: "", label: "Backend unavailable" }]);
+            launcher.saveNoteItem.disabled = true;
+            launcher.captureItem.disabled = true;
+          }
+          return;
+        }
+        launcherProjectsLoaded = true;
+        const projects = response.projects;
+        if (!projects.length) {
+          setSelectOptions(launcher.projectSelect, [{ value: "", label: "Create a project first" }]);
+          launcher.saveNoteItem.disabled = true;
+          launcher.captureItem.disabled = true;
+          return;
+        }
+        launcher.saveNoteItem.disabled = false;
+        launcher.captureItem.disabled = false;
+        setSelectOptions(launcher.projectSelect, projects.map((p) => ({ value: p.id, label: p.name })));
+        applyLastProject(launcher.projectSelect, projects);
+      });
+    }, toggleLauncherMenu = function() {
+      if (!launcher) return;
+      if (launcher.menu.classList.contains("open")) {
+        closeLauncherMenu();
+        return;
+      }
+      launcher.menu.classList.add("open");
+      setMenuStatus("");
+      if (!launcherProjectsLoaded) loadProjectsIntoLauncher();
+    }, closeLauncherMenu = function() {
+      launcher?.menu.classList.remove("open");
+    }, onLauncherCapture = function() {
+      if (!launcher) return;
+      const projectId = launcher.projectSelect.value;
+      if (!projectId) return;
+      chrome.storage.local.set({ [LAST_PROJECT_KEY]: projectId });
+      launcher.captureItem.disabled = true;
+      launcher.saveNoteItem.disabled = true;
+      setMenuStatus("Capturing\u2026");
+      const request = { type: "LAUNCHER_CAPTURE_REQUEST", projectId };
+      chrome.runtime.sendMessage(request, (response) => {
+        if (!launcher) return;
+        launcher.captureItem.disabled = false;
+        launcher.saveNoteItem.disabled = false;
+        if (chrome.runtime.lastError || !response?.ok) {
+          setMenuStatus(response && !response.ok && response.error || "Capture failed.", "error");
+          return;
+        }
+        setMenuStatus(`Captured "${truncate(response.title || "conversation", 40)}" \u2713`, "success");
+        setTimeout(closeLauncherMenu, 1800);
+      });
+    }, evaluateSelection = function(event) {
+      if (event && withinAnyOwnUi(event.target)) return;
+      const selection = window.getSelection();
+      const plainText = selection ? selection.toString().trim() : "";
+      if (plainText.length < MIN_SELECTION_LENGTH) {
+        if (barHostEl && barMode === "selection" && bar?.saveBtn.textContent === "Save Note") hideBar();
+        return;
+      }
+      if (!selection || isEditableContext(selection.anchorNode)) return;
+      try {
+        const cleanPlainText = cleanupText(plainText);
+        const markdown = getSelectionMarkdown(selection, cleanPlainText);
+        showBar(markdown, cleanPlainText);
+      } catch (err) {
+        console.error("[note-cs] failed to show note bar:", err);
+      }
+    }, onSelectionMaybeChanged = function(event) {
+      if (selectionTimer) clearTimeout(selectionTimer);
+      selectionTimer = setTimeout(() => evaluateSelection(event), SELECTION_DEBOUNCE_MS);
+    };
+    getSelectionHtml2 = getSelectionHtml, getSelectionMarkdown2 = getSelectionMarkdown, stripOrphanEdgeQuotes2 = stripOrphanEdgeQuotes, cleanupText2 = cleanupText, isEditableContext2 = isEditableContext, truncate2 = truncate, setSelectOptions2 = setSelectOptions, fetchProjects2 = fetchProjects, applyLastProject2 = applyLastProject, withinAnyOwnUi2 = withinAnyOwnUi, ensureBar2 = ensureBar, setBarStatus2 = setBarStatus, loadProjectsIntoBar2 = loadProjectsIntoBar, showBar2 = showBar, showManualNoteBar2 = showManualNoteBar, hideBar2 = hideBar, onSaveNote2 = onSaveNote, buildLogoMark2 = buildLogoMark, ensureLauncher2 = ensureLauncher, setMenuStatus2 = setMenuStatus, loadProjectsIntoLauncher2 = loadProjectsIntoLauncher, toggleLauncherMenu2 = toggleLauncherMenu, closeLauncherMenu2 = closeLauncherMenu, onLauncherCapture2 = onLauncherCapture, evaluateSelection2 = evaluateSelection, onSelectionMaybeChanged2 = onSelectionMaybeChanged;
+    window.__CW_NOTE_CS__ = true;
+    const MIN_SELECTION_LENGTH = 2;
+    const SELECTION_DEBOUNCE_MS = 150;
+    const PREVIEW_MAX_CHARS = 100;
+    const LAST_PROJECT_KEY = "cw_note_last_project";
+    const DASHBOARD_URL = "http://localhost:3000";
+    const turndownService = new TurndownService({
+      headingStyle: "atx",
+      codeBlockStyle: "fenced",
+      bulletListMarker: "-"
+    });
+    turndownService.use(gfm);
+    const QUOTE_PAIRS = [
+      ['"', '"'],
+      ["\u201C", "\u201D"],
+      ["'", "'"],
+      ["\u2018", "\u2019"]
+    ];
+    const CSS_BAR = `
+    :host { all: initial; }
+    .bar {
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 10px auto 0;
+      padding: 10px;
+      max-width: 640px;
+      width: calc(100% - 32px);
+      background: #1c1c1e;
+      color: #f2f2f2;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      pointer-events: auto;
+      opacity: 0;
+      transform: translateY(-8px);
+      transition: opacity 120ms ease, transform 120ms ease;
     }
-
-    if (isEditableContext(selection.anchorNode)) return; // don't hijack the compose box
-
-    showBar(text);
+    .bar.visible { opacity: 1; transform: translateY(0); }
+    .preview {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #c9c9cc;
+    }
+    .manual-input {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 54px;
+      resize: vertical;
+      background: #2c2c2e;
+      color: #f2f2f2;
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 8px;
+      padding: 6px 8px;
+      font: inherit;
+    }
+    .bar-row { display: flex; align-items: center; gap: 8px; }
+    select {
+      flex: 1 1 auto;
+      min-width: 0;
+      max-width: 200px;
+      background: #2c2c2e;
+      color: #f2f2f2;
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 7px;
+      padding: 5px 6px;
+      font: inherit;
+    }
+    button {
+      flex: 0 0 auto;
+      border: none;
+      border-radius: 7px;
+      padding: 6px 12px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .primary { background: #4f8cff; color: white; }
+    .primary:disabled { opacity: 0.5; cursor: default; }
+    .subtle { background: transparent; color: #9a9a9e; font-weight: 400; padding: 4px 6px; }
+    .status { flex: 1 1 auto; min-width: 0; color: #9a9a9e; }
+    .status.error { color: #ff8080; }
+    .status.success { color: #63d68a; }
+  `;
+    const CSS_LAUNCHER = `
+    :host { all: initial; }
+    .root {
+      position: relative;
+      font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .fab {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #1c1c1e;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      border: none;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: transform 120ms ease;
+    }
+    .fab:hover { transform: scale(1.06); }
+    .menu {
+      position: absolute;
+      bottom: 54px;
+      right: 0;
+      width: 250px;
+      background: #1c1c1e;
+      color: #f2f2f2;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      padding: 8px;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+      pointer-events: auto;
+    }
+    .menu.open { display: flex; }
+    .menu-project {
+      background: #2c2c2e;
+      color: #f2f2f2;
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 7px;
+      padding: 6px 8px;
+      font: inherit;
+      margin-bottom: 4px;
+    }
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      border: none;
+      color: #f2f2f2;
+      padding: 8px;
+      border-radius: 8px;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+    }
+    .menu-item:hover { background: rgba(255,255,255,0.08); }
+    .menu-item:disabled { opacity: 0.45; cursor: default; }
+    .menu-status { padding: 2px 8px 4px; color: #9a9a9e; font-size: 12px; }
+    .menu-status.error { color: #ff8080; }
+    .menu-status.success { color: #63d68a; }
+  `;
+    let barHostEl = null;
+    let bar = null;
+    let barMode = "selection";
+    let pendingText = "";
+    let projectsLoadedInBar = false;
+    let launcherHostEl = null;
+    let launcher = null;
+    let launcherProjectsLoaded = false;
+    let selectionTimer = null;
+    document.addEventListener("mouseup", onSelectionMaybeChanged);
+    document.addEventListener("keyup", onSelectionMaybeChanged);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        hideBar();
+        closeLauncherMenu();
+      }
+    });
+    try {
+      ensureLauncher();
+    } catch (err) {
+      console.error("[note-cs] failed to render launcher:", err);
+    }
+    console.debug("[note-cs] loaded on", location.hostname);
   }
-
-  function onSelectionMaybeChanged(event) {
-    clearTimeout(selectionTimer);
-    selectionTimer = setTimeout(() => evaluateSelection(event), SELECTION_DEBOUNCE_MS);
-  }
-
-  document.addEventListener('mouseup', onSelectionMaybeChanged);
-  document.addEventListener('keyup', onSelectionMaybeChanged);
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hideBar();
-  });
-}
+  var getSelectionHtml2;
+  var getSelectionMarkdown2;
+  var stripOrphanEdgeQuotes2;
+  var cleanupText2;
+  var isEditableContext2;
+  var truncate2;
+  var setSelectOptions2;
+  var fetchProjects2;
+  var applyLastProject2;
+  var withinAnyOwnUi2;
+  var ensureBar2;
+  var setBarStatus2;
+  var loadProjectsIntoBar2;
+  var showBar2;
+  var showManualNoteBar2;
+  var hideBar2;
+  var onSaveNote2;
+  var buildLogoMark2;
+  var ensureLauncher2;
+  var setMenuStatus2;
+  var loadProjectsIntoLauncher2;
+  var toggleLauncherMenu2;
+  var closeLauncherMenu2;
+  var onLauncherCapture2;
+  var evaluateSelection2;
+  var onSelectionMaybeChanged2;
+})();

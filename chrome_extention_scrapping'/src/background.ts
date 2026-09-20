@@ -17,8 +17,9 @@ import { CaptureQueue }        from './core/CaptureQueue';
 import { BackendClient }       from './api/BackendClient';
 import { ProviderRegistry }    from './providers/ProviderRegistry';
 import type {
-  ExternalRequest, ContentScriptMessage, CaptureContextRequest,
+  ExternalRequest, ContentScriptMessage, CaptureContextRequest, CaptureContextResult,
   NoteGetProjectsRequest, NoteSaveRequest, NoteSaveResult,
+  LauncherCaptureRequest, LauncherCaptureResult,
 } from './types/messages';
 import type { ProviderSession, FailureReason } from './types/session';
 
@@ -91,8 +92,23 @@ chrome.runtime.onMessage.addListener(
 );
 
 async function handleCaptureRequest(msg: CaptureContextRequest): Promise<unknown> {
-  const { projectId, tabId, platform, idempotencyKey } = msg;
+  return performCapture(msg.projectId, msg.tabId, msg.idempotencyKey);
+}
 
+/**
+ * The actual extraction + upload pipeline, factored out of
+ * handleCaptureRequest() so a second caller — the on-page launcher button
+ * (LAUNCHER_CAPTURE_REQUEST, below) — can trigger the exact same capture
+ * without going through the popup at all. The popup supplies its own
+ * tabId/idempotencyKey (queried via chrome.tabs); the launcher instead
+ * derives tabId from the message sender (it always know which tab a
+ * content-script message came from) and generates its own idempotencyKey.
+ */
+async function performCapture(
+  projectId: string,
+  tabId: number,
+  idempotencyKey: string,
+): Promise<CaptureContextResult> {
   // 1. Acquire per-tab lock (prevent double-click race)
   const lockKey = `cw_cap_lock_${tabId}`;
   const existing = await chrome.storage.local.get(lockKey);
@@ -258,7 +274,7 @@ async function handleCaptureRequest(msg: CaptureContextRequest): Promise<unknown
       sessionId:    entry.result.session_id,
       title:        entry.result.title,
       messageCount: entry.result.messages_count,
-      platform,
+      platform:     extracted.platform,
       capturedAt:   entry.result.captured_at,
     };
   } finally {
@@ -341,6 +357,43 @@ async function handleNoteSave(msg: NoteSaveRequest): Promise<NoteSaveResult> {
   const result = await api.captureConversation(msg.projectId, payload);
   return { type: 'NOTE_SAVE_RESULT', ok: true, contextId: result.context_id };
 }
+
+// ── Launcher capture (on-page floating button → Background) ─────────────────
+// Same full-conversation extraction as the popup's "Capture Context" button
+// (performCapture, defined above), triggered from the launcher's own project
+// picker instead. tabId comes from the message sender — a content script
+// always runs in exactly the tab it should capture, so there's no need to
+// query the active tab the way the popup does.
+
+chrome.runtime.onMessage.addListener(
+  (message: LauncherCaptureRequest, sender, sendResponse) => {
+    if (message.type !== 'LAUNCHER_CAPTURE_REQUEST') return undefined;
+
+    const tabId = sender.tab?.id;
+    if (tabId === undefined) {
+      sendResponse({ type: 'LAUNCHER_CAPTURE_RESULT', ok: false, error: 'Could not identify the current tab.' });
+      return undefined;
+    }
+
+    const idempotencyKey = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `cap_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    performCapture(message.projectId, tabId, idempotencyKey)
+      .then((result) => {
+        const response: LauncherCaptureResult = result.ok
+          ? { type: 'LAUNCHER_CAPTURE_RESULT', ok: true, contextId: result.contextId, title: result.title, messageCount: result.messageCount }
+          : { type: 'LAUNCHER_CAPTURE_RESULT', ok: false, error: result.detail ?? 'Capture failed.' };
+        sendResponse(response);
+      })
+      .catch((err: unknown) => sendResponse({
+        type: 'LAUNCHER_CAPTURE_RESULT', ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      }));
+
+    return true;
+  },
+);
 
 // ── webNavigation — conversation URL capture ──────────────────────────────────
 
