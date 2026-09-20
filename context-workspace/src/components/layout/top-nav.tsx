@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Menu, Search, Bell, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useSearchStore, useWorkspaceStore } from '@/store';
+import { useSearchStore, useWorkspaceStore, useAuthStore } from '@/store';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,16 +15,31 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { mockUser } from '@/mock';
+import { authService } from '@/lib/api/services/auth.service';
 
 interface TopNavProps {
   onMobileMenuToggle?: () => void;
 }
 
 export function TopNav({ onMobileMenuToggle }: TopNavProps) {
+  const router = useRouter();
   const setOpenSearch = useSearchStore((state) => state.setOpen);
   const syncStatus = useWorkspaceStore((state) => state.syncStatus);
   const setSyncStatus = useWorkspaceStore((state) => state.setSyncStatus);
+  const user = useAuthStore((state) => state.user);
+  const refreshToken = useAuthStore((state) => state.refreshToken);
+  const clearSession = useAuthStore((state) => state.clearSession);
+
+  const displayName = user?.email?.split('@')[0] ?? 'Account';
+  const initials = displayName.slice(0, 2).toUpperCase();
+
+  const handleLogout = () => {
+    // Best-effort server-side revoke — the client-side session clear (and
+    // redirect) happens regardless of whether this network call succeeds.
+    if (refreshToken) void authService.logout(refreshToken).catch(() => {});
+    clearSession();
+    router.push('/login');
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -66,10 +82,10 @@ export function TopNav({ onMobileMenuToggle }: TopNavProps) {
         >
           <div className="flex items-center gap-2.5">
             <Search className="w-3.5 h-3.5 shrink-0" />
-            <span>Search task…</span>
+            <span>Search notes…</span>
           </div>
           <kbd className="hidden sm:inline-flex items-center gap-0.5 h-5 px-1.5 text-[10px] font-medium text-[#94a3b8] bg-white border border-border rounded pointer-events-none">
-            ⌘F
+            ⌘K
           </kbd>
         </button>
       </div>
@@ -97,25 +113,26 @@ export function TopNav({ onMobileMenuToggle }: TopNavProps) {
           >
             <Avatar className="h-7 w-7">
               <AvatarFallback className="bg-[#0f172a] text-white text-[11px] font-bold">
-                {mockUser.name.split(' ').map((n: string) => n[0]).join('')}
+                {initials}
               </AvatarFallback>
             </Avatar>
             <div className="hidden sm:block text-left">
-              <p className="text-[12px] font-semibold text-[#0f172a] leading-tight">{mockUser.name}</p>
-              <p className="text-[10px] text-[#94a3b8] leading-tight">{mockUser.email}</p>
+              <p className="text-[12px] font-semibold text-[#0f172a] leading-tight">{displayName}</p>
+              <p className="text-[10px] text-[#94a3b8] leading-tight">{user?.email ?? ''}</p>
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56 bg-white border-border shadow-lg" align="end">
             <DropdownMenuGroup>
               <DropdownMenuLabel className="font-normal">
-                <p className="text-[13px] font-semibold text-[#0f172a]">{mockUser.name}</p>
-                <p className="text-[11px] text-[#94a3b8]">{mockUser.email}</p>
+                <p className="text-[13px] font-semibold text-[#0f172a]">{displayName}</p>
+                <p className="text-[11px] text-[#94a3b8]">{user?.email ?? ''}</p>
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-[13px]">Profile Settings</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-[13px] text-[#ef4444] focus:text-[#ef4444]">
+            <DropdownMenuItem
+              className="text-[13px] text-[#ef4444] focus:text-[#ef4444]"
+              onClick={handleLogout}
+            >
               Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
