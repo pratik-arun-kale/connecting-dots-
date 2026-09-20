@@ -1,15 +1,21 @@
 'use client';
 
 import React, { useState } from 'react';
-import { MessageSquare, Bookmark, Calendar, Settings } from 'lucide-react';
+import { MessageSquare, StickyNote, Calendar, Settings } from 'lucide-react';
 import { ProjectSettingsDialog } from './project-settings-dialog';
 import type { Project } from '@/types';
 
 interface ProjectHeaderProps {
   project: Project;
+  /** Real, live counts — project.sessionsCount/contextsCount are stale
+   *  placeholders hardcoded to 0 by the mock mapper in project.service.ts,
+   *  which is why the header used to show "0 sessions · 0 contexts" while
+   *  the tabs correctly showed the real numbers. */
+  sessionsCount: number;
+  notesCount: number;
 }
 
-export function ProjectHeader({ project }: ProjectHeaderProps) {
+export function ProjectHeader({ project, sessionsCount, notesCount }: ProjectHeaderProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
@@ -48,11 +54,11 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[12px] text-[#94a3b8]">
           <span className="flex items-center gap-1.5">
             <MessageSquare className="w-3.5 h-3.5" />
-            <span className="font-semibold text-[#0f172a]">{project.sessionsCount}</span> sessions
+            <span className="font-semibold text-[#0f172a]">{sessionsCount}</span> sessions
           </span>
           <span className="flex items-center gap-1.5">
-            <Bookmark className="w-3.5 h-3.5" />
-            <span className="font-semibold text-[#0f172a]">{project.contextsCount}</span> contexts
+            <StickyNote className="w-3.5 h-3.5" />
+            <span className="font-semibold text-[#0f172a]">{notesCount}</span> notes
           </span>
           <span className="flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5" />

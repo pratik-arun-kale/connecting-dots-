@@ -80,6 +80,16 @@ export function useProjectContexts(projectId: string) {
   });
 }
 
+export function useCreateNote(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (text: string) => projectService.createNote(projectId, text),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, projectId, QUERY_KEYS.contexts] });
+    },
+  });
+}
+
 // ──────────────────────────────────────────────
 // Session Hooks
 // ──────────────────────────────────────────────

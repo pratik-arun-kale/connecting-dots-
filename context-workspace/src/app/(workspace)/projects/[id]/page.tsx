@@ -5,15 +5,14 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useProject, useProjectContexts, useProjectSessions } from '@/lib/query';
 import { ProjectHeader } from '@/components/project/project-header';
 import { SessionTimeline } from '@/components/project/session-timeline';
-import { CapturedContextList } from '@/components/project/captured-context-list';
-import { NotesSection } from '@/components/project/notes-section';
+import { NotesFeed } from '@/components/project/notes-feed';
 import { RagQueryPanel } from '@/components/project/rag-query-panel';
 import { ConversationSearchPanel } from '@/components/project/conversation-search-panel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, MessageSquare, Bookmark, StickyNote, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, MessageSquare, StickyNote, Loader2, Sparkles } from 'lucide-react';
 
-const VALID_TABS = new Set(['sessions', 'contexts', 'notes', 'ask']);
+const VALID_TABS = new Set(['notes', 'sessions', 'ask']);
 
 // Next.js requires any component calling useSearchParams() to sit under a
 // Suspense boundary — without one, this route 404'd entirely in dev instead
@@ -41,12 +40,22 @@ function ProjectDetailPageInner() {
   // Deep-link support (e.g. the extension's "Open Ask AI in Dashboard" link
   // uses ?tab=ask) — Radix Tabs only reads defaultValue once on mount, which
   // is all a one-shot deep link needs; no need for fully controlled state.
+  // Notes is the default/first tab now — it's the primary view, not Sessions.
   const requestedTab = searchParams.get('tab');
-  const initialTab = requestedTab && VALID_TABS.has(requestedTab) ? requestedTab : 'sessions';
+  const initialTab = requestedTab && VALID_TABS.has(requestedTab) ? requestedTab : 'notes';
 
   const { data: project, isLoading: isLoadingProject, error: projectError } = useProject(id);
-  const { data: sessions = [], isLoading: isLoadingSessions } = useProjectSessions(id);
-  const { data: contexts = [], isLoading: isLoadingContexts } = useProjectContexts(id);
+  const { data: allSessions = [], isLoading: isLoadingSessions } = useProjectSessions(id);
+  const { data: allContexts = [], isLoading: isLoadingContexts } = useProjectContexts(id);
+
+  // "Sessions" only shows real AI provider sessions — a note isn't a
+  // session with anyone, it's structurally one on the backend (the generic
+  // capture pipeline is platform-agnostic) but showing it next to a real
+  // ChatGPT/Claude session there is just confusing. Notes live in the
+  // unified Notes feed instead, alongside captured conversation excerpts —
+  // that merge (captured highlights + your own notes, one stream, each
+  // labeled by type) is the whole point of this redesign.
+  const sessions = allSessions.filter((s) => s.source_platform !== 'note');
 
   if (isLoadingProject) {
     return (
@@ -83,13 +92,24 @@ function ProjectDetailPageInner() {
         <span>Back to Dashboard</span>
       </button>
 
-      {/* Main Header */}
-      <ProjectHeader project={project} />
+      {/* Main Header — real counts passed explicitly (project.sessionsCount/
+          contextsCount are stale placeholders hardcoded to 0 by the mock
+          mapper in project.service.ts, not real data). */}
+      <ProjectHeader project={project} sessionsCount={sessions.length} notesCount={allContexts.length} />
 
-      {/* Workspace Tabs */}
+      {/* Workspace Tabs — Notes first: it's the primary view now. */}
       <Tabs defaultValue={initialTab} className="space-y-4">
         <div className="border-b border-border/40 pb-px">
           <TabsList className="bg-transparent p-0 gap-4 h-10 w-full justify-start rounded-none border-b border-transparent">
+            <TabsTrigger
+              value="notes"
+              className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 rounded-none px-1 pb-2.5 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground data-[state=active]:text-foreground border-b-2 border-transparent transition-all cursor-pointer"
+            >
+              <span className="flex items-center gap-1.5">
+                <StickyNote className="w-3.5 h-3.5" />
+                Notes
+              </span>
+            </TabsTrigger>
             <TabsTrigger
               value="sessions"
               className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 rounded-none px-1 pb-2.5 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground data-[state=active]:text-foreground border-b-2 border-transparent transition-all cursor-pointer"
@@ -97,24 +117,6 @@ function ProjectDetailPageInner() {
               <span className="flex items-center gap-1.5">
                 <MessageSquare className="w-3.5 h-3.5" />
                 Sessions ({sessions.length})
-              </span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="contexts"
-              className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 rounded-none px-1 pb-2.5 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground data-[state=active]:text-foreground border-b-2 border-transparent transition-all cursor-pointer"
-            >
-              <span className="flex items-center gap-1.5">
-                <Bookmark className="w-3.5 h-3.5" />
-                Captured Context ({contexts.length})
-              </span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="notes"
-              className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 rounded-none px-1 pb-2.5 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground data-[state=active]:text-foreground border-b-2 border-transparent transition-all cursor-pointer"
-            >
-              <span className="flex items-center gap-1.5">
-                <StickyNote className="w-3.5 h-3.5" />
-                Scratchpad & Notes
               </span>
             </TabsTrigger>
             <TabsTrigger
@@ -130,6 +132,18 @@ function ProjectDetailPageInner() {
         </div>
 
         {/* Tab Contents */}
+        <TabsContent value="notes" className="outline-none pt-2">
+          {isLoadingContexts ? (
+            <div className="mx-auto max-w-[720px] space-y-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-24 bg-muted/20 border border-border/40 rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <NotesFeed projectId={project.id} contexts={allContexts} />
+          )}
+        </TabsContent>
+
         <TabsContent value="sessions" className="outline-none pt-2">
           {isLoadingSessions ? (
             <div className="space-y-4">
@@ -142,29 +156,13 @@ function ProjectDetailPageInner() {
           )}
         </TabsContent>
 
-        <TabsContent value="contexts" className="outline-none pt-2">
-          {isLoadingContexts ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-40 bg-muted/20 border border-border/40 rounded-xl animate-pulse" />
-              ))}
-            </div>
-          ) : (
-            <CapturedContextList contexts={contexts} />
-          )}
-        </TabsContent>
-
-        <TabsContent value="notes" className="outline-none pt-2">
-          <NotesSection projectId={project.id} />
-        </TabsContent>
-
         <TabsContent value="ask" className="outline-none pt-2 space-y-8">
           <ConversationSearchPanel projectId={project.id} />
 
           <div className="border-t border-border/40 pt-6">
             <RagQueryPanel
               projectId={project.id}
-              chunksIndexed={contexts.length * 3}
+              chunksIndexed={allContexts.length * 3}
             />
           </div>
         </TabsContent>

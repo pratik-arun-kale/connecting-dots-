@@ -100,4 +100,27 @@ export const projectService = {
     );
     return response.data;
   },
+
+  // The dashboard's Notes composer goes through the SAME capture pipeline as
+  // the extension (POST /projects/{id}/capture, platform "note") — not
+  // localStorage — so these notes sync, are searchable, and get embedded
+  // exactly like extension-captured notes. There's no source page for a
+  // dashboard-authored note, so chat_url is left empty (the schema allows
+  // an empty string; getSourceChip() in lib/context-platform.ts falls back
+  // to a plain "Note" label with no link when chat_url is empty).
+  async createNote(projectId: string, text: string): Promise<void> {
+    const trimmed = text.trim();
+    const idempotencyKey =
+      typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `note_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    await apiClient.post(`/projects/${projectId}/capture`, {
+      idempotency_key: idempotencyKey,
+      platform: 'note',
+      chat_url: '',
+      captured_at: new Date().toISOString(),
+      title: `[Note] ${trimmed.slice(0, 80)}`,
+      messages: [{ role: 'user', content: trimmed, timestamp: new Date().toISOString(), index: 0 }],
+      metadata: { source: 'dashboard-note' },
+    });
+  },
 };
