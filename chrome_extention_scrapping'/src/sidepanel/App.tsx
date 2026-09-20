@@ -1,5 +1,8 @@
 import { motion } from 'framer-motion'
 import { useWorkspaceStore } from '@/store/useWorkspaceStore'
+import { LoginGate } from '@/components/auth/LoginGate'
+import { logout } from '@/auth/authService'
+import { notifyAuthChanged } from '@/auth/useAuthSession'
 import { SessionItem } from '../popup/components/session/SessionItem'
 import { SectionLabel } from '../popup/components/ui/SectionLabel'
 import { StatusPill } from '../popup/components/status/StatusPill'
@@ -21,8 +24,7 @@ import { AskAICard } from './components/AskAICard'
  * subtitle, and example queries rather than sharing space with project
  * management chrome.
  */
-export function SidePanelApp() {
-  useBackendHealth()
+function AuthenticatedSidePanel() {
   useSystemTheme()
   const { loading } = useContexts()
   const contexts = useWorkspaceStore(s => s.contexts)
@@ -42,7 +44,15 @@ export function SidePanelApp() {
           </div>
           <span className="text-sm font-semibold">Context Vault</span>
         </div>
-        <StatusPill />
+        <div className="flex items-center gap-2.5">
+          <StatusPill />
+          <button
+            onClick={() => void logout().then(notifyAuthChanged)}
+            className="text-[11px] font-medium text-ink-4 dark:text-white/40 hover:text-ink-2 dark:hover:text-white/70 transition-colors"
+          >
+            Log out
+          </button>
+        </div>
       </header>
 
       {/* Scrollable body */}
@@ -84,5 +94,16 @@ export function SidePanelApp() {
 
       </div>
     </div>
+  )
+}
+
+export function SidePanelApp() {
+  // /health has no auth requirement — safe to check regardless of login state.
+  useBackendHealth()
+
+  return (
+    <LoginGate>
+      <AuthenticatedSidePanel />
+    </LoginGate>
   )
 }

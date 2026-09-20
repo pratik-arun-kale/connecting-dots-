@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useWorkspaceStore } from '@/store/useWorkspaceStore'
+import { LoginGate } from '@/components/auth/LoginGate'
 import { PopupShell } from './components/layout/PopupShell'
 import { Header }    from './components/layout/Header'
 import { NavBar }    from './components/layout/NavBar'
@@ -11,16 +12,18 @@ import { useProjects }       from './hooks/useProjects'
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1]
 
-export function App() {
-  // Bootstrap hooks
-  useBackendHealth()
+// Bootstrap hooks that hit the backend (platform tabs, projects) only make
+// sense once signed in — they're called inside this inner component, which
+// LoginGate only mounts after authentication, rather than in App() itself
+// (which would fire wasted 401s from a logged-out popup on every open).
+function AuthenticatedPopup() {
   usePlatformTabs()
   useProjects()  // fetch immediately, retry, cache — moved from page-level to app-level
 
   const activeTab = useWorkspaceStore(s => s.activeTab)
 
   return (
-    <PopupShell>
+    <>
       <Header />
 
       {/* Page area */}
@@ -43,6 +46,24 @@ export function App() {
       </div>
 
       <NavBar />
+    </>
+  )
+}
+
+export function App() {
+  // /health has no auth requirement — safe to check regardless of login state.
+  useBackendHealth()
+
+  // PopupShell wraps LoginGate (not the other way around) so the popup keeps
+  // its fixed 420px box on the login screen too — Chrome extension popups
+  // have no viewport of their own and shrink-wrap to fit content, so without
+  // an always-present sized shell, the login form alone rendered as a
+  // squished ~160px column instead of the normal popup size.
+  return (
+    <PopupShell>
+      <LoginGate>
+        <AuthenticatedPopup />
+      </LoginGate>
     </PopupShell>
   )
 }

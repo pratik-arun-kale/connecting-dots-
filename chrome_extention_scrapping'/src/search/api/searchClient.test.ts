@@ -94,7 +94,17 @@ describe('searchConversations', () => {
 
   it('re-throws a raw AbortError (not TimeoutError) when the EXTERNAL signal aborts — supersession, not timeout', async () => {
     const ctrl = new AbortController()
+    // Matches real fetch()'s actual contract: reject immediately if the
+    // signal is ALREADY aborted by call time, not just on a future 'abort'
+    // event — searchConversations now awaits chrome.storage (the auth
+    // token) before dispatching, so an abort that lands during that gap
+    // means fetch() is invoked with an already-aborted signal, same as it
+    // would be against a real browser fetch.
     vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      if (init.signal?.aborted) {
+        reject(new DOMException('aborted', 'AbortError'))
+        return
+      }
       init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
     })))
 

@@ -1,3 +1,5 @@
+import { authorizedFetch } from '@/auth/authorizedFetch';
+
 const DEFAULT_BASE = 'http://localhost:8000/api/v1';
 
 export interface BackendSession {
@@ -45,9 +47,8 @@ export class BackendClient {
   constructor(private readonly baseUrl: string = DEFAULT_BASE) {}
 
   async reportState(sessionId: string, state: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/sessions/${sessionId}/state`, {
+    const res = await authorizedFetch(this.baseUrl, `/sessions/${sessionId}/state`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ state }),
     });
     if (!res.ok) {
@@ -56,9 +57,8 @@ export class BackendClient {
   }
 
   async linkSession(sessionId: string, url: string): Promise<BackendSession> {
-    const res = await fetch(`${this.baseUrl}/sessions/${sessionId}/link`, {
+    const res = await authorizedFetch(this.baseUrl, `/sessions/${sessionId}/link`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
     });
     if (!res.ok) {
@@ -68,7 +68,7 @@ export class BackendClient {
   }
 
   async listProjects(): Promise<ProjectSummary[]> {
-    const res = await fetch(`${this.baseUrl}/projects`);
+    const res = await authorizedFetch(this.baseUrl, '/projects');
     if (!res.ok) {
       throw new Error(`listProjects → ${res.status}: ${await res.text()}`);
     }
@@ -78,9 +78,8 @@ export class BackendClient {
   }
 
   async captureConversation(projectId: string, payload: CapturePayload): Promise<CaptureResponse> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/capture`, {
+    const res = await authorizedFetch(this.baseUrl, `/projects/${projectId}/capture`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -91,9 +90,8 @@ export class BackendClient {
   }
 
   async failSession(sessionId: string, reason: string, detail?: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/sessions/${sessionId}/fail`, {
+    const res = await authorizedFetch(this.baseUrl, `/sessions/${sessionId}/fail`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason, ...(detail ? { detail } : {}) }),
     });
     if (!res.ok) {

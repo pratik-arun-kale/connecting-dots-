@@ -1,3 +1,5 @@
+import { authorizedFetch } from '@/auth/authorizedFetch'
+
 const BASE = 'http://localhost:8000/api/v1'
 
 export class ApiError extends Error {
@@ -11,8 +13,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const ctrl  = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 8000)
   try {
-    const res = await fetch(BASE + path, {
-      headers: { 'Content-Type': 'application/json' },
+    const res = await authorizedFetch(BASE, path, {
       signal:  ctrl.signal,
       ...init,
     })

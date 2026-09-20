@@ -1,10 +1,16 @@
 import { StatusPill } from '../status/StatusPill'
+import { logout } from '@/auth/authService'
+import { notifyAuthChanged } from '@/auth/useAuthSession'
 
 // The unlabeled search-icon button that used to live here is gone — it was
 // exactly the kind of hidden affordance the redesign is meant to remove.
 // "Where is search" is now answered by name on the Home screen
 // (OpenSearchAskCard), not by a tooltip on a magnifying-glass icon.
 export function Header() {
+  const handleLogout = () => {
+    void logout().then(notifyAuthChanged)
+  }
+
   return (
     <header className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-surface-5/60 shrink-0">
       <div className="flex items-center gap-2">
@@ -21,7 +27,15 @@ export function Header() {
         </span>
       </div>
 
-      <StatusPill />
+      <div className="flex items-center gap-2.5">
+        <StatusPill />
+        <button
+          onClick={handleLogout}
+          className="text-[11px] font-medium text-ink-4 hover:text-ink-2 transition-colors"
+        >
+          Log out
+        </button>
+      </div>
     </header>
   )
 }

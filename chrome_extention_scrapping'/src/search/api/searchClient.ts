@@ -21,6 +21,7 @@
  */
 import { toSafeSearchResponse } from '../utils/sanitize'
 import type { SafeSearchResponse, SearchRequestParams } from '../types'
+import { withAuthHeader, refreshOnce } from '@/auth/authorizedFetch'
 
 const BASE = 'http://localhost:8000/api/v1' // matches src/lib/api.ts — same backend, same origin allowlisted in manifest host_permissions
 const DEFAULT_TIMEOUT_MS = 10_000
@@ -60,17 +61,31 @@ export async function searchConversations(
   const onExternalAbort = () => timeoutController.abort()
   externalSignal.addEventListener('abort', onExternalAbort)
 
+  const body = JSON.stringify({
+    project_id: params.projectId,
+    query: params.query,
+    top_k: params.topK,
+  })
+
   try {
-    const res = await fetch(`${BASE}/search/conversations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        project_id: params.projectId,
-        query: params.query,
-        top_k: params.topK,
-      }),
-      signal: timeoutController.signal,
-    })
+    let res = await fetch(
+      `${BASE}/search/conversations`,
+      await withAuthHeader({ method: 'POST', body, signal: timeoutController.signal }),
+    )
+
+    // One silent refresh + retry on a 401 — same token-expiry recovery as
+    // every other backend call, kept inline here (rather than routed
+    // through authorizedFetch()) so the timeout/external-abort signal
+    // handling above stays untouched.
+    if (res.status === 401) {
+      const newToken = await refreshOnce(BASE)
+      if (newToken) {
+        res = await fetch(
+          `${BASE}/search/conversations`,
+          await withAuthHeader({ method: 'POST', body, signal: timeoutController.signal }),
+        )
+      }
+    }
 
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '')
