@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { ExternalLink, StickyNote } from 'lucide-react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { ChevronDown, ExternalLink, StickyNote } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { MarkdownContent } from '@/components/markdown/markdown-content';
 import { getContextPlatform, getSourceChip } from '@/lib/context-platform';
@@ -170,18 +169,65 @@ function NoteComposer({ projectId }: { projectId: string }) {
   );
 }
 
-// ── Card ─────────────────────────────────────────────────────────────────
+// ── Card (expands in place — no side drawer) ──────────────────────────────
 
-function NoteCard({ context, onOpen }: { context: ApiContext; onOpen: () => void }) {
+/** TopNav's fixed height (h-16) — the floating header clone below docks
+ *  right under it. Not responsive/variable, so a constant is safe here. */
+const TOPNAV_HEIGHT_PX = 64;
+
+function NoteCard({
+  context, isExpanded, onToggle,
+}: { context: ApiContext; isExpanded: boolean; onToggle: () => void }) {
   const chip = getSourceChip(context);
   const preview = getPreviewText(context);
+  const messages = getMessages(context);
 
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="mb-3 block w-full rounded-xl border border-border/60 bg-card/50 p-4 text-left transition-all hover:border-border hover:bg-card cursor-pointer"
-    >
+  const cardRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLButtonElement>(null);
+  const [floatingRect, setFloatingRect] = useState<{ left: number; width: number } | null>(null);
+  const [showFloating, setShowFloating] = useState(false);
+
+  // position:sticky turned out to be unreliable for this — instead of
+  // depending on it, or on guessing which ancestor's overflow/stacking was
+  // interfering, this renders a second, position:fixed copy of the header
+  // once the real (in-flow) one scrolls out of view. `fixed` is always
+  // relative to the viewport (confirmed no ancestor sets a transform/
+  // filter, which is the one thing that would redirect it), so this can't
+  // be broken by anything upstream in the layout.
+  useEffect(() => {
+    if (!isExpanded) {
+      setShowFloating(false);
+      return;
+    }
+    const measure = () => {
+      const el = cardRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setFloatingRect({ left: rect.left, width: rect.width });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [isExpanded]);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        // Not intersecting AND above the root (top < 0), not below it —
+        // i.e. actually scrolled past, not just "not reached yet".
+        setShowFloating(!entry.isIntersecting && entry.boundingClientRect.top < 0);
+      },
+      { threshold: 0, rootMargin: `-${TOPNAV_HEIGHT_PX}px 0px 0px 0px` },
+    );
+    observer.observe(anchor);
+    return () => observer.disconnect();
+  }, [isExpanded]);
+
+  const headerInner = (
+    <>
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <span
@@ -196,16 +242,91 @@ function NoteCard({ context, onOpen }: { context: ApiContext; onOpen: () => void
           <span className="truncate text-xs font-medium text-muted-foreground">{chip.label}</span>
           {chip.href && <ExternalLink className="w-3 h-3 shrink-0 text-muted-foreground/60" />}
         </div>
-        <time className="shrink-0 text-[10px] text-muted-foreground/70">{formatTime(context.created_at)}</time>
+        <div className="flex shrink-0 items-center gap-2">
+          <time className="text-[10px] text-muted-foreground/70">{formatTime(context.created_at)}</time>
+          <ChevronDown className={cn('w-3.5 h-3.5 text-muted-foreground/60 transition-transform', isExpanded && 'rotate-180')} />
+        </div>
       </div>
 
-      <p className="mb-1 text-[15px] font-semibold leading-snug text-foreground line-clamp-1">
+      <p className={cn('mb-1 text-[15px] font-semibold leading-snug text-foreground', !isExpanded && 'line-clamp-1')}>
         {getDisplayTitle(context)}
       </p>
-      <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
-        {preview || <span className="italic">Empty</span>}
-      </p>
-    </button>
+      {!isExpanded && (
+        <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+          {preview || <span className="italic">Empty</span>}
+        </p>
+      )}
+    </>
+  );
+
+  return (
+    <div
+      ref={cardRef}
+      id={`note-${context.id}`}
+      className={cn(
+        'relative mb-3 rounded-xl border border-border/60 transition-all hover:border-border scroll-mt-4',
+        isExpanded ? 'bg-card' : 'bg-card/50',
+      )}
+    >
+      <button
+        ref={anchorRef}
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isExpanded}
+        className="block w-full rounded-t-xl p-4 text-left cursor-pointer"
+      >
+        {headerInner}
+      </button>
+
+      {isExpanded && showFloating && floatingRect && (
+        <div
+          className="fixed z-30 rounded-b-xl border-b border-border/40 bg-card shadow-md"
+          style={{ top: TOPNAV_HEIGHT_PX, left: floatingRect.left, width: floatingRect.width }}
+        >
+          <button type="button" onClick={onToggle} aria-expanded={isExpanded} className="block w-full p-4 text-left cursor-pointer">
+            {headerInner}
+          </button>
+        </div>
+      )}
+
+      {isExpanded && (
+        <div className="space-y-4 border-t border-border/40 px-4 pb-4 pt-3">
+          {messages.length <= 1 ? (
+            <MarkdownContent content={messages[0]?.content ?? ''} />
+          ) : (
+            messages.map((m, i) => (
+              <div key={i}>
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
+                  {m.role}
+                </p>
+                <MarkdownContent content={m.content} />
+              </div>
+            ))
+          )}
+
+          {chip.href && (
+            <a
+              href={chip.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1.5 text-xs font-medium text-indigo-500 hover:text-indigo-400"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Open source
+            </a>
+          )}
+
+          {/* Annotation field + "Related notes" are deferred: annotating an
+              existing capture needs a backend field that doesn't exist yet
+              (contexts are immutable once captured), and "related" needs a
+              similarity lookup (the RAG retrieval pipeline could power
+              this, but it's not wired to a per-context "find similar"
+              query today). Both are natural follow-ups once there's a
+              backend endpoint for either. */}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -242,67 +363,19 @@ function NoteListItem({
   );
 }
 
-// ── Detail drawer ────────────────────────────────────────────────────────
-
-function NoteDetailDrawer({ context, onClose }: { context: ApiContext | null; onClose: () => void }) {
-  const messages = context ? getMessages(context) : [];
-  const chip = context ? getSourceChip(context) : null;
-
-  return (
-    <Sheet open={!!context} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
-        {context && chip && (
-          <>
-            <SheetHeader className="border-b border-border/40">
-              <SheetTitle className="pr-6 text-sm">{chip.label}</SheetTitle>
-            </SheetHeader>
-
-            <div className="space-y-4 px-4 pb-6">
-              {messages.length <= 1 ? (
-                <MarkdownContent content={messages[0]?.content ?? ''} />
-              ) : (
-                messages.map((m, i) => (
-                  <div key={i}>
-                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
-                      {m.role}
-                    </p>
-                    <MarkdownContent content={m.content} />
-                  </div>
-                ))
-              )}
-
-              {chip.href && (
-                <a
-                  href={chip.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs font-medium text-indigo-500 hover:text-indigo-400"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  Open source
-                </a>
-              )}
-
-              {/* Annotation field + "Related notes" are deferred: annotating
-                  an existing capture needs a backend field that doesn't
-                  exist yet (contexts are immutable once captured), and
-                  "related" needs a similarity lookup (the RAG retrieval
-                  pipeline could power this, but it's not wired to a
-                  per-context "find similar" query today). Both are natural
-                  follow-ups once there's a backend endpoint for either. */}
-            </div>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
-  );
-}
-
 // ── Feed ─────────────────────────────────────────────────────────────────
 
 export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
   const [filter, setFilter] = useState<FilterMode>('all');
-  const [activeContext, setActiveContext] = useState<ApiContext | null>(null);
+  // The one note currently expanded in the center stream (accordion-style —
+  // opening a different one collapses the previous). Clicking a left-sidebar
+  // item sets this too, then the effect below scrolls that card into view.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!expandedId) return;
+    document.getElementById(`note-${expandedId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [expandedId]);
 
   const sorted = useMemo(() => {
     const filtered = contexts.filter((c) => {
@@ -365,8 +438,8 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
                   <NoteListItem
                     key={ctx.id}
                     context={ctx}
-                    isActive={activeContext?.id === ctx.id}
-                    onClick={() => setActiveContext(ctx)}
+                    isActive={expandedId === ctx.id}
+                    onClick={() => setExpandedId(ctx.id)}
                   />
                 ))}
               </div>
@@ -395,14 +468,17 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
                 {group.label}
               </h4>
               {group.items.map((ctx) => (
-                <NoteCard key={ctx.id} context={ctx} onOpen={() => setActiveContext(ctx)} />
+                <NoteCard
+                  key={ctx.id}
+                  context={ctx}
+                  isExpanded={expandedId === ctx.id}
+                  onToggle={() => setExpandedId((prev) => (prev === ctx.id ? null : ctx.id))}
+                />
               ))}
             </div>
           ))
         )}
       </div>
-
-      <NoteDetailDrawer context={activeContext} onClose={() => setActiveContext(null)} />
     </div>
   );
 }
