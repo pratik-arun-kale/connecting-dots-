@@ -284,6 +284,15 @@ function NoteCard({
 
       {isExpanded && (
         <div className="space-y-4 border-t border-border/40 px-4 pb-4 pt-3">
+          {context.prompt_text && (
+            <>
+              <div className="rounded-lg bg-muted/40 px-3 py-2.5">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">You asked</p>
+                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-muted-foreground">{context.prompt_text}</p>
+              </div>
+              <p className="-mb-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">Response</p>
+            </>
+          )}
           {chip.isNote ? (
             // Written notes are click-anywhere-to-edit — no separate edit
             // mode/button, matching the Notion feel. Captured chat
