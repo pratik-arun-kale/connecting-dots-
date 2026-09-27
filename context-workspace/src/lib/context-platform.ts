@@ -47,6 +47,46 @@ export function platformFromUrl(url: string | null | undefined): string | null {
   return null;
 }
 
+/**
+ * Where a note came from, for its label/color. "Mine" used to lump page
+ * selections and typed notes together even though `kind` already told them
+ * apart. Rows saved from the extension's manual-note launcher before the
+ * 0008 migration were backfilled as kind="captured", so they show as
+ * "Selected" — the stored data can't distinguish them.
+ */
+export type NoteOrigin = 'captured' | 'selected' | 'written';
+
+export function getNoteOrigin(context: ApiContext): NoteOrigin {
+  if (getContextPlatform(context) !== 'note') return 'captured';
+  return context.kind === 'written' ? 'written' : 'selected';
+}
+
+export const NOTE_ORIGINS: Record<NoteOrigin, {
+  label: string;
+  description: string;
+  chipClass: string;
+  dotClass: string;
+}> = {
+  captured: {
+    label: 'Captured',
+    description: 'A whole AI conversation, saved with “Capture this conversation”.',
+    chipClass: 'border-indigo-500/20 bg-indigo-500/10 text-indigo-500',
+    dotClass: 'bg-indigo-500',
+  },
+  selected: {
+    label: 'Selected',
+    description: 'A passage you highlighted on a page and saved.',
+    chipClass: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-500',
+    dotClass: 'bg-amber-500',
+  },
+  written: {
+    label: 'Written',
+    description: 'A note you typed yourself.',
+    chipClass: 'border-rose-500/20 bg-rose-500/10 text-rose-500',
+    dotClass: 'bg-rose-500',
+  },
+};
+
 export interface SourceChip {
   label: string;
   href: string | null;

@@ -5,7 +5,8 @@ import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { ChevronDown, ExternalLink, StickyNote, Trash2 } from 'lucide-react';
 import { MarkdownContent } from '@/components/markdown/markdown-content';
-import { getContextPlatform, getSourceChip } from '@/lib/context-platform';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { NOTE_ORIGINS, getContextPlatform, getNoteOrigin, getSourceChip, type NoteOrigin } from '@/lib/context-platform';
 import { useCreateNote, useDeleteNote, useUpdateNoteContent } from '@/lib/query';
 import type { ApiContext } from '@/types';
 
@@ -17,12 +18,12 @@ interface NotesFeedProps {
   projectId: string;
   /** ALL contexts — both extension/dashboard-authored notes and full
    *  conversation captures. This is the merge the redesign asked for:
-   *  one stream, each card labeled "Captured" or "Mine", instead of two
+   *  one stream, each card labeled Captured / Selected / Written, instead of two
    *  separate tabs that read like different features. */
   contexts: ApiContext[];
 }
 
-type FilterMode = 'all' | 'captured' | 'mine';
+type FilterMode = 'all' | NoteOrigin;
 
 interface ContextMessage { role: string; content: string }
 
@@ -172,6 +173,7 @@ function NoteCard({
   onSave: (markdown: string) => void;
 }) {
   const chip = getSourceChip(context);
+  const origin = NOTE_ORIGINS[getNoteOrigin(context)];
   const preview = getPreviewText(context);
   const messages = getMessages(context);
 
@@ -223,15 +225,15 @@ function NoteCard({
     <>
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span
-            className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${
-              chip.isNote
-                ? 'border-rose-500/20 bg-rose-500/10 text-rose-500'
-                : 'border-indigo-500/20 bg-indigo-500/10 text-indigo-500'
-            }`}
-          >
-            {chip.isNote ? 'Mine' : 'Captured'}
-          </span>
+          <Tooltip>
+            <TooltipTrigger
+              render={<span />}
+              className={cn('shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold', origin.chipClass)}
+            >
+              {origin.label}
+            </TooltipTrigger>
+            <TooltipContent>{origin.description}</TooltipContent>
+          </Tooltip>
           <span className="truncate text-xs font-medium text-muted-foreground">{chip.label}</span>
           {chip.href && <ExternalLink className="w-3 h-3 shrink-0 text-muted-foreground/60" />}
         </div>
@@ -366,7 +368,7 @@ function NoteCard({
 function NoteListItem({
   context, isActive, onClick,
 }: { context: ApiContext; isActive: boolean; onClick: () => void }) {
-  const chip = getSourceChip(context);
+  const origin = NOTE_ORIGINS[getNoteOrigin(context)];
 
   return (
     <button
@@ -378,19 +380,50 @@ function NoteListItem({
       )}
     >
       <div className="mb-0.5 flex items-center gap-2">
-        <span
-          className={cn(
-            'h-1.5 w-1.5 shrink-0 rounded-full',
-            chip.isNote ? 'bg-rose-500' : 'bg-indigo-500',
-          )}
-          aria-hidden
-        />
+        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', origin.dotClass)} title={origin.label} />
         <p className="truncate text-[13px] font-semibold text-foreground">{getDisplayTitle(context)}</p>
       </div>
       <p className="line-clamp-1 pl-3.5 text-[11px] text-muted-foreground">
         {getPreviewText(context) || 'Empty'}
       </p>
     </button>
+  );
+}
+
+// ── Filter bar (its colored dots double as the legend) ──────────────────
+
+function FilterBar({
+  filter, onChange, options,
+}: { filter: FilterMode; onChange: (mode: FilterMode) => void; options: FilterMode[] }) {
+  const buttonClass = (mode: FilterMode) => cn(
+    'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer',
+    filter === mode
+      ? 'bg-accent text-foreground'
+      : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground',
+  );
+
+  return (
+    <div className="mb-3 flex flex-wrap gap-1.5">
+      {options.map((mode) => {
+        if (mode === 'all') {
+          return (
+            <button key={mode} type="button" onClick={() => onChange(mode)} className={buttonClass(mode)}>
+              All
+            </button>
+          );
+        }
+        const origin = NOTE_ORIGINS[mode];
+        return (
+          <Tooltip key={mode}>
+            <TooltipTrigger onClick={() => onChange(mode)} className={buttonClass(mode)}>
+              <span className={cn('h-1.5 w-1.5 rounded-full', origin.dotClass)} aria-hidden />
+              {origin.label}
+            </TooltipTrigger>
+            <TooltipContent>{origin.description}</TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </div>
   );
 }
 
@@ -422,11 +455,7 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
   };
 
   const sorted = useMemo(() => {
-    const filtered = contexts.filter((c) => {
-      if (filter === 'all') return true;
-      const isNote = getContextPlatform(c) === 'note';
-      return filter === 'mine' ? isNote : !isNote;
-    });
+    const filtered = contexts.filter((c) => filter === 'all' || getNoteOrigin(c) === filter);
     return [...filtered].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [contexts, filter]);
 
@@ -441,11 +470,7 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
     return result;
   }, [sorted]);
 
-  const filterOptions: Array<{ mode: FilterMode; label: string }> = [
-    { mode: 'all', label: 'All' },
-    { mode: 'captured', label: 'Captured' },
-    { mode: 'mine', label: 'Mine' },
-  ];
+  const filterOptions: FilterMode[] = ['all', 'captured', 'selected', 'written'];
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
@@ -453,23 +478,7 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
           any item to open it in the detail drawer (same drawer the center
           stream's cards open). */}
       <aside className="w-full shrink-0 lg:sticky lg:top-4 lg:w-64">
-        <div className="mb-3 flex gap-1.5">
-          {filterOptions.map(({ mode, label }) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setFilter(mode)}
-              className={cn(
-                'rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer',
-                filter === mode
-                  ? 'bg-indigo-500/10 text-indigo-500'
-                  : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <FilterBar filter={filter} onChange={setFilter} options={filterOptions} />
 
         <div className="max-h-[calc(100vh-14rem)] space-y-4 overflow-y-auto pr-1 lg:max-h-[calc(100vh-10rem)]">
           {groups.map((group) => (
