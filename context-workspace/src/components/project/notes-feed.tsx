@@ -1,16 +1,17 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ExternalLink, StickyNote } from 'lucide-react';
-import { Textarea } from '@/components/ui/textarea';
+import { ChevronDown, ExternalLink, StickyNote, Trash2 } from 'lucide-react';
 import { MarkdownContent } from '@/components/markdown/markdown-content';
 import { getContextPlatform, getSourceChip } from '@/lib/context-platform';
-import { useCreateNote } from '@/lib/query';
-import { projectService } from '@/lib/api/services';
-import { QUERY_KEYS } from '@/lib/constants';
+import { useCreateNote, useDeleteNote, useUpdateNoteContent } from '@/lib/query';
 import type { ApiContext } from '@/types';
+
+// BlockNote/ProseMirror touches `document` at module init — must not run
+// during SSR/static generation, hence the dynamic import.
+const NoteEditor = dynamic(() => import('./note-editor').then((m) => m.NoteEditor), { ssr: false });
 
 interface NotesFeedProps {
   projectId: string;
@@ -87,20 +88,18 @@ const AUTOSAVE_DEBOUNCE_MS = 800;
 
 function NoteComposer({ projectId }: { projectId: string }) {
   const [expanded, setExpanded] = useState(false);
-  const [text, setText] = useState('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const createNote = useCreateNote(projectId);
-  const queryClient = useQueryClient();
+  const updateNote = useUpdateNoteContent(projectId);
 
   // A note is created on the FIRST debounced pause; every pause after that
   // PATCHes the same context's content_md instead of creating a new one.
   const noteIdRef = useRef<string | null>(null);
   const lastSavedRef = useRef('');
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const persist = useCallback(
-    async (value: string) => {
-      const trimmed = value.trim();
+    async (markdown: string) => {
+      const trimmed = markdown.trim();
       if (!trimmed || trimmed === lastSavedRef.current) return;
       setStatus('saving');
       try {
@@ -108,35 +107,22 @@ function NoteComposer({ projectId }: { projectId: string }) {
           const { contextId } = await createNote.mutateAsync(trimmed);
           noteIdRef.current = contextId;
         } else {
-          await projectService.updateNoteContent(noteIdRef.current, trimmed);
-          queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, projectId, QUERY_KEYS.contexts] });
+          await updateNote.mutateAsync({ contextId: noteIdRef.current, contentMd: trimmed });
         }
         lastSavedRef.current = trimmed;
         setStatus('saved');
       } catch {
-        setStatus('idle'); // stays in the textarea untouched — next pause/blur retries
+        setStatus('idle'); // stays in the editor untouched — next pause/blur retries
       }
     },
-    [createNote, projectId, queryClient],
+    [createNote, updateNote],
   );
 
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
-    setText(value);
-    setStatus('idle');
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => void persist(value), AUTOSAVE_DEBOUNCE_MS);
-  };
-
   const collapse = () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    void persist(text).finally(() => {
-      setExpanded(false);
-      setText('');
-      setStatus('idle');
-      noteIdRef.current = null;
-      lastSavedRef.current = '';
-    });
+    setExpanded(false);
+    setStatus('idle');
+    noteIdRef.current = null;
+    lastSavedRef.current = '';
   };
 
   return (
@@ -152,13 +138,13 @@ function NoteComposer({ projectId }: { projectId: string }) {
         </button>
       ) : (
         <div className="space-y-1.5">
-          <Textarea
+          <NoteEditor
             autoFocus
-            value={text}
-            onChange={handleChange}
+            editable
+            placeholder="Write a note…"
+            onDebouncedChange={persist}
             onBlur={collapse}
-            placeholder="Write a note… (Markdown supported)"
-            className="min-h-20 resize-none border-none bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+            className="min-h-20"
           />
           <p className="text-[10px] text-muted-foreground">
             {status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved ✓' : 'Autosaves as you type — click away when done.'}
@@ -176,8 +162,15 @@ function NoteComposer({ projectId }: { projectId: string }) {
 const TOPNAV_HEIGHT_PX = 64;
 
 function NoteCard({
-  context, isExpanded, onToggle,
-}: { context: ApiContext; isExpanded: boolean; onToggle: () => void }) {
+  context, isExpanded, onToggle, onDelete, isDeleting, onSave,
+}: {
+  context: ApiContext;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onDelete: () => void;
+  isDeleting: boolean;
+  onSave: (markdown: string) => void;
+}) {
   const chip = getSourceChip(context);
   const preview = getPreviewText(context);
   const messages = getMessages(context);
@@ -291,7 +284,17 @@ function NoteCard({
 
       {isExpanded && (
         <div className="space-y-4 border-t border-border/40 px-4 pb-4 pt-3">
-          {messages.length <= 1 ? (
+          {chip.isNote ? (
+            // Written notes are click-anywhere-to-edit — no separate edit
+            // mode/button, matching the Notion feel. Captured chat
+            // transcripts below stay read-only: they're not user-authored.
+            <NoteEditor
+              editable
+              initialMarkdown={context.content_md ?? messages[0]?.content ?? ''}
+              onDebouncedChange={onSave}
+              className="min-h-16"
+            />
+          ) : messages.length <= 1 ? (
             <MarkdownContent content={messages[0]?.content ?? ''} />
           ) : (
             messages.map((m, i) => (
@@ -304,18 +307,37 @@ function NoteCard({
             ))
           )}
 
-          {chip.href && (
-            <a
-              href={chip.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1.5 text-xs font-medium text-indigo-500 hover:text-indigo-400"
+          <div className="flex items-center justify-between gap-3 pt-1">
+            {chip.href ? (
+              <a
+                href={chip.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1.5 text-xs font-medium text-indigo-500 hover:text-indigo-400"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Open source
+              </a>
+            ) : (
+              <span />
+            )}
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm('Delete this note? This removes it everywhere — it cannot be undone.')) {
+                  onDelete();
+                }
+              }}
+              disabled={isDeleting}
+              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-destructive disabled:opacity-50 disabled:cursor-default cursor-pointer"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-              Open source
-            </a>
-          )}
+              <Trash2 className="w-3.5 h-3.5" />
+              {isDeleting ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
 
           {/* Annotation field + "Related notes" are deferred: annotating an
               existing capture needs a backend field that doesn't exist yet
@@ -371,11 +393,24 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
   // opening a different one collapses the previous). Clicking a left-sidebar
   // item sets this too, then the effect below scrolls that card into view.
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const deleteNote = useDeleteNote(projectId);
+  const updateNote = useUpdateNoteContent(projectId);
 
   useEffect(() => {
     if (!expandedId) return;
     document.getElementById(`note-${expandedId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [expandedId]);
+
+  const handleDelete = (contextId: string) => {
+    deleteNote.mutate(contextId, {
+      onSuccess: () => setExpandedId((prev) => (prev === contextId ? null : prev)),
+    });
+  };
+
+  const handleSave = (contextId: string, markdown: string) => {
+    if (!markdown.trim()) return; // never autosave a note down to empty
+    updateNote.mutate({ contextId, contentMd: markdown });
+  };
 
   const sorted = useMemo(() => {
     const filtered = contexts.filter((c) => {
@@ -473,6 +508,9 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
                   context={ctx}
                   isExpanded={expandedId === ctx.id}
                   onToggle={() => setExpandedId((prev) => (prev === ctx.id ? null : ctx.id))}
+                  onDelete={() => handleDelete(ctx.id)}
+                  isDeleting={deleteNote.isPending && deleteNote.variables === ctx.id}
+                  onSave={(markdown) => handleSave(ctx.id, markdown)}
                 />
               ))}
             </div>

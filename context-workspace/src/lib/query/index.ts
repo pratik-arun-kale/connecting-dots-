@@ -90,6 +90,27 @@ export function useCreateNote(projectId: string) {
   });
 }
 
+export function useDeleteNote(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (contextId: string) => projectService.deleteNote(contextId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, projectId, QUERY_KEYS.contexts] });
+    },
+  });
+}
+
+export function useUpdateNoteContent(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contextId, contentMd }: { contextId: string; contentMd: string }) =>
+      projectService.updateNoteContent(contextId, contentMd),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, projectId, QUERY_KEYS.contexts] });
+    },
+  });
+}
+
 // ──────────────────────────────────────────────
 // Session Hooks
 // ──────────────────────────────────────────────

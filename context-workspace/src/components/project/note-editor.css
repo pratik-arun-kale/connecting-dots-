@@ -1,0 +1,26 @@
+/* Rebinds BlockNote's own color variables to this app's shadcn tokens
+   (--card/--border/--foreground/--muted-foreground, defined in globals.css
+   and swapped by the `.dark` class) instead of its hardcoded defaults, so
+   the editor blends into the note card instead of looking like a pasted-in
+   widget with its own slightly-off shade of white/gray. */
+.bn-note-editor {
+  --bn-colors-editor-background: transparent;
+  --bn-colors-editor-text: var(--foreground);
+  --bn-colors-border: var(--border);
+  --bn-colors-side-menu: var(--muted-foreground);
+  --bn-colors-menu-background: var(--card);
+  --bn-colors-menu-text: var(--foreground);
+  --bn-colors-hovered-background: var(--accent);
+  --bn-colors-selected-background: var(--accent);
+  --bn-colors-disabled-text: var(--muted-foreground);
+  --bn-colors-shadow: var(--border);
+  --bn-border-radius: var(--radius-md);
+  --bn-font-family: inherit;
+}
+
+.bn-note-editor .bn-editor {
+  padding: 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  background: transparent;
+}
