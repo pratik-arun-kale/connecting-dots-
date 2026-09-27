@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ExternalLink, StickyNote, Trash2 } from 'lucide-react';
+import { ChevronDown, ExternalLink, Search, StickyNote, Trash2, X } from 'lucide-react';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 import { MarkdownContent } from '@/components/markdown/markdown-content';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { NOTE_ORIGINS, getContextPlatform, getNoteOrigin, getSourceChip, type NoteOrigin } from '@/lib/context-platform';
@@ -63,6 +64,20 @@ function getDisplayTitle(context: ApiContext): string {
   if (getContextPlatform(context) !== 'note' && context.title) return context.title;
   const preview = getPreviewText(context);
   return preview.slice(0, 60) || 'Untitled';
+}
+
+/** Every whitespace-separated term must appear somewhere in the note. */
+function matchesQuery(context: ApiContext, query: string): boolean {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const haystack = [
+    getDisplayTitle(context),
+    getSourceChip(context).label,
+    context.page_title,
+    context.prompt_text,
+    context.content_md ?? getMessages(context).map((m) => m.content).join('\n'),
+  ].filter(Boolean).join('\n').toLowerCase();
+  return terms.every((t) => haystack.includes(t));
 }
 
 function formatTime(iso: string): string {
@@ -431,6 +446,7 @@ function FilterBar({
 
 export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
   const [filter, setFilter] = useState<FilterMode>('all');
+  const [query, setQuery] = useState('');
   // The one note currently expanded in the center stream (accordion-style —
   // opening a different one collapses the previous). Clicking a left-sidebar
   // item sets this too, then the effect below scrolls that card into view.
@@ -455,9 +471,11 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
   };
 
   const sorted = useMemo(() => {
-    const filtered = contexts.filter((c) => filter === 'all' || getNoteOrigin(c) === filter);
+    const filtered = contexts.filter(
+      (c) => (filter === 'all' || getNoteOrigin(c) === filter) && matchesQuery(c, query),
+    );
     return [...filtered].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [contexts, filter]);
+  }, [contexts, filter, query]);
 
   const groups = useMemo(() => {
     const result: Array<{ label: string; items: ApiContext[] }> = [];
@@ -505,7 +523,29 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
       <div className="mx-auto w-full min-w-0 flex-1 lg:mx-0 lg:max-w-[720px]">
         <NoteComposer projectId={projectId} />
 
-        {sorted.length === 0 ? (
+        {contexts.length > 0 && (
+          <InputGroup className="mb-4 h-9 bg-card/60">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setQuery(''); }}
+              placeholder="Search this project’s notes…"
+              aria-label="Search this project’s notes"
+            />
+            {query && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton size="icon-xs" onClick={() => setQuery('')} aria-label="Clear search">
+                  <X />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
+        )}
+
+        {contexts.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/25 p-12 text-center">
             <StickyNote className="mb-3 w-8 h-8 text-muted-foreground/60" />
             <h4 className="mb-1 text-sm font-semibold text-foreground">No notes yet</h4>
@@ -514,6 +554,10 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
               <span className="font-semibold text-foreground">Save Note</span> in the extension.
             </p>
           </div>
+        ) : sorted.length === 0 ? (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            {query ? <>No notes match “{query}”.</> : 'No notes of this kind yet.'}
+          </p>
         ) : (
           groups.map((group) => (
             <div key={group.label} className="mb-5">
