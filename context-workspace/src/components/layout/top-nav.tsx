@@ -2,9 +2,9 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Menu, Search, Bell, RefreshCw, Sun, Moon } from 'lucide-react';
+import { Menu, Search, Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useSearchStore, useWorkspaceStore, useAuthStore } from '@/store';
+import { useSearchStore, useAuthStore } from '@/store';
 import { useThemeStore } from '@/store/theme-store';
 import {
   DropdownMenu,
@@ -25,8 +25,6 @@ interface TopNavProps {
 export function TopNav({ onMobileMenuToggle }: TopNavProps) {
   const router = useRouter();
   const setOpenSearch = useSearchStore((state) => state.setOpen);
-  const syncStatus = useWorkspaceStore((state) => state.syncStatus);
-  const setSyncStatus = useWorkspaceStore((state) => state.setSyncStatus);
   const user = useAuthStore((state) => state.user);
   const refreshToken = useAuthStore((state) => state.refreshToken);
   const clearSession = useAuthStore((state) => state.clearSession);
@@ -43,14 +41,6 @@ export function TopNav({ onMobileMenuToggle }: TopNavProps) {
     clearSession();
     router.push('/login');
   };
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSyncStatus('syncing');
-      setTimeout(() => setSyncStatus('synced'), 2000);
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [setSyncStatus]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -95,14 +85,6 @@ export function TopNav({ onMobileMenuToggle }: TopNavProps) {
 
       {/* Right: Actions + User */}
       <div className="flex items-center gap-3">
-        {/* Sync indicator */}
-        {syncStatus === 'syncing' && (
-          <span className="hidden sm:flex items-center gap-1.5 text-[12px] text-amber-500 font-medium">
-            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-            Syncing
-          </span>
-        )}
-
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
@@ -110,12 +92,6 @@ export function TopNav({ onMobileMenuToggle }: TopNavProps) {
           className="w-9 h-9 rounded-xl border border-border bg-card hover:bg-muted/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all cursor-pointer"
         >
           {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-        </button>
-
-        {/* Notification bell */}
-        <button className="relative w-9 h-9 rounded-xl border border-border bg-card hover:bg-muted/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all">
-          <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-indigo-500 border-2 border-card" />
         </button>
 
         {/* User */}
