@@ -1,6 +1,12 @@
 import type { Metadata } from 'next';
+import { Literata } from 'next/font/google';
 import { AppProviders } from '@/providers/app-providers';
 import './globals.css';
+
+// Note bodies only — the interface stays on the system sans. Consumers use
+// the --font-note token (globals.css), never this variable directly, so
+// swapping the face means changing this import and nothing else.
+const noteFont = Literata({ subsets: ['latin'], display: 'swap', variable: '--font-note-face' });
 
 export const metadata: Metadata = {
   title: 'Context Workspace',
@@ -13,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+    <html lang="en" className={`h-full antialiased ${noteFont.variable}`} suppressHydrationWarning>
       <head>
         {/* Applies the persisted (or system) theme before React hydrates —
             without this, the page would flash light-then-dark (or vice

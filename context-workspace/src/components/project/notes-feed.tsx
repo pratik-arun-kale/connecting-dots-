@@ -260,7 +260,7 @@ function NoteCard({
         {getDisplayTitle(context)}
       </p>
       {!isExpanded && (
-        <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+        <p className="line-clamp-3 font-note text-sm leading-relaxed text-muted-foreground">
           {preview || <span className="italic">Empty</span>}
         </p>
       )}
@@ -319,14 +319,18 @@ function NoteCard({
               className="min-h-16"
             />
           ) : messages.length <= 1 ? (
-            <MarkdownContent content={messages[0]?.content ?? ''} />
+            <div className="font-note">
+              <MarkdownContent content={messages[0]?.content ?? ''} />
+            </div>
           ) : (
             messages.map((m, i) => (
               <div key={i}>
                 <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
                   {m.role}
                 </p>
-                <MarkdownContent content={m.content} />
+                <div className="font-note">
+                  <MarkdownContent content={m.content} />
+                </div>
               </div>
             ))
           )}

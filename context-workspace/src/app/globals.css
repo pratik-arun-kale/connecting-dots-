@@ -4,6 +4,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Serif for note bodies (the reading/writing surface). A real CSS variable,
+   not inlined, so plain CSS like note-editor.css can use it too. */
+@theme {
+  --font-note: var(--font-note-face), Georgia, 'Times New Roman', serif;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
