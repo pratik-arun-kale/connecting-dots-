@@ -100,8 +100,6 @@ function dayLabel(iso: string): string {
 
 // ── Composer ("Take a note…" bar — Google Keep style) ───────────────────────
 
-const AUTOSAVE_DEBOUNCE_MS = 800;
-
 function NoteComposer({ projectId }: { projectId: string }) {
   const [expanded, setExpanded] = useState(false);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -378,33 +376,6 @@ function NoteCard({
   );
 }
 
-// ── Left sidebar list item (compact) ────────────────────────────────────
-
-function NoteListItem({
-  context, isActive, onClick,
-}: { context: ApiContext; isActive: boolean; onClick: () => void }) {
-  const origin = NOTE_ORIGINS[getNoteOrigin(context)];
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'block w-full rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer',
-        isActive ? 'bg-accent' : 'hover:bg-muted/50',
-      )}
-    >
-      <div className="mb-0.5 flex items-center gap-2">
-        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', origin.dotClass)} title={origin.label} />
-        <p className="truncate text-[13px] font-semibold text-foreground">{getDisplayTitle(context)}</p>
-      </div>
-      <p className="line-clamp-1 pl-3.5 text-[11px] text-muted-foreground">
-        {getPreviewText(context) || 'Empty'}
-      </p>
-    </button>
-  );
-}
-
 // ── Filter bar (its colored dots double as the legend) ──────────────────
 
 function FilterBar({
@@ -418,7 +389,7 @@ function FilterBar({
   );
 
   return (
-    <div className="mb-3 flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-1.5">
       {options.map((mode) => {
         if (mode === 'all') {
           return (
@@ -447,9 +418,8 @@ function FilterBar({
 export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
   const [filter, setFilter] = useState<FilterMode>('all');
   const [query, setQuery] = useState('');
-  // The one note currently expanded in the center stream (accordion-style —
-  // opening a different one collapses the previous). Clicking a left-sidebar
-  // item sets this too, then the effect below scrolls that card into view.
+  // The one note currently expanded (accordion-style — opening a different
+  // one collapses the previous).
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const deleteNote = useDeleteNote(projectId);
   const updateNote = useUpdateNoteContent(projectId);
@@ -491,40 +461,12 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
   const filterOptions: FilterMode[] = ['all', 'captured', 'selected', 'written'];
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-      {/* Left: filters + a compact, day-grouped list of every note — click
-          any item to open it in the detail drawer (same drawer the center
-          stream's cards open). */}
-      <aside className="w-full shrink-0 lg:sticky lg:top-4 lg:w-64">
-        <FilterBar filter={filter} onChange={setFilter} options={filterOptions} />
+    <div className="mx-auto w-full min-w-0 max-w-180">
+      <NoteComposer projectId={projectId} />
 
-        <div className="max-h-[calc(100vh-14rem)] space-y-4 overflow-y-auto pr-1 lg:max-h-[calc(100vh-10rem)]">
-          {groups.map((group) => (
-            <div key={group.label}>
-              <h4 className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                {group.label}
-              </h4>
-              <div className="space-y-0.5">
-                {group.items.map((ctx) => (
-                  <NoteListItem
-                    key={ctx.id}
-                    context={ctx}
-                    isActive={expandedId === ctx.id}
-                    onClick={() => setExpandedId(ctx.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </aside>
-
-      {/* Center: composer + the continuous passage stream. */}
-      <div className="mx-auto w-full min-w-0 flex-1 lg:mx-0 lg:max-w-[720px]">
-        <NoteComposer projectId={projectId} />
-
-        {contexts.length > 0 && (
-          <InputGroup className="mb-4 h-9 bg-card/60">
+      {contexts.length > 0 && (
+        <div className="mb-5 space-y-2.5">
+          <InputGroup className="h-9 bg-card/60">
             <InputGroupAddon>
               <Search />
             </InputGroupAddon>
@@ -543,42 +485,43 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
               </InputGroupAddon>
             )}
           </InputGroup>
-        )}
+          <FilterBar filter={filter} onChange={setFilter} options={filterOptions} />
+        </div>
+      )}
 
-        {contexts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/25 p-12 text-center">
-            <StickyNote className="mb-3 w-8 h-8 text-muted-foreground/60" />
-            <h4 className="mb-1 text-sm font-semibold text-foreground">No notes yet</h4>
-            <p className="max-w-xs text-xs text-muted-foreground">
-              Write one above, or select text on ChatGPT/Claude/Gemini and click{' '}
-              <span className="font-semibold text-foreground">Save Note</span> in the extension.
-            </p>
-          </div>
-        ) : sorted.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            {query ? <>No notes match “{query}”.</> : 'No notes of this kind yet.'}
+      {contexts.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/25 p-12 text-center">
+          <StickyNote className="mb-3 w-8 h-8 text-muted-foreground/60" />
+          <h4 className="mb-1 text-sm font-semibold text-foreground">No notes yet</h4>
+          <p className="max-w-xs text-xs text-muted-foreground">
+            Write one above, or select text on ChatGPT/Claude/Gemini and click{' '}
+            <span className="font-semibold text-foreground">Save Note</span> in the extension.
           </p>
-        ) : (
-          groups.map((group) => (
-            <div key={group.label} className="mb-5">
-              <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                {group.label}
-              </h4>
-              {group.items.map((ctx) => (
-                <NoteCard
-                  key={ctx.id}
-                  context={ctx}
-                  isExpanded={expandedId === ctx.id}
-                  onToggle={() => setExpandedId((prev) => (prev === ctx.id ? null : ctx.id))}
-                  onDelete={() => handleDelete(ctx.id)}
-                  isDeleting={deleteNote.isPending && deleteNote.variables === ctx.id}
-                  onSave={(markdown) => handleSave(ctx.id, markdown)}
-                />
-              ))}
-            </div>
-          ))
-        )}
-      </div>
+        </div>
+      ) : sorted.length === 0 ? (
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          {query ? <>No notes match “{query}”.</> : 'No notes of this kind yet.'}
+        </p>
+      ) : (
+        groups.map((group) => (
+          <div key={group.label} className="mb-5">
+            <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              {group.label}
+            </h4>
+            {group.items.map((ctx) => (
+              <NoteCard
+                key={ctx.id}
+                context={ctx}
+                isExpanded={expandedId === ctx.id}
+                onToggle={() => setExpandedId((prev) => (prev === ctx.id ? null : ctx.id))}
+                onDelete={() => handleDelete(ctx.id)}
+                isDeleting={deleteNote.isPending && deleteNote.variables === ctx.id}
+                onSave={(markdown) => handleSave(ctx.id, markdown)}
+              />
+            ))}
+          </div>
+        ))
+      )}
     </div>
   );
 }
