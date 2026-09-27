@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictException, NotFoundException
 from app.core.logging import get_logger
+from app.core.rag import vector_store
 from app.models.context import Context
 from app.models.session import Session
 from app.repositories.context import ContextRepository
@@ -269,8 +270,17 @@ class ContextService:
         return context
 
     async def delete_note(self, context_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+        """Deletes the SQL row AND its RAG chunks (ChromaDB) — otherwise a
+        "deleted" note would still turn up in Ask AI/search results, pointing
+        at a context_id that no longer exists. The SQL delete is the part
+        the caller is actually waiting on, so it happens first, inside the
+        normal request transaction; the vector cleanup is best-effort
+        (see vector_store.delete_context_chunks) and never blocks it."""
         context = await self._repo.get_by_id_for_owner(context_id, owner_id)
         if context is None:
             raise NotFoundException(f"Note {context_id} not found.")
+        session = await self._session_repo.get_by_id(context.session_id)
         await self._repo.delete(context)
+        if session is not None:
+            vector_store.delete_context_chunks(str(session.project_id), str(context_id))
         logger.info("note_deleted", context_id=str(context_id))

@@ -7,6 +7,10 @@ from typing import Any, Dict, List
 
 import chromadb
 
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
 _lock: threading.Lock = threading.Lock()
 _client: chromadb.PersistentClient | None = None
 
@@ -118,3 +122,17 @@ def chunk_count(project_id: str) -> int:
         return get_collection(project_id).count()
     except Exception:
         return 0
+
+
+def delete_context_chunks(project_id: str, context_id: str) -> None:
+    """Removes every chunk belonging to one captured context (all its chunk_ids
+    share this context_id in their metadata — see chunker.py's base_meta).
+    Called when a note/context is deleted, so deleting it actually removes it
+    from RAG search/Ask AI too, not just the SQL row — best-effort: a
+    ChromaDB hiccup here shouldn't block the delete of the row itself, which
+    is the part the user is actually waiting on."""
+    try:
+        col = get_collection(project_id)
+        col.delete(where={"context_id": context_id})
+    except Exception:
+        logger.warning("vector_delete_failed", project_id=project_id, context_id=context_id, exc_info=True)
