@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // A stray package-lock.json under the user's home directory made Turbopack
+  // misdetect the workspace root two levels up, watching the whole home
+  // folder instead of just this project — pin it explicitly.
+  turbopack: {
+    root: __dirname,
+  },
 };
 
 export default nextConfig;
