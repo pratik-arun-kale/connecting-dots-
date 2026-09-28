@@ -28,7 +28,12 @@ from app.services.session import SessionService
 
 # ── Database session ──────────────────────────────────────────────────────────
 
-DbSession = Annotated[AsyncSession, Depends(get_db_session)]
+# scope="function": commit when the route returns, BEFORE the response is
+# sent. The default ("request") commits after sending, so a client that
+# immediately refetched (or PATCHed a note it just created) could hit the
+# not-yet-committed state — a 404 or a list missing the new row — and a
+# failed commit would still have returned 200.
+DbSession = Annotated[AsyncSession, Depends(get_db_session, scope="function")]
 
 # ── Service factories ─────────────────────────────────────────────────────────
 
