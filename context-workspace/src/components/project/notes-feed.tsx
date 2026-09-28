@@ -10,10 +10,17 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { NOTE_ORIGINS, getContextPlatform, getNoteOrigin, getSourceChip, type NoteOrigin } from '@/lib/context-platform';
 import { useCreateNote, useDeleteNote, useUpdateNoteContent } from '@/lib/query';
 import type { ApiContext } from '@/types';
+import type { NoteEditorHandle } from './note-editor';
 
 // BlockNote/ProseMirror touches `document` at module init — must not run
 // during SSR/static generation, hence the dynamic import.
 const NoteEditor = dynamic(() => import('./note-editor').then((m) => m.NoteEditor), { ssr: false });
+// Same editor; its loading state stands in for the placeholder during the
+// brief moment after page load before the editor's code has arrived.
+const ComposerEditor = dynamic(() => import('./note-editor').then((m) => m.NoteEditor), {
+  ssr: false,
+  loading: () => <p className="py-0.75 font-note text-sm text-muted-foreground/70">Write a note…</p>,
+});
 
 interface NotesFeedProps {
   projectId: string;
@@ -33,37 +40,49 @@ function getMessages(context: ApiContext): ContextMessage[] {
   return (raw?.messages as ContextMessage[] | undefined) ?? [];
 }
 
-/** Card preview: plain, truncated (CSS line-clamp) text — not rendered
- *  Markdown, since clamping a multi-block rendered tree (headings/lists/
- *  tables) to N lines doesn't work the way clamping one text block does.
- *  Full Markdown rendering is reserved for the detail drawer. */
-function getPreviewText(context: ApiContext): string {
+/** One Markdown line as plain text: drops block markers (heading, bullet,
+ *  numbering, quote, checkbox), link syntax and emphasis/code markers, but
+ *  keeps hyphens and underscores inside words. */
+function stripMarkdownLine(line: string): string {
+  return line
+    .replace(/^\s*(#{1,6}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s*)/, '')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*|\*|~~|`)(\S(?:.*?\S)?)\1/g, '$2')
+    .trim();
+}
+
+/** The card's text as plain lines. Notes read content_md: that's where
+ *  edits land — raw_content.messages is the immutable first-save snapshot
+ *  (for a composer note, only the words typed before the first autosave). */
+function getBodyLines(context: ApiContext): string[] {
   const messages = getMessages(context);
   let text: string;
-  if (messages.length === 0) {
-    text = '';
-  } else if (messages.length === 1) {
-    text = messages[0].content;
+  if (getContextPlatform(context) === 'note') {
+    text = context.content_md ?? messages[0]?.content ?? '';
+  } else if (messages.length <= 1) {
+    text = messages[0]?.content ?? '';
   } else {
     const firstUser = messages.find((m) => m.role === 'user');
     const firstOther = messages.find((m) => m.role !== 'user');
-    text = [firstUser && `You asked: ${firstUser.content}`, firstOther?.content].filter(Boolean).join('\n\n');
+    text = [firstUser && `You asked: ${firstUser.content}`, firstOther?.content].filter(Boolean).join('\n');
   }
-  // Collapse paragraph/line breaks and markdown emphasis markers into a
-  // single flowing line for the card preview — a line-clamp on raw text
-  // with \n\n paragraph breaks wastes clamp lines on blank space, showing
-  // less actual content than a compact excerpt would. Full formatting
-  // (real paragraphs, code blocks, etc.) still renders in the detail drawer.
-  return text.replace(/\s*\n+\s*/g, ' ').replace(/[*_`#>-]/g, '').trim();
+  return text.split('\n').map(stripMarkdownLine).filter(Boolean);
 }
 
-/** Notes have no real title ("[Note] <preview>" isn't meant for display) —
- *  derive one from the body. Captured conversations already have a real
- *  title (the page's actual title, cleaned up at capture time). */
+/** Notes have no real title ("[Note] <first 80 chars>" isn't meant for
+ *  display), so their first line serves as one. Captured conversations
+ *  already have a real title (the page's title, cleaned up at capture). */
 function getDisplayTitle(context: ApiContext): string {
   if (getContextPlatform(context) !== 'note' && context.title) return context.title;
-  const preview = getPreviewText(context);
-  return preview.slice(0, 60) || 'Untitled';
+  return getBodyLines(context)[0] ?? 'Untitled';
+}
+
+/** Card preview, as one flowing line for CSS line-clamp (clamping rendered
+ *  Markdown doesn't work). For notes it starts after the first line, which
+ *  is already shown as the title. */
+function getPreviewText(context: ApiContext): string {
+  const lines = getBodyLines(context);
+  return (getContextPlatform(context) === 'note' ? lines.slice(1) : lines).join(' ');
 }
 
 /** Every whitespace-separated term must appear somewhere in the note. */
@@ -101,69 +120,126 @@ function dayLabel(iso: string): string {
 // ── Composer ("Take a note…" bar — Google Keep style) ───────────────────────
 
 function NoteComposer({ projectId }: { projectId: string }) {
-  const [expanded, setExpanded] = useState(false);
+  // The editor stays mounted, styled as the collapsed bar: mounting it on
+  // click took ~0.5s, and anything typed in that gap was lost. `sessionKey`
+  // remounts a fresh, empty editor after a note is finished.
+  const [active, setActive] = useState(false);
+  const [sessionKey, setSessionKey] = useState(0);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const createNote = useCreateNote(projectId);
   const updateNote = useUpdateNoteContent(projectId);
 
-  // A note is created on the FIRST debounced pause; every pause after that
-  // PATCHes the same context's content_md instead of creating a new one.
+  // A note is created on the FIRST save; every save after that PATCHes the
+  // same context's content_md instead of creating a new one.
   const noteIdRef = useRef<string | null>(null);
   const lastSavedRef = useRef('');
+  // Saves run strictly one after another: otherwise a second save arriving
+  // while the first create is still in flight would see no noteId yet and
+  // create a duplicate note.
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
 
   const persist = useCallback(
-    async (markdown: string) => {
-      const trimmed = markdown.trim();
-      if (!trimmed || trimmed === lastSavedRef.current) return;
-      setStatus('saving');
-      try {
-        if (!noteIdRef.current) {
-          const { contextId } = await createNote.mutateAsync(trimmed);
-          noteIdRef.current = contextId;
-        } else {
-          await updateNote.mutateAsync({ contextId: noteIdRef.current, contentMd: trimmed });
+    (markdown: string) => {
+      const run = async () => {
+        const trimmed = markdown.trim();
+        if (!trimmed || trimmed === lastSavedRef.current) return;
+        setStatus('saving');
+        try {
+          if (!noteIdRef.current) {
+            const { contextId } = await createNote.mutateAsync(trimmed);
+            noteIdRef.current = contextId;
+          } else {
+            await updateNote.mutateAsync({ contextId: noteIdRef.current, contentMd: trimmed });
+          }
+          lastSavedRef.current = trimmed;
+          setStatus('saved');
+        } catch {
+          setStatus('idle'); // content stays in the editor — the next pause retries
         }
-        lastSavedRef.current = trimmed;
-        setStatus('saved');
-      } catch {
-        setStatus('idle'); // stays in the editor untouched — next pause/blur retries
-      }
+      };
+      saveChainRef.current = saveChainRef.current.then(run);
+      return saveChainRef.current;
     },
     [createNote, updateNote],
   );
 
-  const collapse = () => {
-    setExpanded(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const editorHandle = useRef<NoteEditorHandle>(null);
+  const closingRef = useRef(false);
+
+  // Closes on click-outside or Esc rather than on blur: BlockNote's slash
+  // menu and toolbars take focus when clicked, so blur fired mid-edit and
+  // collapsed the composer. Saves everything before resetting, so the next
+  // note starts fresh instead of overwriting this one.
+  const close = useCallback(async () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    await editorHandle.current?.flush();
+    await saveChainRef.current;
+    const wroteNote = noteIdRef.current !== null;
+    setActive(false);
     setStatus('idle');
     noteIdRef.current = null;
     lastSavedRef.current = '';
-  };
+    // Only remount when a note was actually saved — clicking in and out of
+    // an empty composer shouldn't rebuild the editor.
+    if (wroteNote) setSessionKey((k) => k + 1);
+    else (document.activeElement as HTMLElement | null)?.blur();
+    closingRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Element | null;
+      if (!target || containerRef.current?.contains(target)) return;
+      if (target.closest('.bn-root, .bn-shadcn')) return; // BlockNote UI portalled elsewhere
+      void close();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [active, close]);
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card/60 p-3 mb-6">
-      {!expanded ? (
-        <button
-          type="button"
-          onClick={() => setExpanded(true)}
-          className="flex w-full items-center gap-2 text-left text-sm text-muted-foreground cursor-pointer"
-        >
-          <span aria-hidden>✎</span>
-          <span>Write a note…</span>
-        </button>
-      ) : (
-        <div className="space-y-1.5">
-          <NoteEditor
-            autoFocus
-            editable
-            placeholder="Write a note…"
-            onDebouncedChange={persist}
-            onBlur={collapse}
-            className="min-h-20"
-          />
-          <p className="text-[10px] text-muted-foreground">
-            {status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved ✓' : 'Autosaves as you type — click away when done.'}
-          </p>
-        </div>
+    <div
+      ref={containerRef}
+      onFocusCapture={() => setActive(true)}
+      // Clicks on the padding around the text still start writing.
+      onPointerDown={(e) => {
+        if (!(e.target as Element).closest('.bn-root')) {
+          e.preventDefault();
+          editorHandle.current?.focus();
+        }
+      }}
+      // Capture phase: BlockNote marks every Esc as handled, so check first.
+      // With the slash menu open, Esc belongs to BlockNote (closes the
+      // menu); otherwise it closes the composer.
+      onKeyDownCapture={(e) => {
+        if (!active || e.key !== 'Escape') return;
+        if (containerRef.current?.querySelector('[class*="bn-suggestion-menu"]')) return;
+        void close();
+      }}
+      className={cn(
+        'mb-6 cursor-text rounded-xl border p-3 transition-colors',
+        active ? 'border-border bg-card' : 'border-border/60 bg-card/60',
+      )}
+    >
+      <ComposerEditor
+        key={sessionKey}
+        editable
+        placeholder="Write a note…"
+        onDebouncedChange={persist}
+        handleRef={editorHandle}
+        className={cn(active && 'min-h-20')}
+      />
+      {active && (
+        <p className="mt-1.5 text-[10px] text-muted-foreground">
+          {status === 'saving'
+            ? 'Saving…'
+            : status === 'saved'
+              ? 'Saved ✓'
+              : 'Autosaves as you type · type / for headings, lists, checklists · Esc or click outside when done'}
+        </p>
       )}
     </div>
   );
@@ -259,10 +335,9 @@ function NoteCard({
       <p className={cn('mb-1 text-[15px] font-semibold leading-snug text-foreground', !isExpanded && 'line-clamp-1')}>
         {getDisplayTitle(context)}
       </p>
-      {!isExpanded && (
-        <p className="line-clamp-3 font-note text-sm leading-relaxed text-muted-foreground">
-          {preview || <span className="italic">Empty</span>}
-        </p>
+      {/* A one-line note is fully shown by its title — no preview needed. */}
+      {!isExpanded && preview && (
+        <p className="line-clamp-3 font-note text-sm leading-relaxed text-muted-foreground">{preview}</p>
       )}
     </>
   );

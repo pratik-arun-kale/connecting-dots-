@@ -4,6 +4,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* BlockNote's shadcn UI (menus, toolbar) is styled with Tailwind classes in
+   its JS, so Tailwind has to scan it to generate them. */
+@source "../../node_modules/@blocknote/shadcn";
+
 /* Serif for note bodies (the reading/writing surface). A real CSS variable,
    not inlined, so plain CSS like note-editor.css can use it too. */
 @theme {

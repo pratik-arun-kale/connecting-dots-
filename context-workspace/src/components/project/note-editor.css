@@ -18,6 +18,17 @@
   --bn-font-family: inherit;
 }
 
+/* BlockNote's heading scale (3em / 2em / 1.3em) is page-title sized; notes
+   read calmer with headings closer to the body text. */
+/* H1's size is set on the base selector (no data-level rule), so override
+   that, then pin every level explicitly. */
+.bn-note-editor [data-content-type=heading] { --level: 1.5em; padding-top: 10px; }
+.bn-note-editor [data-content-type=heading][data-level="2"] { --level: 1.3em; }
+.bn-note-editor [data-content-type=heading][data-level="3"] { --level: 1.15em; }
+.bn-note-editor [data-content-type=heading][data-level="4"] { --level: 1em; }
+.bn-note-editor [data-content-type=heading][data-level="5"] { --level: 0.95em; }
+.bn-note-editor [data-content-type=heading][data-level="6"] { --level: 0.9em; }
+
 /* Content only — .bn-root (menus, toolbars) keeps the interface sans. */
 .bn-note-editor .bn-editor {
   font-family: var(--font-note);
