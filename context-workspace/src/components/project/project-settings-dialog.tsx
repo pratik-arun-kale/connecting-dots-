@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Trash2, AlertTriangle } from 'lucide-react';
 import { useUpdateProject, useDeleteProject } from '@/lib/query';
+import { useWorkspaceStore } from '@/store';
 import type { Project } from '@/types';
 
 interface ProjectSettingsDialogProps {
@@ -55,7 +56,10 @@ export function ProjectSettingsDialog({ project, open, onClose }: ProjectSetting
     deleteProject.mutate(project.id, {
       onSuccess: () => {
         onClose();
-        router.push('/dashboard');
+        if (useWorkspaceStore.getState().activeProjectId === project.id) {
+          useWorkspaceStore.getState().setActiveProject(null);
+        }
+        router.push('/notes');
       },
     });
   };

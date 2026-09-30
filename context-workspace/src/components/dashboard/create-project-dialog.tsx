@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCreateProjectWithSessions } from '@/lib/query';
+import { useWorkspaceStore } from '@/store';
 import { extensionService } from '@/lib/services/extension.service';
 import type { Platform } from '@/types';
 
@@ -32,8 +33,9 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export function CreateProjectDialog({ compact = false }: { compact?: boolean }) {
+export function CreateProjectDialog({ compact = false, iconOnly = false }: { compact?: boolean; iconOnly?: boolean }) {
   const [open, setOpen] = useState(false);
+  const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([]);
   const [platformError, setPlatformError] = useState('');
   const [submitError, setSubmitError] = useState('');
@@ -78,7 +80,8 @@ export function CreateProjectDialog({ compact = false }: { compact?: boolean }) 
           setSelectedPlatforms([]);
           setSubmitError('');
           setOpen(false);
-          router.push(`/projects/${result.project.id}`);
+          setActiveProject(result.project.id);
+          router.push('/notes');
 
           // ── Step 2: fire-and-forget extension messaging ───────────────────
           // Project creation is already complete. Extension failure is non-fatal.
@@ -122,10 +125,20 @@ export function CreateProjectDialog({ compact = false }: { compact?: boolean }) 
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else setOpen(true); }}>
-      <DialogTrigger render={<Button size="sm" className={compact ? "h-7 px-2.5 text-[12px] gap-1 bg-[#f1f5f9] text-[#0f172a] hover:bg-[#e2e8f0] border border-border rounded-lg cursor-pointer" : "h-9 px-4 text-[13px] gap-1.5 bg-[#0f172a] hover:bg-[#1e293b] text-white rounded-xl cursor-pointer"} />}>
-        <Plus className="w-3.5 h-3.5" />
-        {compact ? <span>New</span> : <span>Add Project</span>}
-      </DialogTrigger>
+      {iconOnly ? (
+        <DialogTrigger
+          aria-label="New project"
+          title="New project"
+          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" />
+        </DialogTrigger>
+      ) : (
+        <DialogTrigger render={<Button size="sm" className={compact ? "h-7 px-2.5 text-[12px] gap-1 bg-[#f1f5f9] text-[#0f172a] hover:bg-[#e2e8f0] border border-border rounded-lg cursor-pointer" : "h-9 px-4 text-[13px] gap-1.5 bg-[#0f172a] hover:bg-[#1e293b] text-white rounded-xl cursor-pointer"} />}>
+          <Plus className="w-3.5 h-3.5" />
+          {compact ? <span>New</span> : <span>Add Project</span>}
+        </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-110 bg-card border-border">
         <DialogHeader>
