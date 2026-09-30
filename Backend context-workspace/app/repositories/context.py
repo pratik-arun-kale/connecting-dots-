@@ -59,6 +59,37 @@ class ContextRepository(BaseRepository[Context]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all()), total
 
+    async def list_for_owner(
+        self,
+        owner_id: uuid.UUID,
+        *,
+        project_id: uuid.UUID | None = None,
+        offset: int = 0,
+        limit: int = 200,
+    ) -> tuple[list[tuple[Context, uuid.UUID]], int]:
+        """Every context the owner has, across projects (or one project),
+        most recently edited first — each paired with its project_id."""
+        base = (
+            select(Context, Session.project_id)
+            .join(Session, Context.session_id == Session.id)
+            .join(Project, Session.project_id == Project.id)
+            .where(Project.user_id == owner_id)
+        )
+        if project_id is not None:
+            base = base.where(Session.project_id == project_id)
+
+        count_result = await self.session.execute(
+            select(func.count()).select_from(base.subquery())
+        )
+        total = count_result.scalar_one()
+
+        result = await self.session.execute(
+            base.order_by(Context.updated_at.desc(), Context.created_at.desc(), Context.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        return [(context, pid) for context, pid in result.all()], total
+
     async def list_by_project(
         self,
         project_id: uuid.UUID,

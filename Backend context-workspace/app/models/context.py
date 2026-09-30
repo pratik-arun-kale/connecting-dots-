@@ -44,6 +44,10 @@ class Context(Base, UUIDPrimaryKeyMixin):
         String(64), nullable=True, unique=True, index=True
     )
     title: Mapped[str | None]    = mapped_column(String(512), nullable=True)
+    # user_title: a title the reader typed themselves. Kept separate from the
+    # automatic `title` so clearing it restores the original, and anything
+    # that (re)generates `title` can never overwrite what the user chose.
+    user_title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     messages_count: Mapped[int]  = mapped_column(Integer, nullable=False, default=0)
     platform: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     chat_url: Mapped[str | None] = mapped_column(String(2048), nullable=True, index=True)

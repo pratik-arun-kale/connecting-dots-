@@ -211,6 +211,22 @@ class ContextService:
         logger.debug("project_contexts_listed", project_id=str(project_id), total=total)
         return contexts, total
 
+    async def list_notes_for_owner(
+        self,
+        owner_id: uuid.UUID,
+        *,
+        project_id: uuid.UUID | None = None,
+        offset: int = 0,
+        limit: int = 200,
+    ) -> tuple[list[tuple[Context, uuid.UUID]], int]:
+        if project_id is not None:
+            project = await self._project_repo.get_by_id_for_owner(project_id, owner_id)
+            if project is None:
+                raise NotFoundException(f"Project {project_id} not found.")
+        return await self._repo.list_for_owner(
+            owner_id, project_id=project_id, offset=offset, limit=limit
+        )
+
     async def capture_context(self, payload: ContextCapture, owner_id: uuid.UUID) -> Context:
         session = await self._session_repo.get_by_id_for_owner(payload.session_id, owner_id)
         if session is None:
@@ -265,6 +281,9 @@ class ContextService:
             raise NotFoundException(f"Note {context_id} not found.")
 
         updates = payload.model_dump(exclude_unset=True)
+        if "user_title" in updates:
+            # Blank means "no title of my own" — back to the automatic one.
+            updates["user_title"] = (updates["user_title"] or "").strip() or None
         context = await self._repo.update(context, **updates)
         logger.info("note_updated", context_id=str(context_id), fields=list(updates.keys()))
         return context

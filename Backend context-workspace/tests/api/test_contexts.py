@@ -202,6 +202,91 @@ async def test_list_contexts_for_another_users_session_returns_404(
     assert response.status_code == 404
 
 
+# ── List across projects (GET /contexts) ───────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_list_notes_across_projects(authenticated_client: AsyncClient) -> None:
+    project_a, session_a = await _bootstrap(authenticated_client)
+    project_b, session_b = await _bootstrap(authenticated_client)
+    c1 = await _create_context(authenticated_client, session_a)
+    c2 = await _create_context(authenticated_client, session_b)
+
+    response = await authenticated_client.get(CONTEXT_BASE)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 2
+    by_id = {item["id"]: item for item in data["items"]}
+    assert by_id[c1["id"]]["project_id"] == project_a
+    assert by_id[c2["id"]]["project_id"] == project_b
+
+
+@pytest.mark.asyncio
+async def test_list_notes_filtered_by_project(authenticated_client: AsyncClient) -> None:
+    project_a, session_a = await _bootstrap(authenticated_client)
+    _, session_b = await _bootstrap(authenticated_client)
+    only = await _create_context(authenticated_client, session_a)
+    await _create_context(authenticated_client, session_b)
+
+    response = await authenticated_client.get(CONTEXT_BASE, params={"project_id": project_a})
+    data = response.json()
+    assert data["total"] == 1
+    assert [item["id"] for item in data["items"]] == [only["id"]]
+
+
+@pytest.mark.asyncio
+async def test_list_notes_never_includes_another_users_notes(
+    authenticated_client: AsyncClient, second_authenticated_client: AsyncClient
+) -> None:
+    _, session_id = await _bootstrap(authenticated_client)
+    await _create_context(authenticated_client, session_id)
+
+    response = await second_authenticated_client.get(CONTEXT_BASE)
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "total": 0}
+
+
+@pytest.mark.asyncio
+async def test_list_notes_for_another_users_project_returns_404(
+    authenticated_client: AsyncClient, second_authenticated_client: AsyncClient
+) -> None:
+    project_id, session_id = await _bootstrap(authenticated_client)
+    await _create_context(authenticated_client, session_id)
+
+    response = await second_authenticated_client.get(CONTEXT_BASE, params={"project_id": project_id})
+    assert response.status_code == 404
+
+
+# ── User title (PATCH user_title) ──────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_set_and_clear_user_title(authenticated_client: AsyncClient) -> None:
+    _, session_id = await _bootstrap(authenticated_client)
+    created = await _create_context(authenticated_client, session_id)
+    url = f"{CONTEXT_BASE}/detail/{created['id']}"
+
+    set_resp = await authenticated_client.patch(url, json={"user_title": "  Interview prep  "})
+    assert set_resp.status_code == 200
+    assert set_resp.json()["user_title"] == "Interview prep"
+    assert set_resp.json()["title"] == created["title"]  # automatic title untouched
+
+    clear_resp = await authenticated_client.patch(url, json={"user_title": "   "})
+    assert clear_resp.status_code == 200
+    assert clear_resp.json()["user_title"] is None
+
+
+@pytest.mark.asyncio
+async def test_set_another_users_title_returns_404(
+    authenticated_client: AsyncClient, second_authenticated_client: AsyncClient
+) -> None:
+    _, session_id = await _bootstrap(authenticated_client)
+    created = await _create_context(authenticated_client, session_id)
+
+    response = await second_authenticated_client.patch(
+        f"{CONTEXT_BASE}/detail/{created['id']}", json={"user_title": "hijacked"}
+    )
+    assert response.status_code == 404
+
+
 # ── Get by ID ──────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ app/api/v1/routes/contexts.py
 Context endpoints.
 
 POST   /contexts                       – capture a context
+GET    /contexts                       – list the caller's notes across projects
 GET    /contexts/{session_id}          – list contexts for a session
 GET    /contexts/detail/{context_id}   – get a single context
 PATCH  /contexts/detail/{context_id}   – update user_note and/or content_md
@@ -20,6 +21,8 @@ from app.schemas.context import (
     ContextCreate,
     ContextListResponse,
     ContextResponse,
+    NoteListItem,
+    NoteListResponse,
     NoteUpdateRequest,
 )
 
@@ -54,6 +57,30 @@ async def create_context(
 ) -> ContextResponse:
     context = await service.create_context(payload, current_user.id)
     return ContextResponse.model_validate(context)
+
+
+@router.get(
+    "",
+    response_model=NoteListResponse,
+    summary="List the caller's notes across all projects (or one), most recently edited first",
+)
+async def list_notes(
+    service: ContextServiceDep,
+    current_user: CurrentUserDep,
+    project_id: uuid.UUID | None = Query(default=None),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=200, ge=1, le=500),
+) -> NoteListResponse:
+    rows, total = await service.list_notes_for_owner(
+        current_user.id, project_id=project_id, offset=offset, limit=limit
+    )
+    return NoteListResponse(
+        items=[
+            NoteListItem(**ContextResponse.model_validate(c).model_dump(), project_id=pid)
+            for c, pid in rows
+        ],
+        total=total,
+    )
 
 
 @router.get(
