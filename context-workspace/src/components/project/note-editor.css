@@ -29,6 +29,12 @@
 .bn-note-editor [data-content-type=heading][data-level="5"] { --level: 0.95em; }
 .bn-note-editor [data-content-type=heading][data-level="6"] { --level: 0.9em; }
 
+/* BlockNote hardcodes table borders as #ddd, which glares in dark mode. */
+.bn-note-editor .bn-editor [data-content-type=table] th,
+.bn-note-editor .bn-editor [data-content-type=table] td {
+  border-color: var(--border);
+}
+
 /* Content only — .bn-root (menus, toolbars) keeps the interface sans. */
 .bn-note-editor .bn-editor {
   font-family: var(--font-note);

@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useImperativeHandle, useRef, type Ref } from 'react';
+import type { PartialBlock } from '@blocknote/core';
+import { SuggestionMenu, insertOrUpdateBlockForSlashMenu } from '@blocknote/core/extensions';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/shadcn';
 import { useThemeStore } from '@/store/theme-store';
@@ -13,11 +15,31 @@ import './note-editor.css';
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
+export type InsertableBlock = 'heading' | 'bulletListItem' | 'checkListItem' | 'table' | 'codeBlock' | 'quote';
+
 export interface NoteEditorHandle {
   /** Saves any pending edit now (skipping the debounce) and resolves once
    *  the consumer's save has finished. No-op if nothing is pending. */
   flush: () => Promise<void>;
   focus: () => void;
+  /** Same behavior as picking the block from the "/" menu: turns an empty
+   *  current line into it, otherwise inserts it below. */
+  insertBlock: (type: InsertableBlock) => void;
+  openSlashMenu: () => void;
+}
+
+function blockFor(type: InsertableBlock): PartialBlock {
+  switch (type) {
+    case 'heading':
+      return { type: 'heading', props: { level: 2 } };
+    case 'table':
+      return {
+        type: 'table',
+        content: { type: 'tableContent', rows: [{ cells: ['', '', ''] }, { cells: ['', '', ''] }] },
+      } as PartialBlock;
+    default:
+      return { type };
+  }
 }
 
 interface NoteEditorProps {
@@ -91,7 +113,18 @@ export function NoteEditor({
     await onChangeRef.current(editor.blocksToMarkdownLossy(blocks));
   }, [editor]);
 
-  useImperativeHandle(handleRef, () => ({ flush, focus: () => editor.focus() }), [flush, editor]);
+  useImperativeHandle(handleRef, () => ({
+    flush,
+    focus: () => editor.focus(),
+    insertBlock: (type) => {
+      editor.focus();
+      insertOrUpdateBlockForSlashMenu(editor, blockFor(type));
+    },
+    openSlashMenu: () => {
+      editor.focus();
+      editor.getExtension(SuggestionMenu)?.openSuggestionMenu('/');
+    },
+  }), [flush, editor]);
 
   const handleChange = useCallback(() => {
     if (initializingRef.current) return;
