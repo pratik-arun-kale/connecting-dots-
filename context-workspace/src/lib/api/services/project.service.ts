@@ -134,6 +134,24 @@ export const projectService = {
     await apiClient.patch(`/contexts/detail/${contextId}`, { content_md: contentMd });
   },
 
+  /** Every note the user has, across projects (or one), most recently edited first. */
+  async listNotes(projectId: string | null): Promise<ApiContext[]> {
+    const response = await apiClient.get<ApiContextListResponse>('/contexts', {
+      params: { limit: 500, ...(projectId ? { project_id: projectId } : {}) },
+    });
+    return response.data.items;
+  },
+
+  async getNote(contextId: string): Promise<ApiContext> {
+    const response = await apiClient.get<ApiContext>(`/contexts/detail/${contextId}`);
+    return response.data;
+  },
+
+  /** An empty title clears it, falling back to the automatic title. */
+  async updateNoteTitle(contextId: string, userTitle: string): Promise<void> {
+    await apiClient.patch(`/contexts/detail/${contextId}`, { user_title: userTitle });
+  },
+
   async updateNoteAnnotation(contextId: string, userNote: string | null): Promise<void> {
     await apiClient.patch(`/contexts/detail/${contextId}`, { user_note: userNote });
   },

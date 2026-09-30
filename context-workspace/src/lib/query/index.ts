@@ -80,34 +80,67 @@ export function useProjectContexts(projectId: string) {
   });
 }
 
+/** Every note list (sidebar, Home, a project's contexts) and the single-note
+ *  cache — refreshed after any note is created, edited or deleted. */
+function invalidateNotes(queryClient: ReturnType<typeof useQueryClient>, projectId?: string) {
+  queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.notes] });
+  if (projectId) {
+    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, projectId, QUERY_KEYS.contexts] });
+  }
+}
+
+/** All the user's notes (projectId null) or one project's, recently edited first. */
+export function useNotes(projectId: string | null) {
+  return useQuery<ApiContext[]>({
+    queryKey: [QUERY_KEYS.notes, 'list', projectId ?? 'all'],
+    queryFn: () => projectService.listNotes(projectId),
+    staleTime: 0,
+  });
+}
+
+export function useNote(contextId: string | null) {
+  return useQuery<ApiContext>({
+    queryKey: [QUERY_KEYS.notes, 'detail', contextId],
+    queryFn: () => projectService.getNote(contextId as string),
+    enabled: !!contextId,
+    staleTime: 0,
+  });
+}
+
 export function useCreateNote(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (text: string) => projectService.createNote(projectId, text),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, projectId, QUERY_KEYS.contexts] });
-    },
+    onSuccess: () => invalidateNotes(queryClient, projectId),
   });
 }
 
-export function useDeleteNote(projectId: string) {
+export function useDeleteNote(projectId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (contextId: string) => projectService.deleteNote(contextId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, projectId, QUERY_KEYS.contexts] });
+    onSuccess: (_data, contextId) => {
+      queryClient.removeQueries({ queryKey: [QUERY_KEYS.notes, 'detail', contextId] });
+      invalidateNotes(queryClient, projectId);
     },
   });
 }
 
-export function useUpdateNoteContent(projectId: string) {
+export function useUpdateNoteContent(projectId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ contextId, contentMd }: { contextId: string; contentMd: string }) =>
       projectService.updateNoteContent(contextId, contentMd),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, projectId, QUERY_KEYS.contexts] });
-    },
+    onSuccess: () => invalidateNotes(queryClient, projectId),
+  });
+}
+
+export function useUpdateNoteTitle(projectId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contextId, userTitle }: { contextId: string; userTitle: string }) =>
+      projectService.updateNoteTitle(contextId, userTitle),
+    onSuccess: () => invalidateNotes(queryClient, projectId),
   });
 }
 

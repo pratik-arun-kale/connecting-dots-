@@ -20,6 +20,7 @@ export const QUERY_KEYS = {
   projects: "projects",
   sessions: "sessions",
   contexts: "contexts",
+  notes: "notes",
   messages: "messages",
   search: "search",
 } as const;

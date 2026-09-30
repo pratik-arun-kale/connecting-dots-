@@ -119,9 +119,13 @@ export interface ApiContext {
   created_at: string;
   // Promoted capture fields (populated by extension capture pipeline)
   title?: string | null;
+  /** A title the reader set; wins over the automatic `title` (migration 0009). */
+  user_title?: string | null;
   platform?: string | null;
   chat_url?: string | null;
   messages_count?: number;
+  /** Present on items from GET /contexts (the cross-project note list). */
+  project_id?: string;
   // Notebook fields (backend migration 0008) — see app/models/context.py
   updated_at?: string | null;
   content_md?: string | null;
