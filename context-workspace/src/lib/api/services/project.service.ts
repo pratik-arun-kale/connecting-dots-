@@ -7,10 +7,7 @@ import type {
   Project,
   RagQueryResponse,
 } from '@/types';
-import { mockProjects } from '@/mock';
 import apiClient from '../client';
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Maps a backend ApiProject to the frontend Project shape expected by existing components.
 function toFrontendProject(p: ApiProject): Project {
@@ -36,24 +33,6 @@ export const projectService = {
   async getProject(id: string): Promise<Project> {
     const response = await apiClient.get<ApiProject>(`/projects/${id}`);
     return toFrontendProject(response.data);
-  },
-
-  // Legacy mock-backed create — kept for backward compatibility with useCreateProject hook.
-  async createProject(
-    data: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'lastActiveAt' | 'sessionsCount' | 'contextsCount'>
-  ): Promise<Project> {
-    await delay(400);
-    const newProject: Project = {
-      ...data,
-      id: `proj-${Date.now()}`,
-      sessionsCount: 0,
-      contextsCount: 0,
-      lastActiveAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    mockProjects.push(newProject);
-    return newProject;
   },
 
   // New flow: create project + sessions in one call (backed by real backend).

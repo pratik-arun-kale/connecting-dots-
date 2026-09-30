@@ -1,10 +1,9 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useCallback } from 'react';
 import { QUERY_KEYS, DEFAULT_STALE_TIME } from '@/lib/constants';
-import { projectService, sessionService, contextService, searchService, conversationSearchService } from '@/lib/api/services';
-import type { ApiContext, ApiSession, ConversationSearchResponse, CreateProjectWithSessionsRequest, Project, RagQueryResponse, Session, Context, ChatMessage } from '@/types';
+import { projectService, sessionService, conversationSearchService } from '@/lib/api/services';
+import type { ApiContext, ApiSession, ConversationSearchResponse, CreateProjectWithSessionsRequest, RagQueryResponse } from '@/types';
 
 // ──────────────────────────────────────────────
 // Project Hooks
@@ -24,17 +23,6 @@ export function useProject(id: string) {
     queryFn: () => projectService.getProject(id),
     staleTime: DEFAULT_STALE_TIME,
     enabled: !!id,
-  });
-}
-
-export function useCreateProject() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'lastActiveAt' | 'sessionsCount' | 'contextsCount'>) =>
-      projectService.createProject(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects] });
-    },
   });
 }
 
@@ -148,14 +136,6 @@ export function useUpdateNoteTitle(projectId?: string) {
 // Session Hooks
 // ──────────────────────────────────────────────
 
-export function useSessions(projectId?: string) {
-  return useQuery({
-    queryKey: projectId ? [QUERY_KEYS.sessions, { projectId }] : [QUERY_KEYS.sessions],
-    queryFn: () => sessionService.getSessions(projectId),
-    staleTime: DEFAULT_STALE_TIME,
-  });
-}
-
 const TERMINAL_SESSION_STATES = new Set(['completed', 'failed']);
 
 export function useProjectSessions(projectId: string) {
@@ -169,64 +149,6 @@ export function useProjectSessions(projectId: string) {
       if (!Array.isArray(data) || data.length === 0) return false;
       const hasActive = data.some((s) => !TERMINAL_SESSION_STATES.has(s.session_state));
       return hasActive ? 3_000 : false;
-    },
-  });
-}
-
-export function useSession(id: string) {
-  return useQuery({
-    queryKey: [QUERY_KEYS.sessions, id],
-    queryFn: () => sessionService.getSession(id),
-    staleTime: DEFAULT_STALE_TIME,
-    enabled: !!id,
-  });
-}
-
-export function useSessionMessages(sessionId: string) {
-  return useQuery({
-    queryKey: [QUERY_KEYS.sessions, sessionId, QUERY_KEYS.messages],
-    queryFn: () => sessionService.getSessionMessages(sessionId),
-    staleTime: DEFAULT_STALE_TIME,
-    enabled: !!sessionId,
-  });
-}
-
-export function useCreateSession() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Omit<Session, 'id' | 'startedAt' | 'endedAt' | 'messagesCount' | 'contextsCount'>) =>
-      sessionService.createSession(data),
-    onSuccess: (newSession) => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.sessions] });
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, newSession.projectId, QUERY_KEYS.sessions] });
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, newSession.projectId] });
-    },
-  });
-}
-
-// ──────────────────────────────────────────────
-// Context Hooks
-// ──────────────────────────────────────────────
-
-export function useContexts(filters?: { projectId?: string; sessionId?: string; type?: string }) {
-  return useQuery({
-    queryKey: [QUERY_KEYS.contexts, filters],
-    queryFn: () => contextService.getContexts(filters),
-    staleTime: DEFAULT_STALE_TIME,
-  });
-}
-
-export function useCreateContext() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Omit<Context, 'id' | 'createdAt'>) =>
-      contextService.createContext(data),
-    onSuccess: (newContext) => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.contexts] });
-      if (newContext.sessionId) {
-        queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.contexts, { sessionId: newContext.sessionId }] });
-      }
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects, newContext.projectId] });
     },
   });
 }
@@ -250,6 +172,7 @@ export function useDeleteProject() {
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: [QUERY_KEYS.projects, id] });
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.notes] }); // its notes are gone too
     },
   });
 }
@@ -274,35 +197,3 @@ export function useSearchConversations(projectId: string) {
   });
 }
 
-// ──────────────────────────────────────────────
-// Search Hooks
-// ──────────────────────────────────────────────
-
-export function useSearchResults(query: string) {
-  return useQuery({
-    queryKey: [QUERY_KEYS.search, query],
-    queryFn: () => searchService.search(query),
-    enabled: query.trim().length >= 2,
-    staleTime: 60 * 1000, // Search results can become stale quicker
-  });
-}
-
-// ──────────────────────────────────────────────
-// Custom Hooks
-// ──────────────────────────────────────────────
-
-export function useDebounce<T extends (...args: any[]) => void>(
-  callback: T,
-  delay: number
-): (...args: Parameters<T>) => void {
-  const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null);
-
-  return useCallback(
-    (...args: Parameters<T>) => {
-      if (timeoutId) clearTimeout(timeoutId);
-      const id = setTimeout(() => callback(...args), delay);
-      setTimeoutId(id);
-    },
-    [callback, delay, timeoutId]
-  );
-}
