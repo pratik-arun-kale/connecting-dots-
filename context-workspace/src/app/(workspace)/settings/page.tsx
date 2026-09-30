@@ -9,7 +9,7 @@ import { Terminal, Key, Globe, User, Shield, Check } from 'lucide-react';
 
 export default function SettingsPage() {
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 md:px-8">
       <PageHeader
         title="Settings"
         description="Configure your AI context synchronization and developer accounts."

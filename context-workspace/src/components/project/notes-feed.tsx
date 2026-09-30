@@ -2,34 +2,33 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ExternalLink, Search, StickyNote, Trash2, X } from 'lucide-react';
+import { Search, StickyNote, X } from 'lucide-react';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
-import { MarkdownContent } from '@/components/markdown/markdown-content';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { NOTE_ORIGINS, getNoteOrigin, getSourceChip, type NoteOrigin } from '@/lib/context-platform';
-import { useCreateNote, useDeleteNote, useUpdateNoteContent } from '@/lib/query';
+import { useCreateNote, useUpdateNoteContent } from '@/lib/query';
 import type { ApiContext } from '@/types';
-import { dayLabel, formatTime, getDisplayTitle, getMessages, getPreviewText, matchesQuery } from '@/lib/note-display';
+import { dayLabel, formatTime, getDisplayTitle, getPreviewText, matchesQuery } from '@/lib/note-display';
 import type { NoteEditorHandle } from './note-editor';
 
-// BlockNote/ProseMirror touches `document` at module init — must not run
-// during SSR/static generation, hence the dynamic import.
-const NoteEditor = dynamic(() => import('./note-editor').then((m) => m.NoteEditor), { ssr: false });
-// Same editor; its loading state stands in for the placeholder during the
-// brief moment after page load before the editor's code has arrived.
+// BlockNote/ProseMirror touches `document` at module init — client only. Its
+// loading state stands in for the placeholder during the brief moment after
+// page load before the editor's code has arrived.
 const ComposerEditor = dynamic(() => import('./note-editor').then((m) => m.NoteEditor), {
   ssr: false,
   loading: () => <p className="py-0.75 font-note text-sm text-muted-foreground/70">Write a note…</p>,
 });
 
 interface NotesFeedProps {
-  projectId: string;
-  /** ALL contexts — both extension/dashboard-authored notes and full
-   *  conversation captures. This is the merge the redesign asked for:
-   *  one stream, each card labeled Captured / Selected / Written, instead of two
-   *  separate tabs that read like different features. */
+  /** The project new notes go into; null = "All notes" (no composer). */
+  projectId: string | null;
+  /** Notes and conversation captures, one stream, each labeled
+   *  Captured / Selected / Written. */
   contexts: ApiContext[];
+  /** Project names by id, shown on cards when listing across projects. */
+  projectNames?: Record<string, string>;
 }
 
 type FilterMode = 'all' | NoteOrigin;
@@ -162,73 +161,19 @@ function NoteComposer({ projectId }: { projectId: string }) {
   );
 }
 
-// ── Card (expands in place — no side drawer) ──────────────────────────────
+// ── Card (opens the note's own page) ─────────────────────────────────────
 
-/** TopNav's fixed height (h-16) — the floating header clone below docks
- *  right under it. Not responsive/variable, so a constant is safe here. */
-const TOPNAV_HEIGHT_PX = 64;
-
-function NoteCard({
-  context, isExpanded, onToggle, onDelete, isDeleting, onSave,
-}: {
-  context: ApiContext;
-  isExpanded: boolean;
-  onToggle: () => void;
-  onDelete: () => void;
-  isDeleting: boolean;
-  onSave: (markdown: string) => void;
-}) {
+function NoteCard({ context, projectName }: { context: ApiContext; projectName?: string }) {
   const chip = getSourceChip(context);
   const origin = NOTE_ORIGINS[getNoteOrigin(context)];
   const preview = getPreviewText(context);
-  const messages = getMessages(context);
 
-  const cardRef = useRef<HTMLDivElement>(null);
-  const anchorRef = useRef<HTMLButtonElement>(null);
-  const [floatingRect, setFloatingRect] = useState<{ left: number; width: number } | null>(null);
-  const [showFloating, setShowFloating] = useState(false);
-
-  // position:sticky turned out to be unreliable for this — instead of
-  // depending on it, or on guessing which ancestor's overflow/stacking was
-  // interfering, this renders a second, position:fixed copy of the header
-  // once the real (in-flow) one scrolls out of view. `fixed` is always
-  // relative to the viewport (confirmed no ancestor sets a transform/
-  // filter, which is the one thing that would redirect it), so this can't
-  // be broken by anything upstream in the layout.
-  useEffect(() => {
-    if (!isExpanded) {
-      setShowFloating(false);
-      return;
-    }
-    const measure = () => {
-      const el = cardRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      setFloatingRect({ left: rect.left, width: rect.width });
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [isExpanded]);
-
-  useEffect(() => {
-    if (!isExpanded) return;
-    const anchor = anchorRef.current;
-    if (!anchor) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        // Not intersecting AND above the root (top < 0), not below it —
-        // i.e. actually scrolled past, not just "not reached yet".
-        setShowFloating(!entry.isIntersecting && entry.boundingClientRect.top < 0);
-      },
-      { threshold: 0, rootMargin: `-${TOPNAV_HEIGHT_PX}px 0px 0px 0px` },
-    );
-    observer.observe(anchor);
-    return () => observer.disconnect();
-  }, [isExpanded]);
-
-  const headerInner = (
-    <>
+  return (
+    <Link
+      href={`/notes/${context.id}`}
+      id={`note-${context.id}`}
+      className="mb-3 block rounded-xl border border-border/60 bg-card/50 p-4 transition-colors hover:border-border hover:bg-card"
+    >
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <Tooltip>
@@ -240,135 +185,16 @@ function NoteCard({
             </TooltipTrigger>
             <TooltipContent>{origin.description}</TooltipContent>
           </Tooltip>
-          <span className="truncate text-xs font-medium text-muted-foreground">{chip.label}</span>
-          {chip.href && <ExternalLink className="w-3 h-3 shrink-0 text-muted-foreground/60" />}
+          <span className="truncate text-xs font-medium text-muted-foreground">
+            {projectName ? `${projectName} · ${chip.label}` : chip.label}
+          </span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <time className="text-[10px] text-muted-foreground/70">{formatTime(context.created_at)}</time>
-          <ChevronDown className={cn('w-3.5 h-3.5 text-muted-foreground/60 transition-transform', isExpanded && 'rotate-180')} />
-        </div>
+        <time className="shrink-0 text-[10px] text-muted-foreground/70">{formatTime(context.created_at)}</time>
       </div>
-
-      <p className={cn('mb-1 text-[15px] font-semibold leading-snug text-foreground', !isExpanded && 'line-clamp-1')}>
-        {getDisplayTitle(context)}
-      </p>
+      <p className="mb-1 line-clamp-1 text-[15px] font-semibold leading-snug text-foreground">{getDisplayTitle(context)}</p>
       {/* A one-line note is fully shown by its title — no preview needed. */}
-      {!isExpanded && preview && (
-        <p className="line-clamp-3 font-note text-sm leading-relaxed text-muted-foreground">{preview}</p>
-      )}
-    </>
-  );
-
-  return (
-    <div
-      ref={cardRef}
-      id={`note-${context.id}`}
-      className={cn(
-        'relative mb-3 rounded-xl border border-border/60 transition-all hover:border-border scroll-mt-4',
-        isExpanded ? 'bg-card' : 'bg-card/50',
-      )}
-    >
-      <button
-        ref={anchorRef}
-        type="button"
-        onClick={onToggle}
-        aria-expanded={isExpanded}
-        className="block w-full rounded-t-xl p-4 text-left cursor-pointer"
-      >
-        {headerInner}
-      </button>
-
-      {isExpanded && showFloating && floatingRect && (
-        <div
-          className="fixed z-30 rounded-b-xl border-b border-border/40 bg-card shadow-md"
-          style={{ top: TOPNAV_HEIGHT_PX, left: floatingRect.left, width: floatingRect.width }}
-        >
-          <button type="button" onClick={onToggle} aria-expanded={isExpanded} className="block w-full p-4 text-left cursor-pointer">
-            {headerInner}
-          </button>
-        </div>
-      )}
-
-      {isExpanded && (
-        <div className="space-y-4 border-t border-border/40 px-4 pb-4 pt-3">
-          {context.prompt_text && (
-            <>
-              <div className="rounded-lg bg-muted/40 px-3 py-2.5">
-                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">You asked</p>
-                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-muted-foreground">{context.prompt_text}</p>
-              </div>
-              <p className="-mb-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">Response</p>
-            </>
-          )}
-          {chip.isNote ? (
-            // Written notes are click-anywhere-to-edit — no separate edit
-            // mode/button, matching the Notion feel. Captured chat
-            // transcripts below stay read-only: they're not user-authored.
-            <NoteEditor
-              editable
-              initialMarkdown={context.content_md ?? messages[0]?.content ?? ''}
-              onDebouncedChange={onSave}
-              className="min-h-16"
-            />
-          ) : messages.length <= 1 ? (
-            <div className="font-note">
-              <MarkdownContent content={messages[0]?.content ?? ''} />
-            </div>
-          ) : (
-            messages.map((m, i) => (
-              <div key={i}>
-                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
-                  {m.role}
-                </p>
-                <div className="font-note">
-                  <MarkdownContent content={m.content} />
-                </div>
-              </div>
-            ))
-          )}
-
-          <div className="flex items-center justify-between gap-3 pt-1">
-            {chip.href ? (
-              <a
-                href={chip.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-1.5 text-xs font-medium text-indigo-500 hover:text-indigo-400"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                Open source
-              </a>
-            ) : (
-              <span />
-            )}
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (window.confirm('Delete this note? This removes it everywhere — it cannot be undone.')) {
-                  onDelete();
-                }
-              }}
-              disabled={isDeleting}
-              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-destructive disabled:opacity-50 disabled:cursor-default cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              {isDeleting ? 'Deleting…' : 'Delete'}
-            </button>
-          </div>
-
-          {/* Annotation field + "Related notes" are deferred: annotating an
-              existing capture needs a backend field that doesn't exist yet
-              (contexts are immutable once captured), and "related" needs a
-              similarity lookup (the RAG retrieval pipeline could power
-              this, but it's not wired to a per-context "find similar"
-              query today). Both are natural follow-ups once there's a
-              backend endpoint for either. */}
-        </div>
-      )}
-    </div>
+      {preview && <p className="line-clamp-3 font-note text-sm leading-relaxed text-muted-foreground">{preview}</p>}
+    </Link>
   );
 }
 
@@ -411,30 +237,9 @@ function FilterBar({
 
 // ── Feed ─────────────────────────────────────────────────────────────────
 
-export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
+export function NotesFeed({ projectId, contexts, projectNames }: NotesFeedProps) {
   const [filter, setFilter] = useState<FilterMode>('all');
   const [query, setQuery] = useState('');
-  // The one note currently expanded (accordion-style — opening a different
-  // one collapses the previous).
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const deleteNote = useDeleteNote(projectId);
-  const updateNote = useUpdateNoteContent(projectId);
-
-  useEffect(() => {
-    if (!expandedId) return;
-    document.getElementById(`note-${expandedId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [expandedId]);
-
-  const handleDelete = (contextId: string) => {
-    deleteNote.mutate(contextId, {
-      onSuccess: () => setExpandedId((prev) => (prev === contextId ? null : prev)),
-    });
-  };
-
-  const handleSave = (contextId: string, markdown: string) => {
-    if (!markdown.trim()) return; // never autosave a note down to empty
-    updateNote.mutate({ contextId, contentMd: markdown });
-  };
 
   const sorted = useMemo(() => {
     const filtered = contexts.filter(
@@ -457,8 +262,8 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
   const filterOptions: FilterMode[] = ['all', 'captured', 'selected', 'written'];
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-180">
-      <NoteComposer projectId={projectId} />
+    <div className="w-full min-w-0">
+      {projectId && <NoteComposer projectId={projectId} />}
 
       {contexts.length > 0 && (
         <div className="mb-5 space-y-2.5">
@@ -470,8 +275,8 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Escape') setQuery(''); }}
-              placeholder="Search this project’s notes…"
-              aria-label="Search this project’s notes"
+              placeholder={projectId ? 'Search this project’s notes…' : 'Search all notes…'}
+              aria-label="Search notes"
             />
             {query && (
               <InputGroupAddon align="inline-end">
@@ -490,8 +295,8 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
           <StickyNote className="mb-3 w-8 h-8 text-muted-foreground/60" />
           <h4 className="mb-1 text-sm font-semibold text-foreground">No notes yet</h4>
           <p className="max-w-xs text-xs text-muted-foreground">
-            Write one above, or select text on ChatGPT/Claude/Gemini and click{' '}
-            <span className="font-semibold text-foreground">Save Note</span> in the extension.
+            {projectId ? 'Write one above, or select' : 'Pick a project in the sidebar to write one, or select'} text on
+            ChatGPT/Claude/Gemini and click <span className="font-semibold text-foreground">Save Note</span> in the extension.
           </p>
         </div>
       ) : sorted.length === 0 ? (
@@ -508,11 +313,7 @@ export function NotesFeed({ projectId, contexts }: NotesFeedProps) {
               <NoteCard
                 key={ctx.id}
                 context={ctx}
-                isExpanded={expandedId === ctx.id}
-                onToggle={() => setExpandedId((prev) => (prev === ctx.id ? null : ctx.id))}
-                onDelete={() => handleDelete(ctx.id)}
-                isDeleting={deleteNote.isPending && deleteNote.variables === ctx.id}
-                onSave={(markdown) => handleSave(ctx.id, markdown)}
+                projectName={projectNames && ctx.project_id ? projectNames[ctx.project_id] : undefined}
               />
             ))}
           </div>

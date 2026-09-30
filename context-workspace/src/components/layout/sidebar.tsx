@@ -14,7 +14,7 @@ import { useNotes, useProjects } from '@/lib/query';
 import { authService } from '@/lib/api/services/auth.service';
 import { NOTE_ORIGINS, getNoteOrigin } from '@/lib/context-platform';
 import { getDisplayTitle } from '@/lib/note-display';
-import { CreateProjectDialog } from '@/components/dashboard/create-project-dialog';
+import { CreateProjectDialog } from '@/components/project/create-project-dialog';
 import { ProjectSettingsDialog } from '@/components/project/project-settings-dialog';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
@@ -47,6 +47,18 @@ export function Sidebar({ variant = 'desktop', onNavigate }: { variant?: 'deskto
   const [settingsProject, setSettingsProject] = useState<Project | null>(null);
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
+
+  // Keep the project list short so the notes below stay in view; the
+  // selected project is always shown even when it's past the cut.
+  const [showAllProjects, setShowAllProjects] = useState(false);
+  const PROJECTS_SHOWN = 5;
+  const visibleProjects = showAllProjects
+    ? projects
+    : [
+        ...projects.slice(0, PROJECTS_SHOWN),
+        ...(activeProject && projects.indexOf(activeProject) >= PROJECTS_SHOWN ? [activeProject] : []),
+      ];
+  const hiddenProjectCount = projects.length - visibleProjects.length;
 
   const go = (href: string) => { router.push(href); onNavigate?.(); };
 
@@ -164,7 +176,7 @@ export function Sidebar({ variant = 'desktop', onNavigate }: { variant?: 'deskto
               <Layers className="h-3.5 w-3.5 shrink-0 opacity-70" />
               <span className="truncate">All notes</span>
             </button>
-            {projects.map((p) => (
+            {visibleProjects.map((p) => (
               <div key={p.id} className="group/project relative">
                 <button type="button" onClick={() => selectProject(p.id)} className={cn(rowClass(activeProjectId === p.id), 'pr-8')}>
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500/70" aria-hidden />
@@ -180,6 +192,15 @@ export function Sidebar({ variant = 'desktop', onNavigate }: { variant?: 'deskto
                 </button>
               </div>
             ))}
+            {(hiddenProjectCount > 0 || showAllProjects) && projects.length > PROJECTS_SHOWN && (
+              <button
+                type="button"
+                onClick={() => setShowAllProjects((v) => !v)}
+                className="w-full rounded-lg px-2.5 py-1 text-left text-[12px] text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+              >
+                {showAllProjects ? 'Show fewer' : `Show ${hiddenProjectCount} more`}
+              </button>
+            )}
           </section>
 
           <section className="space-y-0.5">

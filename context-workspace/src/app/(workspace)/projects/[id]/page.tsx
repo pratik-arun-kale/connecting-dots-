@@ -1,172 +1,34 @@
 'use client';
 
-import React, { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { useProject, useProjectContexts, useProjectSessions } from '@/lib/query';
-import { ProjectHeader } from '@/components/project/project-header';
-import { SessionTimeline } from '@/components/project/session-timeline';
-import { NotesFeed } from '@/components/project/notes-feed';
-import { RagQueryPanel } from '@/components/project/rag-query-panel';
-import { ConversationSearchPanel } from '@/components/project/conversation-search-panel';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, MessageSquare, StickyNote, Loader2, Sparkles } from 'lucide-react';
+import { useWorkspaceStore } from '@/store';
 
-const VALID_TABS = new Set(['notes', 'sessions', 'ask']);
-
-// Next.js requires any component calling useSearchParams() to sit under a
-// Suspense boundary — without one, this route 404'd entirely in dev instead
-// of throwing a visible error (the whole page failed to compile/render, so
-// Next fell back to its default not-found handler).
-export default function ProjectDetailPage() {
+/**
+ * Old project URLs (the extension links here, e.g. "Open Ask AI in
+ * Dashboard" → /projects/{id}?tab=ask): select the project in the sidebar
+ * and send the tab to its new page.
+ */
+export default function ProjectRedirect() {
   return (
-    <Suspense fallback={
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-2">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-        <span className="text-xs text-muted-foreground">Loading project details...</span>
-      </div>
-    }>
-      <ProjectDetailPageInner />
+    <Suspense fallback={null}>
+      <Redirect />
     </Suspense>
   );
 }
 
-function ProjectDetailPageInner() {
-  const params = useParams();
+const TAB_ROUTES: Record<string, string> = { ask: '/ask', sessions: '/sessions', notes: '/notes' };
+
+function Redirect() {
+  const { id } = useParams<{ id: string }>();
+  const tab = useSearchParams().get('tab');
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const id = params.id as string;
+  const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
 
-  // Deep-link support (e.g. the extension's "Open Ask AI in Dashboard" link
-  // uses ?tab=ask) — Radix Tabs only reads defaultValue once on mount, which
-  // is all a one-shot deep link needs; no need for fully controlled state.
-  // Notes is the default/first tab now — it's the primary view, not Sessions.
-  const requestedTab = searchParams.get('tab');
-  const initialTab = requestedTab && VALID_TABS.has(requestedTab) ? requestedTab : 'notes';
+  useEffect(() => {
+    setActiveProject(id);
+    router.replace(TAB_ROUTES[tab ?? ''] ?? '/notes');
+  }, [id, tab, router, setActiveProject]);
 
-  const { data: project, isLoading: isLoadingProject, error: projectError } = useProject(id);
-  const { data: allSessions = [], isLoading: isLoadingSessions } = useProjectSessions(id);
-  const { data: allContexts = [], isLoading: isLoadingContexts } = useProjectContexts(id);
-
-  // "Sessions" only shows real AI provider sessions — a note isn't a
-  // session with anyone, it's structurally one on the backend (the generic
-  // capture pipeline is platform-agnostic) but showing it next to a real
-  // ChatGPT/Claude session there is just confusing. Notes live in the
-  // unified Notes feed instead, alongside captured conversation excerpts —
-  // that merge (captured highlights + your own notes, one stream, each
-  // labeled by type) is the whole point of this redesign.
-  const sessions = allSessions.filter((s) => s.source_platform !== 'note');
-
-  if (isLoadingProject) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-2">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-        <span className="text-xs text-muted-foreground">Loading project details...</span>
-      </div>
-    );
-  }
-
-  if (projectError || !project) {
-    return (
-      <div className="text-center py-12 space-y-4">
-        <h3 className="font-semibold text-lg text-foreground">Project Not Found</h3>
-        <p className="text-muted-foreground text-sm">
-          The project you are looking for does not exist or has been deleted.
-        </p>
-        <Button onClick={() => router.push('/dashboard')} size="sm" className="bg-indigo-600 hover:bg-indigo-500">
-          <ArrowLeft className="w-4 h-4 mr-1.5" />
-          Back to Dashboard
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Back button */}
-      <button
-        onClick={() => router.push('/dashboard')}
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors cursor-pointer"
-      >
-        <ArrowLeft className="w-3.5 h-3.5" />
-        <span>Back to Dashboard</span>
-      </button>
-
-      {/* Main Header — real counts passed explicitly (project.sessionsCount/
-          contextsCount are stale placeholders hardcoded to 0 by the mock
-          mapper in project.service.ts, not real data). */}
-      <ProjectHeader project={project} sessionsCount={sessions.length} notesCount={allContexts.length} />
-
-      {/* Workspace Tabs — Notes first: it's the primary view now. */}
-      <Tabs defaultValue={initialTab} className="space-y-4">
-        <div className="border-b border-border/40 pb-px">
-          <TabsList className="bg-transparent p-0 gap-4 h-10 w-full justify-start rounded-none border-b border-transparent">
-            <TabsTrigger
-              value="notes"
-              className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 rounded-none px-1 pb-2.5 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground data-[state=active]:text-foreground border-b-2 border-transparent transition-all cursor-pointer"
-            >
-              <span className="flex items-center gap-1.5">
-                <StickyNote className="w-3.5 h-3.5" />
-                Notes
-              </span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="sessions"
-              className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 rounded-none px-1 pb-2.5 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground data-[state=active]:text-foreground border-b-2 border-transparent transition-all cursor-pointer"
-            >
-              <span className="flex items-center gap-1.5">
-                <MessageSquare className="w-3.5 h-3.5" />
-                Sessions ({sessions.length})
-              </span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="ask"
-              className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 rounded-none px-1 pb-2.5 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground data-[state=active]:text-foreground border-b-2 border-transparent transition-all cursor-pointer"
-            >
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                Ask AI
-              </span>
-            </TabsTrigger>
-          </TabsList>
-        </div>
-
-        {/* Tab Contents */}
-        <TabsContent value="notes" className="outline-none pt-2">
-          {isLoadingContexts ? (
-            <div className="mx-auto max-w-[720px] space-y-4">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-24 bg-muted/20 border border-border/40 rounded-xl animate-pulse" />
-              ))}
-            </div>
-          ) : (
-            <NotesFeed projectId={project.id} contexts={allContexts} />
-          )}
-        </TabsContent>
-
-        <TabsContent value="sessions" className="outline-none pt-2">
-          {isLoadingSessions ? (
-            <div className="space-y-4">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-20 bg-muted/20 border border-border/40 rounded-xl animate-pulse" />
-              ))}
-            </div>
-          ) : (
-            <SessionTimeline sessions={sessions} />
-          )}
-        </TabsContent>
-
-        <TabsContent value="ask" className="outline-none pt-2 space-y-8">
-          <ConversationSearchPanel projectId={project.id} />
-
-          <div className="border-t border-border/40 pt-6">
-            <RagQueryPanel
-              projectId={project.id}
-              chunksIndexed={allContexts.length * 3}
-            />
-          </div>
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
+  return null;
 }

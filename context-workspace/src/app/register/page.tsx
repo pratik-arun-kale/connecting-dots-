@@ -45,7 +45,7 @@ export default function RegisterPage() {
     try {
       const tokens = await authService.register(data.email, data.password);
       setSession(tokens);
-      router.push('/dashboard');
+      router.push('/notes');
     } catch (err) {
       setSubmitError(extractErrorMessage(err, 'Something went wrong. Check that the backend is running.'));
     } finally {
