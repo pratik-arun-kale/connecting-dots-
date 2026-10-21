@@ -58,5 +58,6 @@ CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs all of the above 
 
 ## Docs
 
+- [docs/PRODUCTION_PLAN.md](docs/PRODUCTION_PLAN.md) — production roadmap (phases 0–7)
 - [docs/UI_REDESIGN_PLAN.md](docs/UI_REDESIGN_PLAN.md) — redesign roadmap
 - [services/api/README.md](services/api/README.md) — API details
