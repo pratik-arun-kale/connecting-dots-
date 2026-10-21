@@ -10,7 +10,6 @@ import { ScrollArea } from '../components/layout/PopupShell'
 import { stagger, fadeUp } from '@/lib/motion'
 import { api } from '@/lib/api'
 import { normalizeProject, type ApiProject } from '@/types/project'
-import { useProjects } from '../hooks/useProjects'
 
 export function ProjectsPage() {
   const { projects, addProject, removeProject } = useWorkspaceStore()

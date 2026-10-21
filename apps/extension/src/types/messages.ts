@@ -61,7 +61,7 @@ export interface CaptureContextRequest {
   idempotencyKey:  string;
 }
 
-export interface CaptureContextResult {
+export type CaptureContextResult = {
   type: 'CAPTURE_CONTEXT_RESULT';
   ok:   true;
   contextId:     string;
@@ -81,7 +81,7 @@ export interface ExtractConversationMessage {
   type: 'EXTRACT_CONVERSATION';
 }
 
-export interface ExtractConversationResult {
+export type ExtractConversationResult = {
   ok:   true;
   payload: {
     title:    string;

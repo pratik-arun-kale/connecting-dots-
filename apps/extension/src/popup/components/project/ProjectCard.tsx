@@ -1,7 +1,6 @@
 import { motion } from 'framer-motion'
 import { useWorkspaceStore } from '@/store/useWorkspaceStore'
 import { GlassCard } from '../ui/GlassCard'
-import { Dot } from '../ui/Dot'
 import { fadeUp } from '@/lib/motion'
 import { formatRelative, cn } from '@/lib/utils'
 import type { Project } from '@/types/project'
@@ -17,7 +16,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
 
   const handleSelect = () => {
     setActiveProject(project.id)
-    setActiveTab('workspace')
+    setActiveTab('home')
   }
 
   return (
