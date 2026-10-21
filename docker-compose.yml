@@ -1,0 +1,8 @@
+# Local stack: Postgres + the API (migrated on start). Redis is opt-in:
+#   docker compose --profile redis up -d
+# The dashboard and the extension run on the host:
+#   npm run dev:dashboard   /   npm run dev:extension
+# Before the first run, copy services/api/.env.example to services/api/.env
+# and set JWT_SECRET_KEY.
+include:
+  - services/api/docker-compose.yml

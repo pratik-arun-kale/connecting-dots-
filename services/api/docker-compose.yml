@@ -1,4 +1,3 @@
-version: "3.9"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # AI Context Workspace — local development stack
@@ -38,15 +37,21 @@ services:
     volumes:
       # Mount source so uvicorn --reload picks up changes
       - .:/app
+    # Secrets (JWT_SECRET_KEY, OPENAI_API_KEY, …) come from services/api/.env —
+    # copy .env.example. The environment block below wins for DB/Redis hosts.
+    env_file:
+      - path: .env
+        required: false
     environment:
       <<: *common-env
+    # Migrate first so a fresh database is usable straight away.
     command: >
-      uvicorn main:app
+      sh -c "alembic upgrade head && uvicorn main:app
         --host 0.0.0.0
         --port 8000
         --reload
         --reload-dir /app
-        --log-level debug
+        --log-level debug"
     depends_on:
       postgres:
         condition: service_healthy

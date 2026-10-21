@@ -43,5 +43,13 @@ desktop.ini
 # (keep actual migration files)
 
 # ── Misc ─────────────────────────────────────────────────────────────────────
-{app
+# Old standalone copy of the RAG prototype; its history now lives in research/
 RAG Pipeline/
+
+# Tool caches and reports
+.ruff_cache/
+.coverage
+htmlcov/
+playwright-report/
+test-results/
+blob-report/

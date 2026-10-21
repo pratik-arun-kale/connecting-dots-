@@ -1,0 +1,20 @@
+{
+  "name": "connecting-dots",
+  "private": true,
+  "description": "Root scripts for the Connecting Dots monorepo (each app keeps its own package.json and lockfile).",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "setup": "npm ci --prefix apps/extension && npm ci --prefix apps/dashboard",
+    "dev:extension": "npm run dev --prefix apps/extension",
+    "dev:dashboard": "npm run dev --prefix apps/dashboard",
+    "dev:stack": "docker compose up -d --build",
+    "build": "npm run build --prefix apps/extension && npm run build --prefix apps/dashboard",
+    "typecheck": "npm run typecheck --prefix apps/extension && npm run typecheck --prefix apps/dashboard",
+    "lint": "npm run lint --prefix apps/dashboard && node scripts/check-no-localhost.mjs",
+    "test": "npm test --prefix apps/extension",
+    "test:e2e": "npm test --prefix e2e",
+    "check": "npm run lint && npm run typecheck && npm test"
+  }
+}
