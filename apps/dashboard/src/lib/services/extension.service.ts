@@ -20,8 +20,8 @@ export const extensionService = {
       console.warn(
         '[Extension] NEXT_PUBLIC_EXTENSION_ID is not set.\n' +
         '  → Open chrome://extensions, enable Developer Mode,\n' +
-        '  → load the chrome_extention_scrapping folder unpacked,\n' +
-        '  → copy the extension ID and add it to context-workspace/.env.local:\n' +
+        '  → load the apps/extension/dist folder unpacked,\n' +
+        '  → copy the extension ID and add it to apps/dashboard/.env.local:\n' +
         '  →   NEXT_PUBLIC_EXTENSION_ID=<paste-id-here>\n' +
         '  → Then restart the Next.js dev server.'
       );

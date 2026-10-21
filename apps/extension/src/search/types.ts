@@ -9,7 +9,7 @@
  */
 
 // ── Backend contract (POST /search/conversations) ───────────────────────────
-// Mirrors Backend context-workspace/app/schemas/search.py exactly. Treated as
+// Mirrors services/api/app/schemas/search.py exactly. Treated as
 // UNTRUSTED at the network boundary — see sanitize.ts — because a "production
 // grade" client cannot assume the server always sends well-formed JSON matching
 // this shape (partial responses, backend bugs, a proxy mangling the body, etc).

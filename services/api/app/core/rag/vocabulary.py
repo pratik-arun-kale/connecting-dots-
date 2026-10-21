@@ -36,8 +36,8 @@ from app.core.rag.query_normalizer import (
 
 logger = get_logger(__name__)
 
-# Stored at Backend context-workspace/data/vocabulary/ — mirrors vector_store.py's
-# CHROMA_DIR convention (parents[3] = Backend context-workspace/).
+# Stored at services/api/data/vocabulary/ — mirrors vector_store.py's
+# CHROMA_DIR convention (parents[3] = services/api/).
 VOCAB_DIR = Path(__file__).resolve().parents[3] / "data" / "vocabulary"
 
 # A learned term needs at least this many occurrences before it's trusted

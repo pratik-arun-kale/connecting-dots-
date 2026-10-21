@@ -3,7 +3,7 @@
  * ───────────────────────────────────
  * Query-string normalization shared by the cache (key derivation) and the
  * in-flight request dedup map. Deliberately dumb — this is NOT the backend's
- * topic-centric query understanding (see Backend context-workspace's
+ * topic-centric query understanding (see services/api's
  * topic_extractor.py); it only needs to recognize when two strings are "the
  * same request" from the client's point of view (whitespace/case differences),
  * not when they mean the same *topic*. Real query understanding stays

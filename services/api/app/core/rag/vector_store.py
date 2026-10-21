@@ -14,8 +14,8 @@ logger = get_logger(__name__)
 _lock: threading.Lock = threading.Lock()
 _client: chromadb.PersistentClient | None = None
 
-# Stored at Backend context-workspace/data/chromadb/
-# parents[0]=rag/, parents[1]=core/, parents[2]=app/, parents[3]=Backend context-workspace/
+# Stored at services/api/data/chromadb/
+# parents[0]=rag/, parents[1]=core/, parents[2]=app/, parents[3]=services/api/
 CHROMA_DIR = Path(__file__).resolve().parents[3] / "data" / "chromadb"
 
 

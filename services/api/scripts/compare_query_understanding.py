@@ -7,7 +7,7 @@ topic-centric-primary candidate generation, both driving the real
 search_conversations() retrieval pipeline (BM25 + vector + RRF + cross-encoder
 rerank) against the live test project's captured conversations.
 
-Run from the `Backend context-workspace` directory so `app` resolves and the
+Run from the `services/api` directory so `app` resolves and the
 same .env/config the live server uses is picked up:
     python scripts/compare_query_understanding.py
 """
