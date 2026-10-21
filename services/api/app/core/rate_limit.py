@@ -58,7 +58,7 @@ def rate_limit(key_prefix: str, max_requests: int, window_seconds: int):
             if len(fresh) >= max_requests:
                 _buckets[key] = fresh
                 raise TooManyRequestsException(
-                    f"Too many attempts — try again in a few minutes.",
+                    "Too many attempts — try again in a few minutes.",
                 )
             fresh.append(now)
             _buckets[key] = fresh

@@ -31,7 +31,6 @@ from app.core.rag.query_normalizer import (
     _TECHNICAL_TERMS_LOWER,
     _WORD_RE,
     _closest_vocab_match,
-    _max_edit_distance,
 )
 
 logger = get_logger(__name__)

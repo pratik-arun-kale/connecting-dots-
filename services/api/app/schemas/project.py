@@ -11,7 +11,7 @@ from datetime import datetime
 
 from pydantic import Field, field_validator
 
-from app.schemas.base import AppBaseModel, JsonDict
+from app.schemas.base import AppBaseModel
 
 
 # ── Request schemas ───────────────────────────────────────────────────────────

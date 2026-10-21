@@ -10,7 +10,7 @@ from typing import Literal
 
 from urllib.parse import quote_plus
 
-from pydantic import AnyUrl, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,12 +31,19 @@ class Settings(BaseSettings):
     # ── API ──────────────────────────────────────────────────────────────────
     api_v1_prefix: str = "/api/v1"
 
-    # Base origins always allowed. The extension ID changes when loaded unpacked,
-    # so set EXTENSION_ORIGIN=chrome-extension://<your-id> in .env to override.
-    # Find the ID at chrome://extensions after loading the extension unpacked.
-    extension_origin: str = "chrome-extension://klbkondckkfnmfjpgnlcbajnkofjoiab"
+    # The one chrome-extension:// origin allowed to call the API cross-origin,
+    # e.g. EXTENSION_ORIGIN=chrome-extension://<id> (find the ID at
+    # chrome://extensions). No default: an unpacked extension's ID depends on
+    # where it was loaded from. Unset in development means any extension
+    # origin is accepted (see ExtensionCORSMiddleware); unset elsewhere means
+    # none is.
+    extension_origin: str | None = None
 
-    allowed_origins: list[str] = Field(
+    # `| str` lets ALLOWED_ORIGINS be either a JSON list or a comma-separated
+    # string (the form .env.example and docker-compose use) — pydantic-settings
+    # only falls back to the raw string for fields that admit one. Always a
+    # list after validation.
+    allowed_origins: list[str] | str = Field(
         default=[
             "http://localhost:3000",
             "http://localhost:5173",
@@ -47,6 +54,13 @@ class Settings(BaseSettings):
             "https://gemini.google.com",
         ]
     )
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def _split_origins(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     @model_validator(mode="after")
     def _add_extension_origin(self) -> "Settings":

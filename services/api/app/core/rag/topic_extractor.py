@@ -42,7 +42,6 @@ the one used as the reranking query for the merged candidate pool.
 """
 from __future__ import annotations
 
-import re
 from typing import Dict, Optional
 
 from app.core.rag.query_normalizer import (

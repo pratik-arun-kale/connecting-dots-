@@ -49,7 +49,6 @@ class TestExtractCandidateTerms:
         assert "Today" not in found
 
     def test_repeated_sentence_initial_word_is_still_extracted(self):
-        text = "Docker. Docker is useful. Docker helps a lot."
         # "Docker" is protected/technology-cased anyway (all-titlecase, single
         # hump) but repetition alone should still count as a signal here.
         found = {t for t, _ in vocabulary.extract_candidate_terms("Zenith. Zenith is our tool. Zenith helps.")}

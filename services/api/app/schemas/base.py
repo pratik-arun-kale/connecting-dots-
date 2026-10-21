@@ -7,7 +7,6 @@ Shared Pydantic v2 base models and type aliases used across all schemas.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict

@@ -24,6 +24,17 @@ logger = get_logger(__name__)
 
 # ── Extension CORS shim ───────────────────────────────────────────────────────
 
+def _extension_origin_allowed(origin: str) -> bool:
+    """Only the configured EXTENSION_ORIGIN gets CORS headers — any other
+    installed extension is treated like any other unknown origin. With
+    EXTENSION_ORIGIN unset, development still accepts every extension (an
+    unpacked extension's ID changes with its folder); other environments
+    accept none."""
+    if settings.extension_origin:
+        return origin == settings.extension_origin
+    return settings.is_development
+
+
 class ExtensionCORSMiddleware:
     """Pure-ASGI middleware that adds CORS headers for chrome-extension:// origins.
 
@@ -46,7 +57,7 @@ class ExtensionCORSMiddleware:
         headers = dict(scope.get("headers", []))
         origin = headers.get(b"origin", b"").decode()
 
-        is_extension = origin.startswith("chrome-extension://")
+        is_extension = origin.startswith("chrome-extension://") and _extension_origin_allowed(origin)
 
         # For extension origins: handle OPTIONS preflight ourselves
         if is_extension and scope["method"] == "OPTIONS":

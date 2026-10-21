@@ -11,11 +11,10 @@ from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictException, NotFoundException
+from app.core.exceptions import NotFoundException
 from app.core.logging import get_logger
 from app.core.rag import vector_store
 from app.models.context import Context
-from app.models.session import Session
 from app.repositories.context import ContextRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.session import SessionRepository
