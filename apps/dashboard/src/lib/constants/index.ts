@@ -1,13 +1,14 @@
+import { env } from "@/lib/env";
+
 // ──────────────────────────────────────────────
 // Application Constants
 // ──────────────────────────────────────────────
 
 export const APP_NAME = "Context Workspace" as const;
 
-// Include /api/v1 in the default so service calls like `/projects/...` resolve correctly.
-// Override via NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 in .env.local if needed.
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
+// Includes the /api/v1 prefix, so service calls like `/projects/...` resolve
+// correctly. Set NEXT_PUBLIC_API_BASE_URL in .env.local (see .env.example).
+export const API_BASE_URL = env.apiBaseUrl;
 
 /** Default stale time for TanStack Query (5 minutes). */
 export const DEFAULT_STALE_TIME = 5 * 60 * 1000;

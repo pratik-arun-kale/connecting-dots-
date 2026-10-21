@@ -224,7 +224,7 @@ export function Sidebar({ variant = 'desktop', onNavigate }: { variant?: 'deskto
       <AccountRow collapsed={collapsed} />
 
       {settingsProject && (
-        <ProjectSettingsDialog project={settingsProject} open onClose={() => setSettingsProject(null)} />
+        <ProjectSettingsDialog key={settingsProject.id} project={settingsProject} open onClose={() => setSettingsProject(null)} />
       )}
     </aside>
   );

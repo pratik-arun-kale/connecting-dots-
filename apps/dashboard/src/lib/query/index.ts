@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS, DEFAULT_STALE_TIME } from '@/lib/constants';
+import { env } from '@/lib/env';
 import { projectService, sessionService, conversationSearchService } from '@/lib/api/services';
 import type { ApiContext, ApiSession, ConversationSearchResponse, CreateProjectWithSessionsRequest, RagQueryResponse } from '@/types';
 
@@ -38,7 +39,7 @@ export function useCreateProjectWithSessions() {
       });
 
       // Tell the extension to drive each session through the FSM
-      const extId = process.env.NEXT_PUBLIC_EXTENSION_ID;
+      const extId = env.extensionId;
       if (extId && typeof window !== 'undefined') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const cr = (window as any)?.chrome?.runtime;

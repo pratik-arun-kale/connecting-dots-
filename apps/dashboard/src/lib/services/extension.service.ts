@@ -1,8 +1,9 @@
 import type { ExtensionMessage } from '@/types';
+import { env } from '@/lib/env';
 
 // Set NEXT_PUBLIC_EXTENSION_ID in .env.local to the extension's chrome ID.
 // Find it at chrome://extensions after loading the extension unpacked.
-const EXTENSION_ID = process.env.NEXT_PUBLIC_EXTENSION_ID ?? '';
+const EXTENSION_ID = env.extensionId;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ChromeRuntime = any;

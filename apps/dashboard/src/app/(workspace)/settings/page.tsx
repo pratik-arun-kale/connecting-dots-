@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Terminal, Key, Globe, User, Shield, Check } from 'lucide-react';
+import { Terminal, Globe, Check } from 'lucide-react';
 
 export default function SettingsPage() {
   return (

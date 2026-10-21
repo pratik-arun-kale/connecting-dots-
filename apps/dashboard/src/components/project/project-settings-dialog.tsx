@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Trash2, AlertTriangle } from 'lucide-react';
 import { useUpdateProject, useDeleteProject } from '@/lib/query';
@@ -23,22 +23,9 @@ export function ProjectSettingsDialog({ project, open, onClose }: ProjectSetting
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
 
-  // Sync form if project prop changes
-  useEffect(() => {
-    setName(project.name);
-    setDescription(project.description ?? '');
-  }, [project]);
-
-  // Reset state when dialog closes
-  useEffect(() => {
-    if (!open) {
-      setView('settings');
-      setDeleteConfirm('');
-      updateProject.reset();
-      deleteProject.reset();
-    }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  // No reset/sync effects: the caller mounts this dialog when it opens and
+  // keys it by project id, so closing it or switching project gives a fresh
+  // form and fresh mutation state.
   if (!open) return null;
 
   const handleSave = async (e: React.FormEvent) => {
