@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
 
+// Route changes get extra time: against `next dev`, a page compiles on its
+// first visit.
+const NAVIGATION = { timeout: 30_000 };
+
 /**
  * The dashboard half of the core loop: a new user signs up, creates a
  * project, writes a note, and finds it again in the notes list and in the
@@ -19,7 +23,7 @@ test('sign up, create a project, write a note and find it', async ({ page }) => 
     await page.getByPlaceholder('At least 8 characters').fill(password);
     await page.getByPlaceholder('••••••••').fill(password);
     await page.getByRole('button', { name: /create account/i }).click();
-    await expect(page).toHaveURL(/\/notes$/);
+    await expect(page).toHaveURL(/\/notes$/, NAVIGATION);
   });
 
   await test.step('create a project', async () => {
@@ -32,12 +36,12 @@ test('sign up, create a project, write a note and find it', async ({ page }) => 
 
   await test.step('write a note', async () => {
     await page.getByRole('link', { name: 'New note' }).click();
-    await expect(page).toHaveURL(/\/notes\/new\?project=/);
+    await expect(page).toHaveURL(/\/notes\/new\?project=/, NAVIGATION);
     const editor = page.locator('[contenteditable="true"]').first();
     await editor.click();
     await page.keyboard.type(`${noteLine}\nWritten by the end-to-end test.`);
     // The first save creates the note and swaps the URL to /notes/{id}.
-    await expect(page).toHaveURL(/\/notes\/[0-9a-f-]{36}$/);
+    await expect(page).toHaveURL(/\/notes\/[0-9a-f-]{36}$/, NAVIGATION);
     await expect(page.getByText('Saved')).toBeVisible();
   });
 

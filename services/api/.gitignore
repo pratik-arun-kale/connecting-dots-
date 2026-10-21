@@ -41,6 +41,7 @@ alembic/__pycache__/
 
 # RAG / Vector store data (runtime-generated, not source code)
 data/chromadb/
+data/vocabulary/
 
 # Type checking
 .mypy_cache/
