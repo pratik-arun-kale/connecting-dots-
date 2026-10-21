@@ -13,13 +13,18 @@ from config import (
     EMBEDDING_MODEL,
     FUSED_TOP_K,
     MAX_RETRIEVAL_ATTEMPTS,
-    QA_MODEL,
+    OLLAMA_API_URL,
+    OLLAMA_CONTEXT_CHUNKS,
+    OLLAMA_MAX_TOKENS,
+    OLLAMA_MODEL,
+    OLLAMA_TEMPERATURE,
+    OLLAMA_TIMEOUT_SEC,
     RERANK_TOP_K,
     RERANKER_MODEL,
     VECTOR_TOP_K,
 )
 from generation.citation_builder import build_citations
-from generation.extractive_qa import ExtractiveQA
+from generation.ollama_generator import OllamaGenerator
 from ingestion.build_index import main as build_index
 from ingestion.chunker import Chunker
 from ingestion.loader import DocumentLoader
@@ -67,7 +72,14 @@ def load_pipeline() -> Dict:
     ])
     vector_retriever = VectorRetriever(collection, EMBEDDING_MODEL)
     reranker = Reranker(RERANKER_MODEL)
-    qa_engine = ExtractiveQA(QA_MODEL)
+    qa_engine = OllamaGenerator(
+        model=OLLAMA_MODEL,
+        api_url=OLLAMA_API_URL,
+        temperature=OLLAMA_TEMPERATURE,
+        max_tokens=OLLAMA_MAX_TOKENS,
+        timeout_sec=OLLAMA_TIMEOUT_SEC,
+        max_context_chunks=OLLAMA_CONTEXT_CHUNKS,
+    )
 
     return {
         "documents": documents,
@@ -185,34 +197,31 @@ def _explain_pipeline(response: Dict, original_query: str) -> Dict[str, str]:
             f"giving much higher precision than bi-encoders at the cost of O(n) inference calls."
         )
 
-    # QA
+    # QA (Generative LLM)
     ans_text = response["answer"].get("answer", "")
     ans_score = response["answer"].get("score", 0)
-    if ans_text and "Insufficient evidence" not in ans_text:
-        if len(ans_text) > 150:
-            qa_why = (
-                f"The extractive model returned the **full top chunk as a passage** "
-                f"(fallback path, score {ans_score:.4f}).\n\n"
-                f"RoBERTa-base (fine-tuned on SQuAD2) predicts start/end token positions. "
-                f"When no high-confidence span is found but retrieval confidence is HIGH/MEDIUM, "
-                f"the system returns the full context chunk rather than silencing a known-good document. "
-                f"This prevents false negatives when the answer is implicit or spans multiple sentences."
-            )
-        else:
-            qa_why = (
-                f"Extracted span: **\"{ans_text}\"** (span score {ans_score:.4f}).\n\n"
-                f"RoBERTa-base reads the full [question, context] pair and computes start/end logits "
-                f"over all 512 token positions. The span with the highest combined logit is returned. "
-                f"Score = sigmoid(best_span_logit / 2) — this avoids softmax dilution over 512 positions "
-                f"where even confident predictions yield small per-position probabilities."
-            )
+    if (
+        ans_text
+        and "Insufficient evidence" not in ans_text
+        and "couldn't find" not in ans_text
+        and "Generation error" not in ans_text
+    ):
+        qa_why = (
+            f"**{OLLAMA_MODEL}** generated an answer using the top {OLLAMA_CONTEXT_CHUNKS} "
+            f"reranked chunks as context (score {ans_score:.1f}).\n\n"
+            f"The system prompt instructs the model to answer **only from the provided context** "
+            f"and to say so explicitly if the answer is absent — preventing hallucination.\n\n"
+            f"**Temperature {OLLAMA_TEMPERATURE}** keeps outputs factual and near-deterministic. "
+            f"Unlike extractive span-selection, a generative model can synthesize multi-sentence "
+            f"answers, rephrase for clarity, and handle answers that are implicit in the text."
+        )
     else:
         qa_why = (
-            f"No confident span was found and retrieval confidence was LOW.\n\n"
-            f"This occurs when: (1) the answer requires synthesizing multiple sentences, "
-            f"(2) the question phrasing differs substantially from the document, "
-            f"(3) the answer is implicit rather than stated verbatim, or "
-            f"(4) the retrieved documents genuinely lack the answer."
+            f"The LLM could not find the answer in the retrieved context.\n\n"
+            f"This occurs when: (1) retrieval confidence was LOW and generation was skipped, "
+            f"(2) the retrieved documents genuinely lack the answer, "
+            f"(3) the question requires information not captured during indexing, or "
+            f"(4) the model correctly identified that the context is insufficient."
         )
 
     return {
@@ -484,7 +493,7 @@ def _render_latency_tab(response: Dict) -> None:
             ("RRF Fusion", lat["rrf"]),
             ("Reranking", lat["rerank"]),
             ("Corrective Retrieval", lat["corrective"]),
-            ("QA Extraction", lat["qa"]),
+            ("LLM Generation", lat["qa"]),
         ]
         for label, ms in rows:
             bar_len = min(int(ms / 5), 40)
@@ -522,7 +531,7 @@ def _render_interview_tab(response: Dict) -> None:
         ("2. Vector Retrieval", "vector"),
         ("3. RRF Fusion", "rrf"),
         ("4. Cross-Encoder Reranking", "reranker"),
-        ("5. Answer Extraction", "qa"),
+        ("5. Answer Generation (LLM)", "qa"),
     ]
     for label, key in stages:
         with st.expander(label):
@@ -641,7 +650,7 @@ def main() -> None:
     st.title("Advanced Retrieval-Augmented Generation (RAG) Demo")
     st.markdown(
         "Hybrid BM25 + vector retrieval · RRF fusion · cross-encoder reranking · "
-        "extractive QA · composite confidence grading · corrective retrieval"
+        f"generative QA ({OLLAMA_MODEL}) · composite confidence grading · corrective retrieval"
     )
 
     query = st.text_input("Enter a question for the document collection:")
