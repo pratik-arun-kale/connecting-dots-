@@ -1,6 +1,5 @@
 import { authorizedFetch } from '@/auth/authorizedFetch';
-
-const DEFAULT_BASE = 'http://localhost:8000/api/v1';
+import { API_BASE_URL } from '@/config';
 
 export interface BackendSession {
   id: string;
@@ -49,7 +48,7 @@ export interface ProjectSummary {
 }
 
 export class BackendClient {
-  constructor(private readonly baseUrl: string = DEFAULT_BASE) {}
+  constructor(private readonly baseUrl: string = API_BASE_URL) {}
 
   async reportState(sessionId: string, state: string): Promise<void> {
     const res = await authorizedFetch(this.baseUrl, `/sessions/${sessionId}/state`, {

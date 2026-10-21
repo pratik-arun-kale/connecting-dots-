@@ -22,8 +22,8 @@
 import { toSafeSearchResponse } from '../utils/sanitize'
 import type { SafeSearchResponse, SearchRequestParams } from '../types'
 import { withAuthHeader, refreshOnce } from '@/auth/authorizedFetch'
+import { API_BASE_URL as BASE } from '@/config'
 
-const BASE = 'http://localhost:8000/api/v1' // matches src/lib/api.ts — same backend, same origin allowlisted in manifest host_permissions
 const DEFAULT_TIMEOUT_MS = 10_000
 
 export class HttpStatusError extends Error {

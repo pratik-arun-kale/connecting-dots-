@@ -16,17 +16,8 @@
     "https://chat.openai.com/*",
     "https://claude.ai/*",
     "https://gemini.google.com/*",
-    "https://www.perplexity.ai/*",
-    "http://localhost:8000/*",
-    "http://localhost:3000/*"
+    "https://www.perplexity.ai/*"
   ],
-  "externally_connectable": {
-    "matches": [
-      "http://localhost:3000/*",
-      "http://localhost:8000/*",
-      "http://localhost:*/*"
-    ]
-  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

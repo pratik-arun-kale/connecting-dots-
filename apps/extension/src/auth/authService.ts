@@ -1,6 +1,5 @@
 import { setSession, clearSession, getRefreshToken } from './tokenStorage';
-
-const BASE = 'http://localhost:8000/api/v1';
+import { API_BASE_URL as BASE } from '@/config';
 
 interface BackendErrorBody {
   error?: { message?: string };

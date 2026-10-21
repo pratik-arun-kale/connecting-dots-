@@ -5,11 +5,10 @@
   "version": "3.0.0",
   "description": "Context Workspace — premium AI project manager Chrome extension",
   "scripts": {
-    "dev": "vite build --config vite.popup.config.ts --watch",
-    "build": "npm run build:note-cs && vite build --config vite.popup.config.ts && vite build --config vite.sidepanel.config.ts && node scripts/postbuild.mjs",
-    "build:bg": "esbuild src/background.ts --bundle --format=esm --outfile=dist/background.js --platform=browser",
-    "build:note-cs": "esbuild src/content/note-cs.ts --bundle --format=iife --outfile=content-scripts/note-cs.js --platform=browser",
-    "build:full": "npm run build && npm run build:bg",
+    "dev": "vite build --config vite.popup.config.ts --watch --mode development",
+    "build": "node scripts/build.mjs --mode development",
+    "build:staging": "node scripts/build.mjs --mode staging",
+    "build:prod": "node scripts/build.mjs --mode production",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

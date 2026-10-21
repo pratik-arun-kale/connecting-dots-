@@ -43,6 +43,7 @@
  */
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
+import { DASHBOARD_URL } from '@/config';
 import type {
   NoteGetProjectsResult,
   NoteSaveResult,
@@ -63,7 +64,6 @@ if (!window.__CW_NOTE_CS__) {
   const SELECTION_DEBOUNCE_MS = 150;
   const PREVIEW_MAX_CHARS = 100;
   const LAST_PROJECT_KEY = 'cw_note_last_project';
-  const DASHBOARD_URL = 'http://localhost:3000';
 
   // ── HTML selection → Markdown (Turndown) ─────────────────────────────────
 

@@ -3,6 +3,7 @@ import { login } from '@/auth/authService'
 import { notifyAuthChanged } from '@/auth/useAuthSession'
 import { Button } from '@/popup/components/ui/Button'
 import { GlassCard } from '@/popup/components/ui/GlassCard'
+import { DASHBOARD_URL } from '@/config'
 
 const inputClass =
   'w-full px-3 py-2 rounded-lg border border-surface-5 bg-white text-sm text-ink-1 ' +
@@ -78,7 +79,7 @@ export function LoginForm() {
         <p className="text-[11px] text-ink-4 text-center mt-4">
           No account?{' '}
           <a
-            href="http://localhost:3000/register"
+            href={`${DASHBOARD_URL}/register`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-accent font-medium hover:underline"

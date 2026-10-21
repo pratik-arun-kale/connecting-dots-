@@ -1,6 +1,5 @@
 import { authorizedFetch } from '@/auth/authorizedFetch'
-
-const BASE = 'http://localhost:8000/api/v1'
+import { API_BASE_URL as BASE } from '@/config'
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {

@@ -1,10 +1,5 @@
 import { useWorkspaceStore } from '@/store/useWorkspaceStore'
-
-// Matches the localhost:3000 origin already allowlisted in manifest
-// host_permissions/externally_connectable (same convention as
-// src/search/api/searchClient.ts hardcoding the :8000 backend origin —
-// this extension has no env-config system, so both bases are literal).
-const DASHBOARD_BASE = 'http://localhost:3000'
+import { DASHBOARD_URL } from '@/config'
 
 /**
  * Ask AI generates answers from your captured knowledge (distinct from
@@ -19,7 +14,7 @@ export function AskAICard() {
 
   const handleOpen = () => {
     if (!activeProjectId) return
-    const url = `${DASHBOARD_BASE}/projects/${activeProjectId}?tab=ask`
+    const url = `${DASHBOARD_URL}/projects/${activeProjectId}?tab=ask`
     if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
       chrome.tabs.create({ url, active: true })
     } else {
