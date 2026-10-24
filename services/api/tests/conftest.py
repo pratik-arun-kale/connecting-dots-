@@ -12,6 +12,7 @@ Architecture:
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -22,6 +23,7 @@ from app.core.rate_limit import _buckets as _rate_limit_buckets
 from app.core.settings import settings
 from app.db.base import Base
 from app.db.engine import get_db_session
+from app.services.rag_service import RagService
 from main import create_app
 
 # ── Use a separate test database (override via TEST_DATABASE_URL env) ─────────
@@ -106,8 +108,23 @@ def _reset_rate_limit_buckets() -> None:
     _rate_limit_buckets.clear()
 
 
+@pytest.fixture
+def reindex_calls(monkeypatch) -> list[tuple[Any, ...]]:
+    """Records RagService.reindex_context calls instead of running them — a
+    real one waits REINDEX_DELAY_SEC and then embeds text. Both test-client
+    fixtures use it; take it by name to assert on what was scheduled
+    (tests/services/test_rag_reindex.py covers the real method)."""
+    calls: list[tuple[Any, ...]] = []
+
+    async def _record(self, *args: Any, **kwargs: Any) -> None:
+        calls.append(args)
+
+    monkeypatch.setattr(RagService, "reindex_context", _record)
+    return calls
+
+
 @pytest_asyncio.fixture
-async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+async def client(db_session: AsyncSession, reindex_calls: list) -> AsyncGenerator[AsyncClient, None]:
     """
     AsyncClient bound to the test app.
     The db_session dependency is overridden so routes use the same
@@ -148,7 +165,9 @@ async def authenticated_client(client: AsyncClient) -> AsyncGenerator[AsyncClien
 
 
 @pytest_asyncio.fixture
-async def second_authenticated_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+async def second_authenticated_client(
+    db_session: AsyncSession, reindex_calls: list
+) -> AsyncGenerator[AsyncClient, None]:
     """A second, distinct user with its own AsyncClient instance (so its
     Authorization header can never collide with `authenticated_client`'s),
     built the same way as the `client` fixture and sharing the same

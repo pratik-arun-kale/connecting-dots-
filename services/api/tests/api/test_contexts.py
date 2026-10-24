@@ -274,6 +274,43 @@ async def test_set_and_clear_user_title(authenticated_client: AsyncClient) -> No
     assert clear_resp.json()["user_title"] is None
 
 
+# ── Re-index on edit ───────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["content_md", "user_title"])
+async def test_editing_body_or_title_schedules_a_reindex(
+    authenticated_client: AsyncClient, reindex_calls: list, field: str
+) -> None:
+    project_id, session_id = await _bootstrap(authenticated_client)
+    created = await _create_context(authenticated_client, session_id)
+
+    response = await authenticated_client.patch(
+        f"{CONTEXT_BASE}/detail/{created['id']}", json={field: "Edited text"}
+    )
+    assert response.status_code == 200
+    assert len(reindex_calls) == 1
+    context_id, called_session_id, called_project_id, _raw = reindex_calls[0]
+    assert (str(context_id), str(called_session_id), str(called_project_id)) == (
+        created["id"],
+        session_id,
+        project_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_editing_only_the_annotation_does_not_reindex(
+    authenticated_client: AsyncClient, reindex_calls: list
+) -> None:
+    _, session_id = await _bootstrap(authenticated_client)
+    created = await _create_context(authenticated_client, session_id)
+
+    response = await authenticated_client.patch(
+        f"{CONTEXT_BASE}/detail/{created['id']}", json={"user_note": "my own aside"}
+    )
+    assert response.status_code == 200
+    assert reindex_calls == []
+
+
 @pytest.mark.asyncio
 async def test_set_another_users_title_returns_404(
     authenticated_client: AsyncClient, second_authenticated_client: AsyncClient

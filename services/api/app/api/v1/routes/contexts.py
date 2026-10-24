@@ -7,15 +7,15 @@ POST   /contexts                       – capture a context
 GET    /contexts                       – list the caller's notes across projects
 GET    /contexts/{session_id}          – list contexts for a session
 GET    /contexts/detail/{context_id}   – get a single context
-PATCH  /contexts/detail/{context_id}   – update user_note and/or content_md
+PATCH  /contexts/detail/{context_id}   – update user_note, content_md and/or user_title (re-indexes on body/title edits)
 DELETE /contexts/detail/{context_id}   – delete a note/context
 """
 
 import uuid
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, BackgroundTasks, Query, status
 
-from app.dependencies import ContextServiceDep, CurrentUserDep
+from app.dependencies import ContextServiceDep, CurrentUserDep, RagServiceDep
 from app.schemas.context import (
     ContextCapture,
     ContextCreate,
@@ -25,6 +25,7 @@ from app.schemas.context import (
     NoteListResponse,
     NoteUpdateRequest,
 )
+from app.services.rag_service import raw_content_for_index
 
 router = APIRouter(prefix="/contexts", tags=["Contexts"])
 
@@ -127,9 +128,26 @@ async def update_note(
     context_id: uuid.UUID,
     payload: NoteUpdateRequest,
     service: ContextServiceDep,
+    rag_service: RagServiceDep,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUserDep,
 ) -> ContextResponse:
     context = await service.update_note(context_id, payload, current_user.id)
+
+    # The body and the title are what Ask AI and search match on, so an edit
+    # to either replaces the context's chunks (coalesced across autosaves —
+    # see RagService.reindex_context). The annotation isn't indexed.
+    if payload.model_fields_set & {"content_md", "user_title"}:
+        project_id = await service.project_id_of(context)
+        if project_id is not None:
+            background_tasks.add_task(
+                rag_service.reindex_context,
+                context.id,
+                context.session_id,
+                project_id,
+                raw_content_for_index(context),
+            )
+
     return ContextResponse.model_validate(context)
 
 

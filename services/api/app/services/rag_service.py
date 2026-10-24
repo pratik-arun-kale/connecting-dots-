@@ -14,8 +14,39 @@ from typing import Any, Dict
 
 from app.core.logging import get_logger
 from app.core.rag import chunker, embedder, pipeline, vector_store, vocabulary
+from app.models.context import Context
 
 logger = get_logger(__name__)
+
+# A re-index after an edit waits this long and is dropped if a newer edit to
+# the same context arrived meanwhile, so a burst of autosaves (one every
+# ~800 ms while typing) costs one re-embed instead of one per save.
+REINDEX_DELAY_SEC = 5.0
+
+# context_id -> token of its most recent re-index request. In-process only,
+# like app/core/rate_limit.py: with several workers, each coalesces its own.
+_latest_reindex: Dict[str, object] = {}
+
+
+def raw_content_for_index(context: Context) -> Dict[str, Any]:
+    """What to index for a context as it stands now, in the raw_content shape
+    chunker.chunk_context() expects. Notes (platform "note") are indexed from
+    content_md, where edits land — their raw_content is only the first-save
+    snapshot (for a dashboard note, the words typed before the first
+    autosave). Conversations keep their captured messages. Either way the
+    reader's own title wins, so a search for it finds the note."""
+    raw = context.raw_content or {}
+    if context.platform == "note" and context.content_md:
+        messages: list = [{"role": "user", "content": context.content_md, "timestamp": None, "index": 0}]
+    else:
+        messages = raw.get("messages", [])
+    return {
+        "title": context.user_title or context.title or raw.get("title", ""),
+        "platform": context.platform or raw.get("platform", "unknown"),
+        "chat_url": context.chat_url or raw.get("chat_url", ""),
+        "messages": messages,
+        "metadata": raw.get("metadata", {}),
+    }
 
 
 class RagService:
@@ -39,6 +70,41 @@ class RagService:
             str(project_id),
             raw_content,
         )
+
+    async def reindex_context(
+        self,
+        context_id: uuid.UUID,
+        session_id: uuid.UUID,
+        project_id: uuid.UUID,
+        raw_content: Dict[str, Any],
+        delay: float = REINDEX_DELAY_SEC,
+    ) -> None:
+        """
+        Replace a context's chunks after an edit. Waits `delay` seconds and
+        gives up if a newer re-index for the same context was requested in
+        the meantime — only the latest edit's content gets embedded.
+        Background-task only, like index_context().
+        """
+        key = str(context_id)
+        token = object()
+        _latest_reindex[key] = token
+        await asyncio.sleep(delay)
+        if _latest_reindex.get(key) is not token:
+            return
+        del _latest_reindex[key]
+        await asyncio.to_thread(self._reindex_sync, key, str(session_id), str(project_id), raw_content)
+
+    def _reindex_sync(
+        self,
+        context_id: str,
+        session_id: str,
+        project_id: str,
+        raw_content: Dict[str, Any],
+    ) -> None:
+        # Delete first: chunk ids are positional (<context>__m<i>__c<j>), so
+        # upserting a shorter text would leave the old tail chunks behind.
+        vector_store.delete_context_chunks(project_id, context_id)
+        self._index_sync(context_id, session_id, project_id, raw_content)
 
     def _index_sync(
         self,

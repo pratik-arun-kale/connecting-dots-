@@ -287,6 +287,12 @@ class ContextService:
         logger.info("note_updated", context_id=str(context_id), fields=list(updates.keys()))
         return context
 
+    async def project_id_of(self, context: Context) -> uuid.UUID | None:
+        """The project a context belongs to (through its session) — what the
+        RAG index is keyed on."""
+        session = await self._session_repo.get_by_id(context.session_id)
+        return session.project_id if session is not None else None
+
     async def delete_note(self, context_id: uuid.UUID, owner_id: uuid.UUID) -> None:
         """Deletes the SQL row AND its RAG chunks (ChromaDB) — otherwise a
         "deleted" note would still turn up in Ask AI/search results, pointing
