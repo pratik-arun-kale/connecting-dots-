@@ -44,14 +44,13 @@ class Settings(BaseSettings):
     # only falls back to the raw string for fields that admit one. Always a
     # list after validation.
     allowed_origins: list[str] | str = Field(
+        # The AI chat sites are deliberately absent: content scripts never
+        # call the API themselves — they message the extension's background
+        # worker, whose requests aren't subject to CORS — so allowing those
+        # origins would only let page scripts on them call the API.
         default=[
             "http://localhost:3000",
             "http://localhost:5173",
-            # AI platform origins — needed for content scripts that POST directly to the backend.
-            "https://chat.openai.com",
-            "https://chatgpt.com",
-            "https://claude.ai",
-            "https://gemini.google.com",
         ]
     )
 

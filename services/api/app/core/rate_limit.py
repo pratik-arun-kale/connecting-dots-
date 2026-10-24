@@ -1,8 +1,9 @@
 """
 app/core/rate_limit.py
 ─────────────────────────
-Lightweight in-process rate limiting for the auth endpoints
-(/auth/register, /auth/login, /auth/refresh).
+Lightweight in-process rate limiting: per client IP for the auth endpoints
+(/auth/register, /auth/login, /auth/refresh), per user for capture, search
+and Ask AI (see app.dependencies.user_rate_limit).
 
 NOT Redis-backed, deliberately: app/utils/redis.py is an explicitly-labeled
 stub ("NOT active" — see its docstring) that just logs a warning and no-ops,
@@ -41,26 +42,34 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def check_rate_limit(key: str, max_requests: int, window_seconds: int, message: str) -> None:
+    """Counts one request against `key` and raises TooManyRequestsException
+    (429) once more than max_requests fall within the last window_seconds."""
+    now = time.monotonic()
+    cutoff = now - window_seconds
+
+    with _lock:
+        bucket = _buckets[key]
+        # Drop timestamps outside the current window.
+        fresh = [t for t in bucket if t > cutoff]
+        if len(fresh) >= max_requests:
+            _buckets[key] = fresh
+            raise TooManyRequestsException(message)
+        fresh.append(now)
+        _buckets[key] = fresh
+
+
 def rate_limit(key_prefix: str, max_requests: int, window_seconds: int):
     """Returns a FastAPI dependency enforcing max_requests per window_seconds,
-    keyed by (key_prefix, client IP). Raises TooManyRequestsException (429)
-    once the window is exhausted."""
+    keyed by (key_prefix, client IP) — for routes with no user yet (auth).
+    Signed-in routes limit per user instead: app.dependencies.user_rate_limit."""
 
     def _dependency(request: Request) -> None:
-        key = f"{key_prefix}:{_client_ip(request)}"
-        now = time.monotonic()
-        cutoff = now - window_seconds
-
-        with _lock:
-            bucket = _buckets[key]
-            # Drop timestamps outside the current window.
-            fresh = [t for t in bucket if t > cutoff]
-            if len(fresh) >= max_requests:
-                _buckets[key] = fresh
-                raise TooManyRequestsException(
-                    "Too many attempts — try again in a few minutes.",
-                )
-            fresh.append(now)
-            _buckets[key] = fresh
+        check_rate_limit(
+            f"{key_prefix}:{_client_ip(request)}",
+            max_requests,
+            window_seconds,
+            "Too many attempts — try again in a few minutes.",
+        )
 
     return _dependency

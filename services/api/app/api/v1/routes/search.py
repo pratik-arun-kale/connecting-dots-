@@ -13,7 +13,7 @@ import uuid
 from fastapi import APIRouter, status
 
 from app.core.rag.query_normalizer import _max_edit_distance, levenshtein_distance
-from app.dependencies import CurrentUserDep, ProjectServiceDep, RagServiceDep
+from app.dependencies import CurrentUserDep, ProjectServiceDep, RagServiceDep, user_rate_limit
 from app.schemas.search import ConversationSearchRequest, ConversationSearchResponse
 
 router = APIRouter(prefix="/search", tags=["Search"])
@@ -58,6 +58,7 @@ async def _closest_project_names(
     response_model=ConversationSearchResponse,
     status_code=status.HTTP_200_OK,
     summary="Search captured conversations by topic (retrieval only, no answer generation)",
+    dependencies=[user_rate_limit("search", max_requests=60, window_seconds=60)],
 )
 async def search_conversations(
     payload: ConversationSearchRequest,

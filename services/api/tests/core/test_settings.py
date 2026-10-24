@@ -43,6 +43,13 @@ class TestAllowedOrigins:
         s = make_settings(ALLOWED_ORIGINS=f"https://app.example.com,{EXT}", EXTENSION_ORIGIN=EXT)
         assert s.allowed_origins == ["https://app.example.com", EXT]
 
+    def test_ai_chat_sites_are_not_allowed_by_default(self, make_settings):
+        # Content scripts go through the extension's background worker, so
+        # page scripts on these sites have no business calling the API.
+        s = make_settings()
+        assert not any(site in o for o in s.allowed_origins
+                       for site in ("chatgpt.com", "openai.com", "claude.ai", "gemini.google.com"))
+
     def test_no_extension_origin_by_default(self, make_settings):
         s = make_settings()
         assert s.extension_origin is None

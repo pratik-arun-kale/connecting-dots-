@@ -14,7 +14,14 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Query, status
 
-from app.dependencies import ContextServiceDep, CurrentUserDep, ProjectServiceDep, RagServiceDep, SessionServiceDep
+from app.dependencies import (
+    ContextServiceDep,
+    CurrentUserDep,
+    ProjectServiceDep,
+    RagServiceDep,
+    SessionServiceDep,
+    user_rate_limit,
+)
 from app.schemas.capture import CaptureConversationRequest, CaptureConversationResponse
 from app.schemas.context import ContextListResponse, ContextResponse
 from app.schemas.project import (
@@ -137,6 +144,7 @@ async def delete_project(
     response_model=CaptureConversationResponse,
     status_code=status.HTTP_200_OK,
     summary="Capture a full AI conversation into a project (idempotent)",
+    dependencies=[user_rate_limit("capture", max_requests=60, window_seconds=60)],
 )
 async def capture_conversation(
     project_id: uuid.UUID,
@@ -175,6 +183,8 @@ async def capture_conversation(
     response_model=RagQueryResponse,
     status_code=status.HTTP_200_OK,
     summary="Ask a question about this project's captured conversations (RAG)",
+    # Each question is an LLM call — the one route here that costs money.
+    dependencies=[user_rate_limit("rag_query", max_requests=20, window_seconds=60)],
 )
 async def query_project_contexts(
     project_id: uuid.UUID,

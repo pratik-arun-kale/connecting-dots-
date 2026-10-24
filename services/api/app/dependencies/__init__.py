@@ -15,6 +15,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import UnauthorizedException
+from app.core.rate_limit import check_rate_limit
 from app.core.security import decode_access_token
 from app.core.settings import settings
 from app.db.engine import get_db_session
@@ -100,3 +101,22 @@ async def get_current_active_user(
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_active_user)]
+
+
+# ── Per-user rate limits ─────────────────────────────────────────────────────
+
+def user_rate_limit(key_prefix: str, max_requests: int, window_seconds: int):
+    """A route dependency allowing each signed-in user max_requests per
+    window_seconds — `dependencies=[user_rate_limit(...)]`. Keyed by user id,
+    not IP, so people sharing an office network don't share a budget.
+    In-process, like the auth limits (see app/core/rate_limit.py)."""
+
+    async def _dependency(current_user: CurrentUserDep) -> None:
+        check_rate_limit(
+            f"{key_prefix}:{current_user.id}",
+            max_requests,
+            window_seconds,
+            "You're going a bit fast — wait a minute and try again.",
+        )
+
+    return Depends(_dependency)
