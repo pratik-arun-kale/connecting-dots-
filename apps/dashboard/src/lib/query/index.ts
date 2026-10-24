@@ -2,8 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS, DEFAULT_STALE_TIME } from '@/lib/constants';
-import { env } from '@/lib/env';
 import { projectService, sessionService, conversationSearchService } from '@/lib/api/services';
+import { extensionService } from '@/lib/services/extension.service';
 import type { ApiContext, ApiSession, ConversationSearchResponse, CreateProjectWithSessionsRequest, RagQueryResponse } from '@/types';
 
 // ──────────────────────────────────────────────
@@ -38,20 +38,16 @@ export function useCreateProjectWithSessions() {
         queryKey: [QUERY_KEYS.projects, result.project.id, QUERY_KEYS.sessions],
       });
 
-      // Tell the extension to drive each session through the FSM
-      const extId = env.extensionId;
-      if (extId && typeof window !== 'undefined') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const cr = (window as any)?.chrome?.runtime;
-        for (const session of result.sessions) {
-          cr?.sendMessage(extId, {
-            type: 'CREATE_PROVIDER_SESSION',
-            sessionId: session.id,
-            projectId: result.project.id,
-            platform:  session.source_platform,
-            bootstrapMessage: null,
+      // Tell the extension to drive each session through the FSM — the one
+      // place this is sent. Fire-and-forget: the project already exists, so
+      // a missing or failing extension is reported, never fatal.
+      if (!extensionService.isAvailable()) return;
+      for (const session of result.sessions) {
+        extensionService
+          .createProviderSession(session.id, result.project.id, session.source_platform, null)
+          .then((res) => {
+            if (!res.success) console.warn('[Extension] CREATE_PROVIDER_SESSION failed:', res.error);
           });
-        }
       }
     },
   });

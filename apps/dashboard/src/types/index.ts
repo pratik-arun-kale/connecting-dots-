@@ -48,17 +48,6 @@ export interface ChatMessage {
   };
 }
 
-export interface SearchResult {
-  id: string;
-  type: 'project' | 'session' | 'context' | 'message';
-  title: string;
-  excerpt: string;
-  matchedField: string;
-  score: number;
-  projectId?: string;
-  sessionId?: string;
-}
-
 export interface User {
   id: string;
   name: string;

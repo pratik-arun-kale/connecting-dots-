@@ -48,8 +48,14 @@ export class SessionOrchestrator {
     });
   }
 
-  /** Called by background.ts to start a new session. */
+  /**
+   * Called by background.ts to start a new session. A repeat request for a
+   * session already known (the dashboard retrying, or a duplicate message)
+   * is ignored: storing it again would reset a session that is already
+   * opening a tab — or already linked — back to 'pending'.
+   */
   async start(session: ProviderSession): Promise<void> {
+    if (await this.store.get(session.sessionId)) return;
     await this.store.set(session);
     void this._drive(session.sessionId);
   }

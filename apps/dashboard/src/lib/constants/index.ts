@@ -25,33 +25,3 @@ export const QUERY_KEYS = {
   messages: "messages",
   search: "search",
 } as const;
-
-// ──────────────────────────────────────────────
-// Navigation
-// ──────────────────────────────────────────────
-
-export interface NavItem {
-  label: string;
-  href: string;
-  icon: string; // lucide icon name
-}
-
-export const NAV_ITEMS: NavItem[] = [
-  { label: "Projects", href: "/projects", icon: "FolderKanban" },
-  { label: "Sessions", href: "/sessions", icon: "MessageSquare" },
-  { label: "Saved Contexts", href: "/contexts", icon: "Bookmark" },
-  { label: "Settings", href: "/settings", icon: "Settings" },
-];
-
-// ──────────────────────────────────────────────
-// Sync Status
-// ──────────────────────────────────────────────
-
-export type SyncStatus = "connected" | "syncing" | "disconnected" | "error";
-
-export const SYNC_STATUS: Record<SyncStatus, SyncStatus> = {
-  connected: "connected",
-  syncing: "syncing",
-  disconnected: "disconnected",
-  error: "error",
-} as const;

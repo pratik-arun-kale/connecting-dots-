@@ -39,20 +39,11 @@ export const projectService = {
   async createProjectWithSessions(
     data: CreateProjectWithSessionsRequest
   ): Promise<CreateProjectWithSessionsResponse> {
-    console.log('[DEBUG] createProjectWithSessions → payload:', data);
-    console.log('[DEBUG] createProjectWithSessions → url:', apiClient.defaults.baseURL + '/projects/create-with-sessions');
-    try {
-      const response = await apiClient.post<CreateProjectWithSessionsResponse>(
-        '/projects/create-with-sessions',
-        data
-      );
-      console.log('[DEBUG] createProjectWithSessions → response status:', response.status);
-      console.log('[DEBUG] createProjectWithSessions → response data:', response.data);
-      return response.data;
-    } catch (err: unknown) {
-      console.error('[DEBUG] createProjectWithSessions → ERROR:', err);
-      throw err;
-    }
+    const response = await apiClient.post<CreateProjectWithSessionsResponse>(
+      '/projects/create-with-sessions',
+      data
+    );
+    return response.data;
   },
 
   async getProjectContexts(projectId: string): Promise<ApiContext[]> {

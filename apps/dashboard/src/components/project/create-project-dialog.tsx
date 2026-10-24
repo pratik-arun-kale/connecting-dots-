@@ -18,7 +18,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCreateProjectWithSessions } from '@/lib/query';
 import { useWorkspaceStore } from '@/store';
-import { extensionService } from '@/lib/services/extension.service';
 import type { Platform } from '@/types';
 
 const PLATFORMS: { id: Platform; label: string; domain: string }[] = [
@@ -67,40 +66,20 @@ export function CreateProjectDialog({ compact = false, iconOnly = false }: { com
       return;
     }
 
-    console.log('[DEBUG] onSubmit → name:', data.name, '| platforms:', selectedPlatforms);
-
     createProjectWithSessions.mutate(
       { name: data.name, platforms: selectedPlatforms },
       {
+        // The hook itself asks the extension to open each session.
         onSuccess: (result) => {
-          console.log('[DEBUG] mutation onSuccess → project:', result.project.id, '| sessions:', result.sessions.length);
-
-          // ── Step 1: close dialog and navigate immediately ─────────────────
           reset();
           setSelectedPlatforms([]);
           setSubmitError('');
           setOpen(false);
           setActiveProject(result.project.id);
           router.push('/notes');
-
-          // ── Step 2: fire-and-forget extension messaging ───────────────────
-          // Project creation is already complete. Extension failure is non-fatal.
-          // The useCreateProjectWithSessions hook also sends these messages in onSuccess,
-          // but we keep this here for immediate feedback logging.
-          for (const session of result.sessions) {
-            extensionService
-              .createProviderSession(session.id, result.project.id, session.source_platform, null)
-              .then((res: { success: boolean; error?: string }) => {
-                console.log('[DEBUG] extension CREATE_PROVIDER_SESSION result:', res);
-              })
-              .catch((err: unknown) => {
-                console.warn('[DEBUG] extension messaging failed (non-fatal):', err);
-              });
-          }
         },
 
         onError: (err) => {
-          console.error('[DEBUG] mutation onError:', err);
           // Show the error inside the dialog so the user knows what went wrong
           const message =
             (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
