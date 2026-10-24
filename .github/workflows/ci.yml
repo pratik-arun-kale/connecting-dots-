@@ -104,7 +104,7 @@ jobs:
       - run: pytest
 
   e2e:
-    name: End-to-end — dashboard core loop
+    name: End-to-end — dashboard core loop, extension loads
     runs-on: ubuntu-latest
     needs: [dashboard, api]
     services:
@@ -139,6 +139,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             apps/dashboard/package-lock.json
+            apps/extension/package-lock.json
             e2e/package-lock.json
 
       - name: Start the API
@@ -148,6 +149,12 @@ jobs:
           pip install -r requirements.txt
           alembic upgrade head
           nohup uvicorn main:app --host 127.0.0.1 --port 8000 > ../../api.log 2>&1 &
+
+      - name: Build the extension (loaded by extension-loads.spec.ts)
+        working-directory: apps/extension
+        run: |
+          npm ci
+          npm run build
 
       - name: Build and start the dashboard
         working-directory: apps/dashboard

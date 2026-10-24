@@ -49,7 +49,7 @@ Extension builds: `npm run build` (development, localhost), `npm run build:stagi
 
 ```bash
 npm run check          # lint + localhost guard, typecheck both apps, extension tests
-npm run test:e2e       # Playwright, against a running API + dashboard (npm ci --prefix e2e first)
+npm run test:e2e       # Playwright: needs a running API + dashboard and a built extension (npm ci --prefix e2e first)
 ```
 
 API tests: `cd services/api && pytest` (needs Postgres; tests use a `<POSTGRES_DB>_test` database).

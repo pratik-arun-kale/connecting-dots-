@@ -17,6 +17,13 @@ test('sign up, create a project, write a note and find it', async ({ page }) => 
   const projectName = `E2E project ${run}`;
   const noteLine = `E2E note ${run}`;
 
+  // The dashboard's Content-Security-Policy (next.config.ts) must not block
+  // anything the app itself does; browsers report violations on the console.
+  const cspViolations: string[] = [];
+  page.on('console', (msg) => {
+    if (/Content Security Policy/i.test(msg.text())) cspViolations.push(msg.text());
+  });
+
   await test.step('register', async () => {
     await page.goto('/register');
     await page.getByPlaceholder('you@example.com').fill(email);
@@ -55,4 +62,6 @@ test('sign up, create a project, write a note and find it', async ({ page }) => 
     await page.getByPlaceholder('Search notes and projects…').fill(run);
     await expect(page.getByRole('option', { name: new RegExp(noteLine) })).toBeVisible();
   });
+
+  expect(cspViolations, 'CSP blocked something the app needs').toEqual([]);
 });
