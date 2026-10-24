@@ -94,6 +94,18 @@ class TestUpdateVocabularyFromContext:
         vocab = vocabulary._load_vocab("proj-3")
         assert vocab["zenith"].canonical == "Zenith"
 
+    def test_delete_vocabulary_forgets_file_and_cache(self, tmp_path):
+        vocabulary.update_vocabulary_from_context("proj-del", self._raw(content="Using LangGraph daily.", platform=""))
+        assert (tmp_path / "proj-del.json").exists()
+
+        vocabulary.delete_vocabulary("proj-del")
+
+        assert not (tmp_path / "proj-del.json").exists()
+        assert vocabulary._load_vocab("proj-del") == {}
+
+    def test_delete_vocabulary_of_unknown_project_is_a_no_op(self):
+        vocabulary.delete_vocabulary("never-learned-anything")
+
     def test_protected_terms_are_not_relearned(self):
         vocabulary.update_vocabulary_from_context("proj-4", self._raw(title="RAG basics"))
         vocab = vocabulary._load_vocab("proj-4")

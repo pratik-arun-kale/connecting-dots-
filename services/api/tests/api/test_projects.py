@@ -13,6 +13,8 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+from app.services import project as project_service_module
+
 BASE = "/api/v1/projects"
 
 
@@ -200,13 +202,21 @@ async def test_update_another_users_project_returns_404(
 # ── Delete ─────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_delete_project(authenticated_client: AsyncClient) -> None:
+async def test_delete_project(authenticated_client: AsyncClient, monkeypatch) -> None:
+    cleaned: list[tuple[str, str]] = []
+    monkeypatch.setattr(project_service_module.vector_store, "delete_project_collection",
+                        lambda pid: cleaned.append(("vectors", pid)))
+    monkeypatch.setattr(project_service_module.vocabulary, "delete_vocabulary",
+                        lambda pid: cleaned.append(("vocabulary", pid)))
+
     created = await _create_project(authenticated_client, "To Delete")
     delete_resp = await authenticated_client.delete(f"{BASE}/{created['id']}")
     assert delete_resp.status_code == 204
 
     get_resp = await authenticated_client.get(f"{BASE}/{created['id']}")
     assert get_resp.status_code == 404
+    # Its RAG data on disk goes with it.
+    assert cleaned == [("vectors", created["id"]), ("vocabulary", created["id"])]
 
 
 @pytest.mark.asyncio

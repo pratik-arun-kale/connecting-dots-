@@ -285,6 +285,17 @@ def _save_vocab(project_id: str, vocab: Dict[str, VocabEntry]) -> None:
         _cache[project_id] = vocab
 
 
+def delete_vocabulary(project_id: str) -> None:
+    """Forgets a deleted project's learned vocabulary — the cached copy and
+    the JSON file. Best-effort; a missing file just means nothing was learned."""
+    with _cache_lock:
+        _cache.pop(project_id, None)
+    try:
+        (VOCAB_DIR / f"{project_id}.json").unlink(missing_ok=True)
+    except OSError:
+        logger.warning("vocabulary_delete_failed", project_id=project_id, exc_info=True)
+
+
 def update_vocabulary_from_context(project_id: str, raw_content: Dict[str, Any]) -> int:
     """
     Extracts vocabulary terms from a captured context and merges them into

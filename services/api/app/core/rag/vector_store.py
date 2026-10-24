@@ -136,3 +136,15 @@ def delete_context_chunks(project_id: str, context_id: str) -> None:
         col.delete(where={"context_id": context_id})
     except Exception:
         logger.warning("vector_delete_failed", project_id=project_id, context_id=context_id, exc_info=True)
+
+
+def delete_project_collection(project_id: str) -> None:
+    """Drops a project's whole collection when the project is deleted, so
+    its notes' text doesn't outlive it on disk. Best-effort, like
+    delete_context_chunks: a project that never had anything indexed has no
+    collection, and a ChromaDB hiccup shouldn't block the delete itself."""
+    try:
+        _get_client().delete_collection(_collection_name(project_id))
+        logger.info("vector_collection_deleted", project_id=project_id)
+    except Exception:
+        logger.info("vector_collection_delete_skipped", project_id=project_id, exc_info=True)

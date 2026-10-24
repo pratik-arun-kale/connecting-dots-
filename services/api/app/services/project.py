@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
 from app.core.logging import get_logger
+from app.core.rag import vector_store, vocabulary
 from app.models.project import Project
 from app.repositories.project import ProjectRepository
 from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
@@ -76,6 +77,12 @@ class ProjectService:
         return project
 
     async def delete_project(self, project_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+        """Deletes the project (its sessions and notes cascade in SQL) and
+        then its RAG data — the vector collection and learned vocabulary —
+        which live on disk outside the database. The disk cleanup is
+        best-effort, as for a single note (see ContextService.delete_note)."""
         project = await self.get_project(project_id, owner_id)
         await self._repo.delete(project)
+        vector_store.delete_project_collection(str(project_id))
+        vocabulary.delete_vocabulary(str(project_id))
         logger.info("project_deleted", project_id=str(project_id))
