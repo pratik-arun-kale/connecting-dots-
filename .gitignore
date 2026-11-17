@@ -53,3 +53,4 @@ blob-report/
 
 # Database backups written by services/api/scripts/backup_db.sh
 backups/
+.neon
