@@ -70,8 +70,7 @@ Move the `[Unreleased]` notes in [CHANGELOG.md](CHANGELOG.md) under the new vers
 
 ## Docs
 
-- [docs/runbook.md](docs/runbook.md): backups, restore, routine jobs, deploy checklist.
-
 - [docs/PRODUCTION_PLAN.md](docs/PRODUCTION_PLAN.md) — production roadmap (phases 0–7)
 - [docs/UI_REDESIGN_PLAN.md](docs/UI_REDESIGN_PLAN.md) — redesign roadmap
 - [services/api/README.md](services/api/README.md) — API details
+- [docs/runbook.md](docs/runbook.md) — backups, restore, routine jobs, deploy checklist
