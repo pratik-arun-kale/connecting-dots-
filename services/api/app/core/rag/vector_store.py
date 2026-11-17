@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import chromadb
 
@@ -44,7 +44,7 @@ def get_collection(project_id: str):
     )
 
 
-def upsert_chunks(project_id: str, chunks: List[Dict[str, Any]]) -> None:
+def upsert_chunks(project_id: str, chunks: list[dict[str, Any]]) -> None:
     """Insert or update embedding chunks for a project."""
     if not chunks:
         return
@@ -57,7 +57,7 @@ def upsert_chunks(project_id: str, chunks: List[Dict[str, Any]]) -> None:
     )
 
 
-def retrieve(project_id: str, query_embedding: List[float], top_k: int = 10) -> List[Dict]:
+def retrieve(project_id: str, query_embedding: list[float], top_k: int = 10) -> list[dict]:
     """Return top_k semantically similar chunks for a query embedding."""
     col = get_collection(project_id)
     try:
@@ -76,13 +76,13 @@ def retrieve(project_id: str, query_embedding: List[float], top_k: int = 10) -> 
     if not results or not results["ids"]:
         return []
 
-    out: List[Dict] = []
+    out: list[dict] = []
     for rank, (cid, dist, text, meta) in enumerate(
         zip(
             results["ids"][0],
             results["distances"][0],
             results["documents"][0],
-            results["metadatas"][0],
+            results["metadatas"][0], strict=False,
         ),
         start=1,
     ):
@@ -98,7 +98,7 @@ def retrieve(project_id: str, query_embedding: List[float], top_k: int = 10) -> 
     return out
 
 
-def get_all_chunks(project_id: str) -> List[Dict]:
+def get_all_chunks(project_id: str) -> list[dict]:
     """Fetch all stored chunks for a project (used to build the BM25 index at query time)."""
     col = get_collection(project_id)
     try:
@@ -112,7 +112,7 @@ def get_all_chunks(project_id: str) -> List[Dict]:
     return [
         {"chunk_id": cid, "text": text, "metadata": meta}
         for cid, text, meta in zip(
-            results["ids"], results["documents"], results["metadatas"]
+            results["ids"], results["documents"], results["metadatas"], strict=False
         )
     ]
 

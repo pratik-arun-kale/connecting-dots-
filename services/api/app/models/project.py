@@ -35,8 +35,8 @@ class Project(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     # ── Relationships ────────────────────────────────────────────────────────
-    owner: Mapped["User"] = relationship("User", back_populates="projects", lazy="noload")
-    sessions: Mapped[list["Session"]] = relationship(
+    owner: Mapped[User] = relationship("User", back_populates="projects", lazy="noload")
+    sessions: Mapped[list[Session]] = relationship(
         "Session",
         back_populates="project",
         cascade="all, delete-orphan",

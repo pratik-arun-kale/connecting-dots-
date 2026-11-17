@@ -15,6 +15,7 @@ from app.models.project import Project
 from app.models.session import Session
 from app.repositories.base import BaseRepository
 
+
 class ContextRepository(BaseRepository[Context]):
     model = Context
 

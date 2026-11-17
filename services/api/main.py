@@ -4,8 +4,8 @@ main.py
 FastAPI application factory and entry-point.
 """
 
+from collections.abc import Callable
 from contextlib import asynccontextmanager
-from typing import Callable
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

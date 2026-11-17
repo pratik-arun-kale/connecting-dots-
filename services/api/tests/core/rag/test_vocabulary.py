@@ -132,7 +132,8 @@ class TestUpdateVocabularyFromContext:
         assert "budgeting" in vocab
 
     def test_infrequent_lowercase_word_is_not_promoted(self):
-        vocabulary.update_vocabulary_from_context("proj-8", self._raw(content="budgeting is mentioned once", platform=""))
+        raw = self._raw(content="budgeting is mentioned once", platform="")
+        vocabulary.update_vocabulary_from_context("proj-8", raw)
         vocab = vocabulary._load_vocab("proj-8")
         assert "budgeting" not in vocab
 

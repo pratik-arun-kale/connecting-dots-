@@ -20,7 +20,6 @@ rationale):
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional
 
 # ── Levenshtein distance — small, dependency-free fuzzy matcher ─────────────
 
@@ -59,7 +58,7 @@ def _max_edit_distance(term: str) -> int:
     return 3
 
 
-def _closest_vocab_match(word: str, vocabulary: Dict[str, str]) -> Optional[str]:
+def _closest_vocab_match(word: str, vocabulary: dict[str, str]) -> str | None:
     """
     Return the vocabulary's canonical form if `word` is an exact or close
     match, else None. `vocabulary` maps lowercase-term -> canonical-form.
@@ -71,8 +70,8 @@ def _closest_vocab_match(word: str, vocabulary: Dict[str, str]) -> Optional[str]
     if lower in vocabulary:
         return vocabulary[lower]
 
-    best_term: Optional[str] = None
-    best_dist: Optional[int] = None
+    best_term: str | None = None
+    best_dist: int | None = None
     for vocab_lower, canonical in vocabulary.items():
         if len(vocab_lower) <= 2:
             continue  # exact-match only, see docstring
@@ -121,7 +120,7 @@ _TECHNICAL_TERMS = [
     "GraphQL", "JavaScript", "Python", "React", "Next.js", "Anthropic",
     "Claude", "BM25", "SQL", "JSON", "YAML", "AWS", "GCP",
 ]
-_TECHNICAL_TERMS_LOWER: Dict[str, str] = {t.lower(): t for t in _TECHNICAL_TERMS}
+_TECHNICAL_TERMS_LOWER: dict[str, str] = {t.lower(): t for t in _TECHNICAL_TERMS}
 
 
 def correct_technical_terms(text: str) -> str:
@@ -131,7 +130,7 @@ def correct_technical_terms(text: str) -> str:
     Anything not close to a known term (including any topic word we've never
     heard of) is left completely alone — this never invents a correction.
     """
-    def _replace(match: "re.Match[str]") -> str:
+    def _replace(match: re.Match[str]) -> str:
         word = match.group(0)
         if word.lower() in _TECHNICAL_TERMS_LOWER:
             return word  # already correct (whatever case the user typed) — no-op
@@ -150,7 +149,7 @@ def _merge_split_technical_terms(text: str) -> str:
     (neither one alone is close enough to "FastAPI" to fuzzy-match).
     """
     words = text.split(" ")
-    merged: List[str] = []
+    merged: list[str] = []
     i = 0
     while i < len(words):
         if i + 1 < len(words):
@@ -185,7 +184,7 @@ _INTENT_KEYWORDS = [
     "discusses", "covers", "find", "search", "show", "list", "about",
     "regarding", "ever", "did",
 ]
-_INTENT_VOCAB: Dict[str, str] = {w: w for w in _INTENT_KEYWORDS}
+_INTENT_VOCAB: dict[str, str] = {w: w for w in _INTENT_KEYWORDS}
 
 
 def _fuzzy_correct_intent_words(text: str) -> str:
@@ -194,7 +193,7 @@ def _fuzzy_correct_intent_words(text: str) -> str:
     ("discused" -> "discuss", "whre" -> "where"). Words not close to any
     intent keyword — including the actual search topic — are left untouched.
     """
-    def _replace(match: "re.Match[str]") -> str:
+    def _replace(match: re.Match[str]) -> str:
         word = match.group(0)
         corrected = _closest_vocab_match(word, _INTENT_VOCAB)
         return corrected if corrected else word
@@ -202,7 +201,7 @@ def _fuzzy_correct_intent_words(text: str) -> str:
     return _WORD_RE.sub(_replace, text)
 
 
-_CONVERSATION_SEARCH_PATTERNS: List[re.Pattern] = [
+_CONVERSATION_SEARCH_PATTERNS: list[re.Pattern] = [
     # [interrogative]? + auxiliary(did/have/has) + subject(i/we) + verb + topic.
     # Interrogative prefix is OPTIONAL — "Did I discuss X?" has none at all.
     re.compile(

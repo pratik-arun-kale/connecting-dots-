@@ -17,7 +17,7 @@ for why they alone aren't enough (they only recognize 3 fixed template shapes).
 """
 from __future__ import annotations
 
-from typing import List, NamedTuple, Optional
+from typing import NamedTuple
 
 from app.core.rag import query_normalizer as qn
 from app.core.rag import vocabulary
@@ -31,8 +31,8 @@ class QueryCandidate(NamedTuple):
 
 
 def generate_query_candidates(
-    query: str, project_id: Optional[str] = None
-) -> List[QueryCandidate]:
+    query: str, project_id: str | None = None
+) -> list[QueryCandidate]:
     """
     Build an ordered set of retrieval candidates for one user query:
 
@@ -60,7 +60,7 @@ def generate_query_candidates(
     already-clean query isn't discounted just because a low-weight stage
     happened to produce the same string first.
     """
-    candidates: List[QueryCandidate] = []
+    candidates: list[QueryCandidate] = []
     seen: dict = {}  # query string -> index into `candidates`
 
     def _add(label: str, text: str, weight: float) -> None:
@@ -83,7 +83,7 @@ def generate_query_candidates(
 
     # ── Fallback: old sentence-template regex extraction ────────────────────
     intent_ready = qn._fuzzy_correct_intent_words(cleaned)
-    extracted_topic: Optional[str] = None
+    extracted_topic: str | None = None
     for pattern in qn._CONVERSATION_SEARCH_PATTERNS:
         match = pattern.match(intent_ready)
         if match:
@@ -98,7 +98,7 @@ def generate_query_candidates(
     spell_corrected = qn.correct_technical_terms(base_for_correction)
     _add("spell_corrected", spell_corrected, 1.0)
 
-    vocab_map: Optional[dict] = None
+    vocab_map: dict | None = None
     if project_id:
         vocab_map = vocabulary.get_merged_vocabulary(project_id)
         vocab_ready = vocabulary.merge_split_vocabulary_terms(base_for_correction, vocab_map)

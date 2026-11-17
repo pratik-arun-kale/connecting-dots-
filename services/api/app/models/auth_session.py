@@ -47,7 +47,7 @@ class AuthSession(Base, UUIDPrimaryKeyMixin):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    user: Mapped["User"] = relationship("User", lazy="noload")
+    user: Mapped[User] = relationship("User", lazy="noload")
 
     @property
     def is_active(self) -> bool:

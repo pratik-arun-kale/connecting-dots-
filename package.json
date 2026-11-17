@@ -6,7 +6,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "setup": "npm ci --prefix apps/extension && npm ci --prefix apps/dashboard",
+    "setup": "npm ci --prefix apps/extension && npm ci --prefix apps/dashboard && npm run hooks",
+    "hooks": "git config core.hooksPath .githooks",
     "dev:extension": "npm run dev --prefix apps/extension",
     "dev:dashboard": "npm run dev --prefix apps/dashboard",
     "dev:stack": "docker compose up -d --build",

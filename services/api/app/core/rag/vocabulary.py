@@ -24,7 +24,7 @@ import re
 import threading
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from app.core.logging import get_logger
 from app.core.rag.query_normalizer import (
@@ -67,7 +67,7 @@ _STOPWORDS = {
 }
 
 _cache_lock = threading.Lock()
-_cache: Dict[str, Dict[str, "VocabEntry"]] = {}  # project_id -> {lower_term: entry}
+_cache: dict[str, dict[str, VocabEntry]] = {}  # project_id -> {lower_term: entry}
 
 
 # ── Vocabulary entry: canonical casing by majority vote, source tracking ────
@@ -103,7 +103,7 @@ class VocabEntry:
     def canonical(self) -> str:
         return self.canonical_counts.most_common(1)[0][0]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "canonical_counts": dict(self.canonical_counts),
             "count": self.count,
@@ -112,7 +112,7 @@ class VocabEntry:
         }
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "VocabEntry":
+    def from_dict(cls, d: dict[str, Any]) -> VocabEntry:
         entry = cls()
         entry.canonical_counts = Counter(d.get("canonical_counts", {}))
         entry.count = d.get("count", 0)
@@ -153,7 +153,7 @@ def _sentence_initial_positions(text: str) -> set:
     return positions
 
 
-def _single_word_proper_nouns(text: str, allow_sentence_initial: bool) -> List[str]:
+def _single_word_proper_nouns(text: str, allow_sentence_initial: bool) -> list[str]:
     """
     Single Titlecase words (one capital, rest lowercase — "Qdrant", not
     "FastAPI" which the CamelCase pattern already handles) that are either not
@@ -167,7 +167,7 @@ def _single_word_proper_nouns(text: str, allow_sentence_initial: bool) -> List[s
         return []
     sentence_starts = _sentence_initial_positions(text)
     counts: Counter = Counter()
-    positions_by_word: Dict[str, List[int]] = {}
+    positions_by_word: dict[str, list[int]] = {}
     for m in _SINGLE_PROPER_NOUN_RE.finditer(text):
         word = m.group(0)
         if word.lower() in _COMMON_SENTENCE_STARTERS:
@@ -175,7 +175,7 @@ def _single_word_proper_nouns(text: str, allow_sentence_initial: bool) -> List[s
         counts[word] += 1
         positions_by_word.setdefault(word, []).append(m.start())
 
-    found: List[str] = []
+    found: list[str] = []
     for word, count in counts.items():
         starts = positions_by_word[word]
         only_sentence_initial = all(s in sentence_starts for s in starts)
@@ -186,7 +186,7 @@ def _single_word_proper_nouns(text: str, allow_sentence_initial: bool) -> List[s
 
 def extract_candidate_terms(
     text: str, allow_sentence_initial: bool = False
-) -> List[Tuple[str, str]]:
+) -> list[tuple[str, str]]:
     """Returns (term, kind) pairs found in `text` via pattern matching only.
     `allow_sentence_initial` relaxes the single-word proper-noun check for
     titles, which aren't sentences — every capitalized word in a short title
@@ -194,7 +194,7 @@ def extract_candidate_terms(
     are just grammar."""
     if not text:
         return []
-    found: List[Tuple[str, str]] = []
+    found: list[tuple[str, str]] = []
     for m in _CAMEL_CASE_RE.findall(text):
         found.append((m, "technology"))
     for m in _ALLCAPS_RE.findall(text):
@@ -209,7 +209,7 @@ def extract_candidate_terms(
     return found
 
 
-def extract_terms_from_context(raw_content: Dict[str, Any]) -> List[Tuple[str, str, str]]:
+def extract_terms_from_context(raw_content: dict[str, Any]) -> list[tuple[str, str, str]]:
     """
     Returns (term, source, kind) triples extracted from one captured context's
     title, message content, and platform metadata.
@@ -221,13 +221,13 @@ def extract_terms_from_context(raw_content: Dict[str, Any]) -> List[Tuple[str, s
     vocabulary" job; the vocabulary grows incrementally, one context at a time,
     for as long as the extension keeps capturing conversations.
     """
-    terms: List[Tuple[str, str, str]] = []
+    terms: list[tuple[str, str, str]] = []
 
     title = raw_content.get("title", "") or ""
     for term, kind in extract_candidate_terms(title, allow_sentence_initial=True):
         terms.append((term, "title", kind))
 
-    messages: List[Dict] = raw_content.get("messages", [])
+    messages: list[dict] = raw_content.get("messages", [])
     combined_text = " ".join((m.get("content", "") or "") for m in messages)
     for term, kind in extract_candidate_terms(combined_text):
         terms.append((term, "content", kind))
@@ -257,14 +257,14 @@ def _vocab_path(project_id: str) -> Path:
     return VOCAB_DIR / f"{project_id}.json"
 
 
-def _load_vocab(project_id: str) -> Dict[str, VocabEntry]:
+def _load_vocab(project_id: str) -> dict[str, VocabEntry]:
     with _cache_lock:
         cached = _cache.get(project_id)
     if cached is not None:
         return cached
 
     path = _vocab_path(project_id)
-    vocab: Dict[str, VocabEntry] = {}
+    vocab: dict[str, VocabEntry] = {}
     if path.exists():
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
@@ -277,7 +277,7 @@ def _load_vocab(project_id: str) -> Dict[str, VocabEntry]:
     return vocab
 
 
-def _save_vocab(project_id: str, vocab: Dict[str, VocabEntry]) -> None:
+def _save_vocab(project_id: str, vocab: dict[str, VocabEntry]) -> None:
     path = _vocab_path(project_id)
     data = {k: v.to_dict() for k, v in vocab.items()}
     path.write_text(json.dumps(data), encoding="utf-8")
@@ -296,7 +296,7 @@ def delete_vocabulary(project_id: str) -> None:
         logger.warning("vocabulary_delete_failed", project_id=project_id, exc_info=True)
 
 
-def update_vocabulary_from_context(project_id: str, raw_content: Dict[str, Any]) -> int:
+def update_vocabulary_from_context(project_id: str, raw_content: dict[str, Any]) -> int:
     """
     Extracts vocabulary terms from a captured context and merges them into
     the project's learned vocabulary. Called from RagService._index_sync()
@@ -341,7 +341,7 @@ def update_vocabulary_from_context(project_id: str, raw_content: Dict[str, Any])
 # ── Merged lookup surface: protected dictionary + learned vocabulary ───────
 
 
-def get_merged_vocabulary(project_id: str) -> Dict[str, str]:
+def get_merged_vocabulary(project_id: str) -> dict[str, str]:
     """
     Protected terms (query_normalizer._TECHNICAL_TERMS_LOWER) + this project's
     learned vocabulary, as a flat {lowercase: canonical} map ready for fuzzy
@@ -352,7 +352,7 @@ def get_merged_vocabulary(project_id: str) -> Dict[str, str]:
     get_all_terms() for suggestions, where a single-mention project-specific
     name is still worth surfacing as a "did you mean".
     """
-    merged: Dict[str, str] = dict(_TECHNICAL_TERMS_LOWER)
+    merged: dict[str, str] = dict(_TECHNICAL_TERMS_LOWER)
     for key, entry in _load_vocab(project_id).items():
         if key in merged or entry.count < MIN_OCCURRENCES_FOR_CORRECTION:
             continue
@@ -360,17 +360,17 @@ def get_merged_vocabulary(project_id: str) -> Dict[str, str]:
     return merged
 
 
-def get_all_terms(project_id: str) -> List[Tuple[str, int, str]]:
+def get_all_terms(project_id: str) -> list[tuple[str, int, str]]:
     """All known terms for this project — protected (infinite implied count)
     + every learned term regardless of frequency — as (canonical, count, kind)
     triples. Used by suggestions.py, not by auto-correction."""
-    terms: List[Tuple[str, int, str]] = [(t, 999, "technology") for t in _TECHNICAL_TERMS_LOWER.values()]
+    terms: list[tuple[str, int, str]] = [(t, 999, "technology") for t in _TECHNICAL_TERMS_LOWER.values()]
     for entry in _load_vocab(project_id).values():
         terms.append((entry.canonical, entry.count, entry.kind))
     return terms
 
 
-def correct_against_vocabulary(text: str, vocab_map: Dict[str, str]) -> str:
+def correct_against_vocabulary(text: str, vocab_map: dict[str, str]) -> str:
     """
     Word-by-word fuzzy correction against an arbitrary {lower: canonical} map
     — same exact-match short-circuit as query_normalizer.correct_technical_terms,
@@ -378,7 +378,7 @@ def correct_against_vocabulary(text: str, vocab_map: Dict[str, str]) -> str:
     of only the static list. Reuses _closest_vocab_match / _WORD_RE from
     query_normalizer rather than reimplementing word-splitting or distance logic.
     """
-    def _replace(match: "re.Match[str]") -> str:
+    def _replace(match: re.Match[str]) -> str:
         word = match.group(0)
         if word.lower() in vocab_map:
             return word
@@ -388,7 +388,7 @@ def correct_against_vocabulary(text: str, vocab_map: Dict[str, str]) -> str:
     return _WORD_RE.sub(_replace, text)
 
 
-def merge_split_vocabulary_terms(text: str, vocab_map: Dict[str, str]) -> str:
+def merge_split_vocabulary_terms(text: str, vocab_map: dict[str, str]) -> str:
     """
     Same bigram-concatenation trick as
     query_normalizer._merge_split_technical_terms ("Fast APi" -> "FastAPI"),
@@ -398,7 +398,7 @@ def merge_split_vocabulary_terms(text: str, vocab_map: Dict[str, str]) -> str:
     the static-only version could never know about a project-specific term.
     """
     words = text.split(" ")
-    merged: List[str] = []
+    merged: list[str] = []
     i = 0
     while i < len(words):
         if i + 1 < len(words):

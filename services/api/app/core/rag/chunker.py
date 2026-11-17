@@ -12,7 +12,7 @@ retrieval and the LLM prompt can filter or weight by structural type.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 PROSE_CHUNK_SIZE = 200      # words per prose chunk
 PROSE_CHUNK_OVERLAP = 40    # word overlap between consecutive prose chunks
@@ -21,13 +21,13 @@ CODE_WORD_CAP = 450         # ≈ 600 tokens — truncate code blocks beyond thi
 
 # ── Prose sliding-window splitter ─────────────────────────────────────────────
 
-def _split_prose(text: str) -> List[str]:
+def _split_prose(text: str) -> list[str]:
     words = text.split()
     if not words:
         return []
     if len(words) <= PROSE_CHUNK_SIZE:
         return [text.strip()]
-    chunks: List[str] = []
+    chunks: list[str] = []
     start = 0
     while start < len(words):
         end = min(start + PROSE_CHUNK_SIZE, len(words))
@@ -51,7 +51,7 @@ def _is_table_separator(line: str) -> bool:
 
 # ── Structure-aware block parser ──────────────────────────────────────────────
 
-def _parse_blocks(text: str) -> List[Tuple[str, str]]:
+def _parse_blocks(text: str) -> list[tuple[str, str]]:
     """
     Split *text* into (content, chunk_type) pairs.
 
@@ -61,8 +61,8 @@ def _parse_blocks(text: str) -> List[Tuple[str, str]]:
     so each tuple is already an indexable unit.
     """
     lines = text.splitlines(keepends=True)
-    blocks: List[Tuple[str, str]] = []
-    prose_buf: List[str] = []
+    blocks: list[tuple[str, str]] = []
+    prose_buf: list[str] = []
 
     def flush_prose() -> None:
         if not prose_buf:
@@ -82,7 +82,7 @@ def _parse_blocks(text: str) -> List[Tuple[str, str]]:
         if stripped.startswith("```") or stripped.startswith("~~~"):
             flush_prose()
             fence = "```" if stripped.startswith("```") else "~~~"
-            code_lines: List[str] = [raw]
+            code_lines: list[str] = [raw]
             i += 1
             while i < len(lines):
                 code_lines.append(lines[i])
@@ -110,7 +110,7 @@ def _parse_blocks(text: str) -> List[Tuple[str, str]]:
             and _is_table_separator(lines[i + 1])
         ):
             flush_prose()
-            table_lines: List[str] = []
+            table_lines: list[str] = []
             while i < len(lines) and (
                 _is_table_row(lines[i].strip()) or _is_table_separator(lines[i].strip())
             ):
@@ -135,8 +135,8 @@ def chunk_context(
     context_id: str,
     session_id: str,
     project_id: str,
-    raw_content: Dict[str, Any],
-) -> List[Dict[str, Any]]:
+    raw_content: dict[str, Any],
+) -> list[dict[str, Any]]:
     """
     Convert a captured context's raw_content into flat indexable chunks.
 
@@ -144,8 +144,8 @@ def chunk_context(
     so code fences and tables are never split mid-structure. Metadata includes
     chunk_type so the retrieval layer can filter or weight by structural type.
     """
-    chunks: List[Dict[str, Any]] = []
-    messages: List[Dict] = raw_content.get("messages", [])
+    chunks: list[dict[str, Any]] = []
+    messages: list[dict] = raw_content.get("messages", [])
     title: str = raw_content.get("title", "") or ""
     platform: str = raw_content.get("platform", "unknown") or "unknown"
     chat_url: str = raw_content.get("chat_url", "") or ""
@@ -160,7 +160,7 @@ def chunk_context(
     }
 
     def _build_chunks(
-        blocks: List[Tuple[str, str]],
+        blocks: list[tuple[str, str]],
         role: str,
         msg_idx: int,
         id_prefix: str,

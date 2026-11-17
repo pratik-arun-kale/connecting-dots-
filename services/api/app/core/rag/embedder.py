@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import threading
-from typing import List
 
 from sentence_transformers import SentenceTransformer
 
@@ -21,11 +20,11 @@ def _get_model() -> SentenceTransformer:
     return _model
 
 
-def embed_texts(texts: List[str]) -> List[List[float]]:
+def embed_texts(texts: list[str]) -> list[list[float]]:
     model = _get_model()
     return model.encode(texts, convert_to_numpy=True, show_progress_bar=False).tolist()
 
 
-def embed_query(query: str) -> List[float]:
+def embed_query(query: str) -> list[float]:
     model = _get_model()
     return model.encode(query, convert_to_numpy=True).tolist()

@@ -11,7 +11,7 @@ reimplemented.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from app.core.rag import embedder, vector_store, vocabulary
 from app.core.rag.query_normalizer import _max_edit_distance, levenshtein_distance
@@ -35,7 +35,7 @@ TITLE_SUGGESTION_SLACK = 2
 SEMANTIC_SIMILARITY_FLOOR = 0.35
 
 
-def _closest_terms(topic: str, project_id: str, kind: str, limit: int) -> List[str]:
+def _closest_terms(topic: str, project_id: str, kind: str, limit: int) -> list[str]:
     """Rank every known term of the given kind ('technology' or 'topic') by
     edit distance to `topic`, closest first, ties broken by frequency."""
     topic_lower = topic.lower()
@@ -49,7 +49,7 @@ def _closest_terms(topic: str, project_id: str, kind: str, limit: int) -> List[s
     scored.sort()
     # De-dupe while preserving best-first order (same canonical can appear
     # once per kind already, but guard against case variants slipping through)
-    ordered: List[str] = []
+    ordered: list[str] = []
     seen_lower: set = set()
     for _, _, canonical in scored:
         if canonical.lower() not in seen_lower:
@@ -60,14 +60,14 @@ def _closest_terms(topic: str, project_id: str, kind: str, limit: int) -> List[s
     return ordered
 
 
-def _closest_titles(project_id: str, topic: str, limit: int) -> List[Dict[str, Any]]:
+def _closest_titles(project_id: str, topic: str, limit: int) -> list[dict[str, Any]]:
     """
     Fuzzy (lexical) title matching plus semantic similarity, reusing the exact
     embed_query + vector_store.retrieve calls the main pipeline already uses —
     no separate embedding infrastructure for suggestions.
     """
     all_chunks = vector_store.get_all_chunks(project_id)
-    matches: Dict[str, Dict[str, Any]] = {}
+    matches: dict[str, dict[str, Any]] = {}
     topic_lower = topic.lower()
 
     for chunk in all_chunks:
@@ -95,7 +95,7 @@ def _closest_titles(project_id: str, topic: str, limit: int) -> List[Dict[str, A
     return list(matches.values())[:limit]
 
 
-def generate_suggestions(project_id: str, topic: str) -> Dict[str, Any]:
+def generate_suggestions(project_id: str, topic: str) -> dict[str, Any]:
     """
     Returns:
       {

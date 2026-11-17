@@ -1,0 +1,141 @@
+name: Release
+
+# Push a tag to release:  git tag v3.1.0 && git push origin v3.1.0
+# The tag must match apps/extension/package.json "version" and have a
+# "## [3.1.0]" section in CHANGELOG.md.
+#
+# Needs these repository variables (Settings → Secrets and variables →
+# Actions → Variables):
+#   PROD_API_URL        e.g. https://api.example.com/api/v1
+#   PROD_DASHBOARD_URL  e.g. https://app.example.com
+# The production build refuses to run without them, or with non-https URLs.
+#
+# Not here yet: deploying the dashboard and the API. That waits on the
+# hosting decision (see docs/PRODUCTION_PLAN.md, open questions).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # create the GitHub release
+  packages: write   # push the API image to ghcr.io
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  check:
+    name: Tag matches version and changelog
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./apps/extension/package.json').version")
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag does not match apps/extension/package.json version $pkg"
+            exit 1
+          fi
+          if ! grep -q "^## \[$tag\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [$tag]' section"
+            exit 1
+          fi
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+  extension:
+    name: Extension — production zip
+    needs: check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/extension
+    env:
+      VITE_API_URL: ${{ vars.PROD_API_URL }}
+      VITE_DASHBOARD_URL: ${{ vars.PROD_DASHBOARD_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/extension/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build:prod
+      - name: No local origins in the built manifest
+        run: |
+          if grep -E 'localhost|127\.0\.0\.1' dist/manifest.json; then
+            echo "::error::production manifest names a local origin"
+            exit 1
+          fi
+      - name: Zip
+        run: cd dist && zip -qr "../connecting-dots-extension-${{ needs.check.outputs.version }}.zip" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: apps/extension/connecting-dots-extension-${{ needs.check.outputs.version }}.zip
+
+  api-image:
+    name: API — image to ghcr.io
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        working-directory: services/api
+        run: |
+          # The repo name ends in "-", which is not a valid image name, so
+          # the image is named after the project instead.
+          image="ghcr.io/$(echo '${{ github.repository_owner }}' | tr 'A-Z' 'a-z')/connecting-dots-api"
+          version="${{ needs.check.outputs.version }}"
+          docker build --target runtime \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.version=$version" \
+            -t "$image:$version" -t "$image:latest" .
+          # Never ship a secret baked into the image (see .dockerignore).
+          if docker run --rm --entrypoint sh "$image:$version" -c 'test -e /app/.env'; then
+            echo "::error::.env is inside the image"
+            exit 1
+          fi
+          docker push "$image:$version"
+          docker push "$image:latest"
+          echo "pushed $image:$version" >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: GitHub release
+    needs: [check, extension, api-image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: extension-zip
+      - name: Create the release with the changelog section as notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          # Lines after "## [<version>]" up to the next "## [" heading.
+          awk -v h="## [$VERSION]" '
+            index($0, h) == 1 { on = 1; next }
+            on && index($0, "## [") == 1 { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "::error::empty release notes"; exit 1; }
+          gh release create "$GITHUB_REF_NAME" \
+            "connecting-dots-extension-$VERSION.zip" \
+            --title "v$VERSION" --notes-file notes.md

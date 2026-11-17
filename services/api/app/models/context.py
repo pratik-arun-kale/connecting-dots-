@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -22,8 +22,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.mixins import UUIDPrimaryKeyMixin
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.models.session import Session
@@ -105,7 +103,7 @@ class Context(Base, UUIDPrimaryKeyMixin):
     )
 
     # ── Relationships ────────────────────────────────────────────────────────
-    session: Mapped["Session"] = relationship(
+    session: Mapped[Session] = relationship(
         "Session",
         back_populates="contexts",
         lazy="noload",

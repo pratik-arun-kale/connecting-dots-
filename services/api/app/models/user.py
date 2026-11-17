@@ -32,7 +32,7 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # ── Relationships ────────────────────────────────────────────────────────
-    projects: Mapped[list["Project"]] = relationship(
+    projects: Mapped[list[Project]] = relationship(
         "Project",
         back_populates="owner",
         cascade="all, delete-orphan",

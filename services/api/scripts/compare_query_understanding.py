@@ -15,26 +15,24 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Dict, List, Optional
 
 sys.path.insert(0, ".")
 
-from app.core.rag import pipeline
+from app.core.rag import pipeline, vocabulary
 from app.core.rag import query_candidates as qc
 from app.core.rag import query_normalizer as qn
-from app.core.rag import vocabulary
 from app.core.rag.query_candidates import QueryCandidate
 
 PROJECT_ID = "630c2dc6-bac4-4f50-b1e1-1cf6c514b4ad"
 
 
-def old_generate_query_candidates(query: str, project_id: Optional[str] = None) -> List[QueryCandidate]:
+def old_generate_query_candidates(query: str, project_id: str | None = None) -> list[QueryCandidate]:
     """Reproduces pre-redesign candidate generation: everything EXCEPT the
     topic_centric step. Reuses the exact same underlying primitives
     (qn.*, vocabulary.*) that query_candidates.py itself calls, so this is a
     faithful reconstruction of "current implementation" before this session's
     change, not a reimplementation that could drift from it."""
-    candidates: List[QueryCandidate] = []
+    candidates: list[QueryCandidate] = []
     seen: dict = {}
 
     def _add(label: str, text: str, weight: float) -> None:
@@ -56,7 +54,7 @@ def old_generate_query_candidates(query: str, project_id: Optional[str] = None) 
     _add("normalized", cleaned, 0.75)
 
     intent_ready = qn._fuzzy_correct_intent_words(cleaned)
-    extracted_topic: Optional[str] = None
+    extracted_topic: str | None = None
     for pattern in qn._CONVERSATION_SEARCH_PATTERNS:
         match = pattern.match(intent_ready)
         if match:
@@ -85,7 +83,7 @@ RAG_TITLE = "RAG - RAG Chunking for Complex Data"
 NVIDIA_TITLE = "NVIDIA Monopoly Explained"
 VAULT_TITLE = "Context Vault Architecture with LangGraph"
 
-QUERIES: List[Dict[str, str]] = [
+QUERIES: list[dict[str, str]] = [
     # RAG (18)
     {"q": "RAG", "expect": RAG_TITLE},
     {"q": "rag", "expect": RAG_TITLE},
@@ -146,11 +144,11 @@ QUERIES: List[Dict[str, str]] = [
 ]
 
 
-def evaluate(label: str) -> Dict[str, object]:
+def evaluate(label: str) -> dict[str, object]:
     hits = 0
-    precisions: List[float] = []
-    recalls: List[float] = []
-    rows: List[Dict[str, object]] = []
+    precisions: list[float] = []
+    recalls: list[float] = []
+    rows: list[dict[str, object]] = []
 
     for item in QUERIES:
         query, expected = item["q"], item["expect"]

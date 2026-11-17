@@ -11,7 +11,9 @@ from app.schemas.base import AppBaseModel
 
 
 class RagQueryRequest(AppBaseModel):
-    question: str = Field(..., min_length=3, max_length=1000, description="Natural language question about captured contexts")
+    question: str = Field(
+        ..., min_length=3, max_length=1000, description="Natural language question about captured contexts"
+    )
 
 
 class RagCitation(AppBaseModel):

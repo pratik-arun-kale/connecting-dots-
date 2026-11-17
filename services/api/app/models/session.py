@@ -93,7 +93,9 @@ class Session(Base, UUIDPrimaryKeyMixin):
     # ── Link result ──────────────────────────────────────────────────────────
     tab_url:    Mapped[str | None]      = mapped_column(String(2048), nullable=True)
     linked_url: Mapped[str | None]      = mapped_column(String(2048), nullable=True)
-    link_status: Mapped[str]            = mapped_column(String(20), nullable=False, default=LinkStatus.PENDING, index=True)
+    link_status: Mapped[str]            = mapped_column(
+        String(20), nullable=False, default=LinkStatus.PENDING, index=True
+    )
     linked_at:  Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # ── Failure ──────────────────────────────────────────────────────────────
@@ -105,8 +107,8 @@ class Session(Base, UUIDPrimaryKeyMixin):
     )
 
     # ── Relationships ────────────────────────────────────────────────────────
-    project: Mapped["Project"] = relationship("Project", back_populates="sessions", lazy="noload")
-    contexts: Mapped[list["Context"]] = relationship(
+    project: Mapped[Project] = relationship("Project", back_populates="sessions", lazy="noload")
+    contexts: Mapped[list[Context]] = relationship(
         "Context", back_populates="session", cascade="all, delete-orphan", lazy="noload"
     )
 

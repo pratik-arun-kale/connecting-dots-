@@ -74,13 +74,12 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     The session is committed on success and rolled back on any exception.
     """
     factory = get_session_factory()
-    async with factory() as session:
-        async with session.begin():
-            try:
-                yield session
-            except Exception:
-                await session.rollback()
-                raise
+    async with factory() as session, session.begin():
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
 
 
 # ── Lifecycle helpers (called from app lifespan) ─────────────────────────────

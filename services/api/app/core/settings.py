@@ -7,7 +7,6 @@ All secrets come from environment variables or a .env file.
 
 from functools import lru_cache
 from typing import Literal
-
 from urllib.parse import quote_plus
 
 from pydantic import Field, field_validator, model_validator
@@ -145,8 +144,10 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     openai_temperature: float = 0.1
     openai_max_tokens: int = 512          # output token cap — bounds answer length and cost
-    openai_timeout_sec: float = 30.0      # cloud round-trip is fast; keep this short so a stuck call doesn't tie up a thread-pool worker
-    openai_context_chunks: int = 3        # max reranked chunks considered for context, before the token-budget truncation in openai_generator.py
+    # Cloud round-trip is fast; keep this short so a stuck call doesn't tie up a thread-pool worker.
+    openai_timeout_sec: float = 30.0
+    # Max reranked chunks considered for context, before the token-budget truncation in openai_generator.py.
+    openai_context_chunks: int = 3
 
     @field_validator("openai_api_key")
     @classmethod

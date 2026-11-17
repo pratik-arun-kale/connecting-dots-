@@ -24,9 +24,22 @@ addopts = [
 ]
 
 [tool.ruff]
-target-version = "py312"
-line-length = 100
+# py310, not py312: Docker and CI run 3.12, but local development still runs
+# on 3.10, so fixes must not introduce 3.11+ syntax (e.g. datetime.UTC).
+target-version = "py310"
+line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["B008"]   # do not perform function calls in argument defaults (FastAPI Depends)
+
+[tool.mypy]
+# Run from services/api: `mypy`. Strictness is added module by module once
+# the current errors are fixed (see the report-only CI step).
+python_version = "3.12"
+files = ["app", "main.py"]
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true

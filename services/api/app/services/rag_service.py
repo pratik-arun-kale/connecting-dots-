@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Any, Dict
+from typing import Any
 
 from app.core.logging import get_logger
 from app.core.rag import chunker, embedder, pipeline, vector_store, vocabulary
@@ -25,10 +25,10 @@ REINDEX_DELAY_SEC = 5.0
 
 # context_id -> token of its most recent re-index request. In-process only,
 # like app/core/rate_limit.py: with several workers, each coalesces its own.
-_latest_reindex: Dict[str, object] = {}
+_latest_reindex: dict[str, object] = {}
 
 
-def raw_content_for_index(context: Context) -> Dict[str, Any]:
+def raw_content_for_index(context: Context) -> dict[str, Any]:
     """What to index for a context as it stands now, in the raw_content shape
     chunker.chunk_context() expects. Notes (platform "note") are indexed from
     content_md, where edits land — their raw_content is only the first-save
@@ -57,7 +57,7 @@ class RagService:
         context_id: uuid.UUID,
         session_id: uuid.UUID,
         project_id: uuid.UUID,
-        raw_content: Dict[str, Any],
+        raw_content: dict[str, Any],
     ) -> None:
         """
         Chunk + embed + upsert a captured context into the project's ChromaDB collection.
@@ -76,7 +76,7 @@ class RagService:
         context_id: uuid.UUID,
         session_id: uuid.UUID,
         project_id: uuid.UUID,
-        raw_content: Dict[str, Any],
+        raw_content: dict[str, Any],
         delay: float = REINDEX_DELAY_SEC,
     ) -> None:
         """
@@ -99,7 +99,7 @@ class RagService:
         context_id: str,
         session_id: str,
         project_id: str,
-        raw_content: Dict[str, Any],
+        raw_content: dict[str, Any],
     ) -> None:
         # Delete first: chunk ids are positional (<context>__m<i>__c<j>), so
         # upserting a shorter text would leave the old tail chunks behind.
@@ -111,7 +111,7 @@ class RagService:
         context_id: str,
         session_id: str,
         project_id: str,
-        raw_content: Dict[str, Any],
+        raw_content: dict[str, Any],
     ) -> None:
         chunks = chunker.chunk_context(context_id, session_id, project_id, raw_content)
         if not chunks:
@@ -128,7 +128,7 @@ class RagService:
                 "embedding": emb,
                 "metadata": c["metadata"],
             }
-            for c, emb in zip(chunks, embeddings)
+            for c, emb in zip(chunks, embeddings, strict=False)
         ]
         vector_store.upsert_chunks(project_id, enriched)
 
@@ -149,7 +149,7 @@ class RagService:
 
     async def query_project(
         self, project_id: uuid.UUID, question: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Run the full RAG pipeline against a project's captured contexts."""
         result = await asyncio.to_thread(
             pipeline.run_query, str(project_id), question
@@ -165,7 +165,7 @@ class RagService:
 
     async def search_conversations(
         self, project_id: uuid.UUID, query: str, top_k: int = 10
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find which captured conversations discussed a topic — retrieval only,
         no Ollama / answer generation. Reuses the same hybrid retrieval core

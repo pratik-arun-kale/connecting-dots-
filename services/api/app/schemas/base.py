@@ -11,7 +11,6 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
-
 # ── Base configuration ────────────────────────────────────────────────────────
 
 class AppBaseModel(BaseModel):

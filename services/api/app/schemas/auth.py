@@ -14,7 +14,6 @@ from pydantic import EmailStr, Field
 
 from app.schemas.base import AppBaseModel
 
-
 # ── Requests ───────────────────────────────────────────────────────────────────
 
 class RegisterRequest(AppBaseModel):

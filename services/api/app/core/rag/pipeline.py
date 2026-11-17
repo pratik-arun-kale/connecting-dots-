@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 import threading
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
@@ -48,13 +48,13 @@ def _get_reranker() -> CrossEncoder:
 
 # ── Tokenisation ───────────────────────────────────────────────────────────────
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     return [t for t in re.findall(r"\b\w+\b", text.lower()) if len(t) > 1]
 
 
 # ── BM25 retrieval ─────────────────────────────────────────────────────────────
 
-def _bm25_retrieve(chunks: List[Dict], query: str, top_k: int = 10) -> List[Dict]:
+def _bm25_retrieve(chunks: list[dict], query: str, top_k: int = 10) -> list[dict]:
     if not chunks:
         return []
     tokenized_docs = [_tokenize(c["text"]) for c in chunks]
@@ -69,7 +69,7 @@ def _bm25_retrieve(chunks: List[Dict], query: str, top_k: int = 10) -> List[Dict
                 "text": c["text"],
                 "metadata": c["metadata"],
             }
-            for c, s in zip(chunks, scores)
+            for c, s in zip(chunks, scores, strict=False)
         ],
         key=lambda x: x["score"],
         reverse=True,
@@ -82,12 +82,12 @@ def _bm25_retrieve(chunks: List[Dict], query: str, top_k: int = 10) -> List[Dict
 # ── Reciprocal Rank Fusion ────────────────────────────────────────────────────
 
 def _rrf(
-    bm25_results: List[Dict],
-    vector_results: List[Dict],
+    bm25_results: list[dict],
+    vector_results: list[dict],
     top_k: int = 20,
     k: int = 60,
-) -> List[Dict]:
-    scores: Dict[str, Dict] = {}
+) -> list[dict]:
+    scores: dict[str, dict] = {}
     for r in bm25_results:
         cid = r["chunk_id"]
         scores.setdefault(
@@ -127,14 +127,14 @@ def _rrf(
 
 # ── Cross-encoder reranking ───────────────────────────────────────────────────
 
-def _rerank(query: str, candidates: List[Dict], top_k: int = 5) -> List[Dict]:
+def _rerank(query: str, candidates: list[dict], top_k: int = 5) -> list[dict]:
     if not candidates:
         return []
     reranker = _get_reranker()
     pairs = [(query, c["text"]) for c in candidates]
     scores = reranker.predict(pairs)
     ranked = sorted(
-        [{**c, "reranker_score": float(s)} for c, s in zip(candidates, scores)],
+        [{**c, "reranker_score": float(s)} for c, s in zip(candidates, scores, strict=False)],
         key=lambda x: x["reranker_score"],
         reverse=True,
     )[:top_k]
@@ -145,7 +145,7 @@ def _rerank(query: str, candidates: List[Dict], top_k: int = 5) -> List[Dict]:
 
 # ── Confidence grading ────────────────────────────────────────────────────────
 
-def _grade(reranked: List[Dict]) -> Tuple[float, str, bool]:
+def _grade(reranked: list[dict]) -> tuple[float, str, bool]:
     """Returns (top_score, confidence_level, needs_corrective_retrieval)."""
     if not reranked:
         return 0.0, "LOW", True
@@ -177,7 +177,7 @@ def _grade(reranked: List[Dict]) -> Tuple[float, str, bool]:
 
 # ── Query transformation (lightweight, no LLM) ───────────────────────────────
 
-_SYNONYM_MAP: Dict[str, List[str]] = {
+_SYNONYM_MAP: dict[str, list[str]] = {
     "remote": ["telework", "work from home", "distributed"],
     "expense": ["reimbursement", "spending", "cost"],
     "leave": ["vacation", "time off", "absence", "holiday"],
@@ -195,7 +195,7 @@ _STOP_WORDS = {
 
 def _expand_query(query: str) -> str:
     tokens = re.findall(r"\b\w+\b", query.lower())
-    extra: List[str] = []
+    extra: list[str] = []
     for t in tokens:
         if t in _SYNONYM_MAP:
             extra.extend(_SYNONYM_MAP[t])
@@ -214,7 +214,7 @@ def _simplify_query(query: str) -> str:
 
 def _retrieve(
     project_id: str, question: str, rerank_top_k: int = 5
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Run the full hybrid retrieval pipeline against a project's captured contexts.
     This function is CPU-bound and should be called via asyncio.to_thread().
@@ -230,7 +230,7 @@ def _retrieve(
             "chunks_indexed": 0,
         }
 
-    def _full_retrieval(q: str) -> Tuple[List, List, List, List]:
+    def _full_retrieval(q: str) -> tuple[list, list, list, list]:
         bm25_r = _bm25_retrieve(all_chunks, q)
         vec_r = vector_store.retrieve(project_id, embedder.embed_query(q))
         fused = _rrf(bm25_r, vec_r)
@@ -280,8 +280,8 @@ def _retrieve(
 # ("Run the reranker once on the merged candidates").
 
 def _retrieve_multi_candidate(
-    project_id: str, candidates: List[QueryCandidate], rerank_top_k: int = 8
-) -> Dict[str, Any]:
+    project_id: str, candidates: list[QueryCandidate], rerank_top_k: int = 8
+) -> dict[str, Any]:
     all_chunks = vector_store.get_all_chunks(project_id)
     if not all_chunks or not candidates:
         return {
@@ -294,8 +294,8 @@ def _retrieve_multi_candidate(
             "merged_chunk_count": 0,
         }
 
-    candidate_chunks: Dict[str, List[str]] = {}
-    merged: Dict[str, Dict[str, Any]] = {}  # chunk_id -> fused entry + candidate_weight/matched_by
+    candidate_chunks: dict[str, list[str]] = {}
+    merged: dict[str, dict[str, Any]] = {}  # chunk_id -> fused entry + candidate_weight/matched_by
 
     for cand in candidates:
         bm25_r = _bm25_retrieve(all_chunks, cand.query)
@@ -317,7 +317,8 @@ def _retrieve_multi_candidate(
                 if f["rrf_score"] > existing["rrf_score"]:
                     existing["rrf_score"] = f["rrf_score"]
                     existing["bm25_rank"] = f["bm25_rank"] if f["bm25_rank"] is not None else existing["bm25_rank"]
-                    existing["vector_rank"] = f["vector_rank"] if f["vector_rank"] is not None else existing["vector_rank"]
+                    if f["vector_rank"] is not None:
+                        existing["vector_rank"] = f["vector_rank"]
 
     merged_list = sorted(merged.values(), key=lambda x: x["rrf_score"], reverse=True)[:20]
 
@@ -349,7 +350,7 @@ def _retrieve_multi_candidate(
 
 # ── Main pipeline (QA — generates an answer) ─────────────────────────────────
 
-def run_query(project_id: str, question: str) -> Dict[str, Any]:
+def run_query(project_id: str, question: str) -> dict[str, Any]:
     """
     Run the full hybrid RAG pipeline against a project's captured contexts.
     This function is CPU-bound and should be called via asyncio.to_thread().
@@ -380,7 +381,7 @@ def run_query(project_id: str, question: str) -> Dict[str, Any]:
             "I couldn't find sufficiently relevant information in your captured conversations. "
             "Try capturing more context or rephrasing your question."
         )
-        citations: List[Dict] = []
+        citations: list[dict] = []
     else:
         answer_text = generate_answer(question, reranked)
         seen_ctx: set = set()
@@ -414,7 +415,7 @@ def run_query(project_id: str, question: str) -> Dict[str, Any]:
 
 # ── Conversation search: fuzzy title fallback (Phase 3) ──────────────────────
 
-def _fuzzy_match_conversations_by_title(project_id: str, topic: str) -> List[Dict[str, Any]]:
+def _fuzzy_match_conversations_by_title(project_id: str, topic: str) -> list[dict[str, Any]]:
     """
     Last-resort fallback for when the normalized query still comes back with
     LOW confidence from the hybrid pipeline (a genuinely novel typo the
@@ -425,7 +426,7 @@ def _fuzzy_match_conversations_by_title(project_id: str, topic: str) -> List[Dic
     doesn't need its own index or embedding call.
     """
     all_chunks = vector_store.get_all_chunks(project_id)
-    seen: Dict[str, Dict[str, Any]] = {}
+    seen: dict[str, dict[str, Any]] = {}
     topic_lower = topic.lower()
     max_dist = _max_edit_distance(topic_lower)
 
@@ -472,7 +473,7 @@ def _title_match_bonus(topic: str, title: str) -> float:
     return 0.0
 
 
-def _metadata_match_bonus(topic: str, meta: Dict[str, Any]) -> float:
+def _metadata_match_bonus(topic: str, meta: dict[str, Any]) -> float:
     """Part 4 scoring factor. Small reward when the topic matches structured
     metadata (platform) rather than just free text — a real but much weaker
     signal than a title match, hence the smaller, capped bonus."""
@@ -492,7 +493,7 @@ def _chunk_count_bonus(num_chunks: int) -> float:
     return min(0.05 * max(num_chunks - 1, 0), 0.3)
 
 
-def _filter_positive_chunks(reranked: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _filter_positive_chunks(reranked: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Widening to top-5 (vs run_query's top-3) gives multi-candidate retrieval
     room to surface more than one genuinely distinct conversation — but rank
@@ -508,7 +509,7 @@ def _filter_positive_chunks(reranked: List[Dict[str, Any]]) -> List[Dict[str, An
 
 def search_conversations(
     project_id: str, query: str, top_k: int = 10
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Find which captured conversations discussed a topic — multi-candidate
     hybrid retrieval (Part 2: several reformulations of the query are each
@@ -556,11 +557,11 @@ def search_conversations(
     )
 
     if retrieval["chunks_indexed"] == 0 or retrieval["confidence"] == "LOW" or not reranked:
-        fuzzy_matches: List[Dict[str, Any]] = []
+        fuzzy_matches: list[dict[str, Any]] = []
         if retrieval["chunks_indexed"] > 0:
             fuzzy_matches = _fuzzy_match_conversations_by_title(project_id, normalized_query)
 
-        suggestions_payload: Dict[str, Any] | None = None
+        suggestions_payload: dict[str, Any] | None = None
         if not fuzzy_matches and retrieval["chunks_indexed"] > 0:
             from app.core.rag import suggestions as suggestions_module  # lazy: only needed on the rare no-results path
 
@@ -586,7 +587,7 @@ def search_conversations(
             "suggestions": suggestions_payload,
         }
 
-    conversations: Dict[str, Dict[str, Any]] = {}
+    conversations: dict[str, dict[str, Any]] = {}
     for r in reranked:
         meta = r["metadata"]
         ctx_id = meta.get("context_id", "")
@@ -616,7 +617,7 @@ def search_conversations(
             entry["relevance_score"] = max(entry["relevance_score"], chunk_score)
         entry["_snippets"].append((chunk_score, r["text"][:400]))
 
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     for entry in conversations.values():
         snippets_sorted = sorted(entry.pop("_snippets"), key=lambda s: s[0], reverse=True)
         entry["top_relevant_snippets"] = [text for _, text in snippets_sorted[:3]]

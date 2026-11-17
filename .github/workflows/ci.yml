@@ -98,9 +98,14 @@ jobs:
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
-      # Bug-class rules only for now (syntax errors, undefined names, unused
-      # imports/variables); the full style ruleset is a separate cleanup.
-      - run: ruff check app main.py tests --select E9,F
+      # The full ruleset in pyproject.toml. `ruff format` is not enforced:
+      # much of the code is hand-aligned in columns on purpose.
+      - run: ruff check app main.py tests scripts
+      # Report-only until the existing errors are fixed; then drop
+      # continue-on-error so a type error fails the build.
+      - name: mypy (report only)
+        continue-on-error: true
+        run: mypy
       - run: pytest
 
   e2e:

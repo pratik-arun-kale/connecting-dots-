@@ -61,22 +61,22 @@ Goal: no `localhost` in shipped code, three environments, and every push checked
 
 **Config in one place**
 
-- [ ] Create `apps/extension/src/config.ts` exporting `API_BASE_URL` and `DASHBOARD_URL` from `import.meta.env.VITE_API_URL` / `VITE_DASHBOARD_URL`; fail the build if either is missing.
-- [ ] Replace the hard-coded URLs in the 7 files: `BackendClient.ts`, `authService.ts`, `lib/api.ts`, `searchClient.ts`, `note-cs.ts`, `AskAICard.tsx`, `LoginForm.tsx`. Add an ESLint `no-restricted-syntax` rule that rejects the string `localhost` outside `config.ts`.
-- [ ] Add `.env.development`, `.env.staging`, `.env.production` for the extension; `vite build --mode staging` picks one.
-- [ ] Generate `host_permissions` for the API origin per mode in `scripts/postbuild.mjs`, so production builds never request `localhost`.
-- [ ] Dashboard: read the API URL and extension ID only from `NEXT_PUBLIC_*` vars and validate them at startup with `zod`.
-- [ ] Backend: one `pydantic-settings` `Settings` class; CORS origins, DB URL, JWT secret, LLM keys all from env, with no defaults for secrets.
+- [x] Create `apps/extension/src/config.ts` exporting `API_BASE_URL` and `DASHBOARD_URL` from `import.meta.env.VITE_API_URL` / `VITE_DASHBOARD_URL`; fail the build if either is missing.
+- [x] Replace the hard-coded URLs in the 7 files: `BackendClient.ts`, `authService.ts`, `lib/api.ts`, `searchClient.ts`, `note-cs.ts`, `AskAICard.tsx`, `LoginForm.tsx`. Add an ESLint `no-restricted-syntax` rule that rejects the string `localhost` outside `config.ts`.
+- [x] Add `.env.development`, `.env.staging`, `.env.production` for the extension; `vite build --mode staging` picks one. *Done as `npm run build:staging` / `build:prod`; staging and production URLs come from the environment (release CI uses the `PROD_API_URL` / `PROD_DASHBOARD_URL` repo variables) until hosting is chosen.*
+- [x] Generate `host_permissions` for the API origin per mode in `scripts/postbuild.mjs`, so production builds never request `localhost`.
+- [x] Dashboard: read the API URL and extension ID only from `NEXT_PUBLIC_*` vars and validate them at startup with `zod`.
+- [x] Backend: one `pydantic-settings` `Settings` class; CORS origins, DB URL, JWT secret, LLM keys all from env, with no defaults for secrets.
 
 **Local stack**
 
-- [ ] `docker-compose.yml` with `postgres`, `redis` (needed in Phase 6), `api`, `dashboard`; `pnpm dev` starts compose plus the extension in watch mode.
-- [ ] Seed script `services/api/scripts/seed.py`: one demo user, two projects, twenty notes.
+- [x] `docker-compose.yml` with `postgres`, `redis` (needed in Phase 6), `api`, `dashboard`; `pnpm dev` starts compose plus the extension in watch mode. *Compose runs Postgres + API (Redis opt-in); the dashboard and extension run on the host.*
+- [x] Seed script `services/api/scripts/seed.py`: one demo user, two projects, twenty notes. *Goes through the HTTP API; idempotent; localhost only unless `--allow-remote`.*
 
 **Code quality**
 
-- [ ] Shared `packages/config` with `tsconfig.base.json` (`strict: true`), ESLint flat config and Prettier; backend gets `ruff` + `mypy`.
-- [ ] `husky` + `lint-staged` pre-commit: format and lint changed files.
+- [ ] Shared `packages/config` with `tsconfig.base.json` (`strict: true`), ESLint flat config and Prettier; backend gets `ruff` + `mypy`. *Partly: both apps already use `strict: true`; full ruff ruleset passes and is enforced in CI; mypy runs in CI report-only. Still to do: ESLint for the extension, Prettier, shared config package.*
+- [x] `husky` + `lint-staged` pre-commit: format and lint changed files. *Done as a dependency-free hook in `.githooks/pre-commit` (ruff, ESLint, localhost guard on staged files), enabled by `npm run setup`.*
 
 **CI pipeline** (GitHub Actions; the same jobs map one-to-one to GitLab CI)
 
@@ -86,10 +86,10 @@ Goal: no `localhost` in shipped code, three environments, and every push checked
 | `test-unit` | every push | Vitest (extension, dashboard), `pytest` (api) with a Postgres service container |
 | `build` | every push | extension zip, `next build`, api Docker image |
 | `e2e` | pull requests to `main` | Playwright suite from Phase 4 against the compose stack |
-| `release` | tag `v*` | upload extension zip as an artifact, push api image, deploy dashboard |
+| `release` | tag `v*` | upload extension zip as an artifact, push api image, deploy dashboard *(deploy waits on hosting)* |
 
-- [ ] Protect `main`: pull request required, all jobs green.
-- [ ] Version from one place: `apps/extension/package.json` version written into `manifest.json` at build; `CHANGELOG.md` updated per release.
+- [ ] Protect `main`: pull request required, all jobs green. *Blocked: `main` holds only the initial commit; merge the week branches first.*
+- [x] Version from one place: `apps/extension/package.json` version written into `manifest.json` at build; `CHANGELOG.md` updated per release. *`release.yml` refuses a tag that doesn't match the version or has no changelog section.*
 
 **Done when**: `grep -r localhost apps/*/src` finds only `config.ts`, and a pull request cannot merge with a failing check.
 

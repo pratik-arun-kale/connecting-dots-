@@ -60,7 +60,8 @@ class TestGenerateAnswer:
         with patch("openai.OpenAI") as mock_client_cls:
             mock_client = mock_client_cls.return_value
             mock_client.chat.completions.create.return_value = mock_openai_response("The generated answer.")
-            result = openai_generator.generate_answer("What is RAG?", [make_chunk("RAG is retrieval-augmented generation.")])
+            chunks = [make_chunk("RAG is retrieval-augmented generation.")]
+            result = openai_generator.generate_answer("What is RAG?", chunks)
         assert result == "The generated answer."
 
     def test_passes_configured_model_temperature_and_max_tokens(self, monkeypatch):

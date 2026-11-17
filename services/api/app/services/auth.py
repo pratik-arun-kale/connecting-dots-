@@ -7,14 +7,20 @@ rotation + reuse detection), and logout.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.exceptions import ConflictException, ForbiddenException, UnauthorizedException
 from app.core.logging import get_logger
-from app.core.security import create_access_token, generate_refresh_token, hash_password, hash_refresh_token, verify_password
+from app.core.security import (
+    create_access_token,
+    generate_refresh_token,
+    hash_password,
+    hash_refresh_token,
+    verify_password,
+)
 from app.core.settings import settings
 from app.models.user import User
 from app.repositories.auth_session import AuthSessionRepository

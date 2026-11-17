@@ -42,8 +42,6 @@ the one used as the reranking query for the merged candidate pool.
 """
 from __future__ import annotations
 
-from typing import Dict, Optional
-
 from app.core.rag.query_normalizer import (
     _TECHNICAL_TERMS_LOWER,
     _WORD_RE,
@@ -89,10 +87,10 @@ _INTENT_WORDS = {
 
 # Everything checked for removal after spell-correction.
 _REMOVAL_VOCAB = _STOP_WORDS | _INTENT_WORDS
-_REMOVAL_LOOKUP: Dict[str, str] = {w: w for w in _REMOVAL_VOCAB}
+_REMOVAL_LOOKUP: dict[str, str] = {w: w for w in _REMOVAL_VOCAB}
 
 
-def _spell_correct_token(token: str, vocab_map: Optional[Dict[str, str]]) -> str:
+def _spell_correct_token(token: str, vocab_map: dict[str, str] | None) -> str:
     """
     Fuzzy-correct one token against two vocabularies:
       - the removal vocabulary (fixes typos of intent/stop words, e.g.
@@ -123,7 +121,7 @@ def _spell_correct_token(token: str, vocab_map: Optional[Dict[str, str]]) -> str
     return token
 
 
-def extract_topic(query: str, vocab_map: Optional[Dict[str, str]] = None) -> str:
+def extract_topic(query: str, vocab_map: dict[str, str] | None = None) -> str:
     """
     Topic-centric extraction — the primary conversation-search query-
     understanding mechanism (see module docstring).

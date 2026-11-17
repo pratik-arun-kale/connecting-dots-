@@ -84,7 +84,7 @@ async def get_current_user(
         payload = decode_access_token(token)
         user_id = uuid.UUID(payload["sub"])
     except (jwt.PyJWTError, KeyError, ValueError):
-        raise UnauthorizedException("Invalid or expired access token.")
+        raise UnauthorizedException("Invalid or expired access token.") from None
 
     user = await UserRepository(db).get_by_id(user_id)
     if user is None:

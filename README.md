@@ -19,11 +19,13 @@ Needs Node 20+, Docker, and Chrome.
    cp services/api/.env.example services/api/.env   # then set JWT_SECRET_KEY
    docker compose up -d                              # Postgres + API on :8000, migrated on start
    ```
+   Demo data (optional, API running): `cd services/api && python scripts/seed.py` creates `demo@example.com` / `demo-password-123` with two projects and twenty notes. Safe to run again.
+
    Without Docker: create a Python 3.12 virtualenv in `services/api`, `pip install -r requirements.txt`, point the `POSTGRES_*` variables at your own Postgres, then `alembic upgrade head && uvicorn main:app --reload`.
 
 2. **Dashboard** (http://localhost:3000)
    ```bash
-   npm run setup          # npm ci for the extension and the dashboard
+   npm run setup          # npm ci for both apps, and turns on the pre-commit hook
    npm run dev:dashboard
    ```
 
@@ -52,9 +54,15 @@ npm run check          # lint + localhost guard, typecheck both apps, extension 
 npm run test:e2e       # Playwright: needs a running API + dashboard and a built extension (npm ci --prefix e2e first)
 ```
 
-API tests: `cd services/api && pytest` (needs Postgres; tests use a `<POSTGRES_DB>_test` database).
+API: `cd services/api && ruff check app main.py tests scripts && pytest` (pytest needs Postgres; tests use a `<POSTGRES_DB>_test` database). `mypy` runs in CI as a report only for now.
+
+The pre-commit hook ([.githooks/pre-commit](.githooks/pre-commit), enabled by `npm run setup` or `npm run hooks`) runs ruff and ESLint on staged files and the localhost guard.
 
 CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs all of the above on every push to `master`/`main` and on pull requests.
+
+## Releasing
+
+Move the `[Unreleased]` notes in [CHANGELOG.md](CHANGELOG.md) under the new version, set the same version in `apps/extension/package.json`, then `git tag v<version> && git push origin v<version>`. [release.yml](.github/workflows/release.yml) builds the production extension zip, pushes the API image to `ghcr.io/<owner>/connecting-dots-api`, and creates a GitHub release. It needs the repository variables `PROD_API_URL` and `PROD_DASHBOARD_URL`.
 
 ## Docs
 

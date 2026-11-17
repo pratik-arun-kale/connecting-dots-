@@ -16,7 +16,6 @@ from pydantic import Field, field_validator, model_validator
 
 from app.schemas.base import AppBaseModel, JsonDict
 
-
 # ── Request schemas ───────────────────────────────────────────────────────────
 
 class ContextCapture(AppBaseModel):
@@ -54,7 +53,7 @@ class ContextCreate(AppBaseModel):
     )
 
     @model_validator(mode="after")
-    def _validate_raw_content_non_empty(self) -> "ContextCreate":
+    def _validate_raw_content_non_empty(self) -> ContextCreate:
         if not self.raw_content:
             raise ValueError("raw_content must not be empty.")
         return self
@@ -119,7 +118,7 @@ class NoteUpdateRequest(AppBaseModel):
     user_title: str | None = Field(default=None, max_length=512)
 
     @model_validator(mode="after")
-    def _require_at_least_one_field(self) -> "NoteUpdateRequest":
+    def _require_at_least_one_field(self) -> NoteUpdateRequest:
         # model_fields_set (not "is None") so PATCHing user_note explicitly
         # to null — clearing an annotation — isn't mistaken for "nothing sent".
         if not self.model_fields_set:
