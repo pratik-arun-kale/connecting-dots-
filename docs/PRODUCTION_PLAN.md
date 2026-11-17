@@ -118,7 +118,7 @@ Goal: one user can never read another's data, captured content cannot run script
 - [x] Refresh-token rotation with reuse detection: store a token family; a reused refresh token revokes the whole family. *Reuse revokes every session of the user.*
 - [x] Extension keeps `chrome.storage.session` for the access token; restrict `externally_connectable` to the dashboard origin only. *`externally_connectable` is generated per build from the dashboard URL.*
 - [x] Password hashing with Argon2id (check what the backend uses now); minimum length 10, breached-password check optional. *Argon2id; new accounts need 10+ characters (existing shorter passwords still log in).*
-- [ ] Add email verification, password reset, and "log out of all devices". *"Log out of all devices" exists (`/auth/logout-all`); email verification and password reset wait on choosing an email provider.*
+- [x] Add email verification, password reset, and "log out of all devices". *Resend. Verification links last 24 h, reset links 60 min; single use, stored hashed, newest link only. Unverified users see a banner, not a lock-out. Reset answers the same for any address, is limited per IP and per address, verifies the email and signs out every session.*
 
 **Abuse limits**
 

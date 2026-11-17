@@ -38,6 +38,20 @@ class LogoutRequest(AppBaseModel):
     refresh_token: str | None = None
 
 
+class EmailTokenRequest(AppBaseModel):
+    """The token from a verification link."""
+    token: str = Field(..., min_length=1, max_length=200)
+
+
+class PasswordResetRequest(AppBaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(AppBaseModel):
+    token: str = Field(..., min_length=1, max_length=200)
+    new_password: str = Field(..., min_length=10, max_length=256)
+
+
 # ── Responses ──────────────────────────────────────────────────────────────────
 
 class UserResponse(AppBaseModel):
@@ -45,6 +59,8 @@ class UserResponse(AppBaseModel):
     email: str
     is_active: bool
     created_at: datetime
+    # None until the owner confirms the address (see /auth/verify-email).
+    email_verified_at: datetime | None = None
     # Deliberately no password_hash field — never serialize it, ever.
 
 

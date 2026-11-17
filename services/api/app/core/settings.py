@@ -149,6 +149,26 @@ class Settings(BaseSettings):
     # None = host-only cookie on the API host, the safest default.
     auth_cookie_domain: str | None = None
 
+    # ── Email (Resend) — verification and password-reset links ─────────────
+    # Without a key, development logs each email instead of sending it, and
+    # other environments send nothing (and log an error). EMAIL_FROM must use
+    # a domain verified in Resend; onboarding@resend.dev only delivers to the
+    # address of your own Resend account.
+    resend_api_key: str | None = None
+    email_from: str = "Connecting Dots <onboarding@resend.dev>"
+    email_product_name: str = "Connecting Dots"
+    # Where the links in emails point: the dashboard's origin.
+    dashboard_url: str = "http://localhost:3000"
+    email_verify_token_hours: int = 24
+    password_reset_token_minutes: int = 60
+
+    @field_validator("resend_api_key")
+    @classmethod
+    def _ignore_placeholder_resend_key(cls, v: str | None) -> str | None:
+        if v is None or not v.strip() or v.strip().lower() in {"re_...", "your-key-here", "changeme"}:
+            return None
+        return v.strip()
+
     # ── Auth: bootstrapped admin (absorbs pre-auth legacy data) ──────────────
     # Only used by the 0007 migration to create/reuse one admin user and
     # assign any orphaned (pre-auth) projects to them. Optional: if unset,

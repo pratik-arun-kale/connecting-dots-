@@ -24,6 +24,8 @@ interface AuthState {
   // trades it once for a cookie session; never persisted again.
   legacyRefreshToken: string | null;
   setSession: (tokens: TokenPair) => void;
+  /** Replace the signed-in user's profile (e.g. after verifying the email). */
+  setUser: (user: AuthUser) => void;
   clearSession: () => void;
 }
 
@@ -46,6 +48,7 @@ export const useAuthStore = create<AuthState>()(
           user: tokens.user,
           legacyRefreshToken: null,
         }),
+      setUser: (user) => set((state) => (state.user?.id === user.id ? { user } : {})),
       clearSession: () =>
         set({ status: 'unauthenticated', accessToken: null, user: null, legacyRefreshToken: null }),
     }),

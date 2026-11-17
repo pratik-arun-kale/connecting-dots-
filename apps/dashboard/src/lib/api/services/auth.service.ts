@@ -5,6 +5,8 @@ export interface AuthUser {
   email: string;
   is_active: boolean;
   created_at: string;
+  /** null until the address is confirmed through an emailed link. */
+  email_verified_at: string | null;
 }
 
 export interface TokenPair {
@@ -48,6 +50,27 @@ export const authService = {
   /** Revokes this session's refresh token and clears the cookie. */
   async logout(): Promise<void> {
     await apiClient.post('/auth/logout', {}, COOKIE_MODE);
+  },
+
+  /** Emails the signed-in user a new verification link (no-op once verified). */
+  async requestVerification(): Promise<void> {
+    await apiClient.post('/auth/verify-email/request');
+  },
+
+  /** Redeems the token from a verification link. Works signed in or not. */
+  async verifyEmail(token: string): Promise<AuthUser> {
+    const response = await apiClient.post<AuthUser>('/auth/verify-email', { token });
+    return response.data;
+  },
+
+  /** Always resolves the same way, whether or not the address has an account. */
+  async requestPasswordReset(email: string): Promise<void> {
+    await apiClient.post('/auth/password-reset', { email });
+  },
+
+  /** Sets a new password from a reset link. Signs out every session, this one included. */
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    await apiClient.post('/auth/password-reset/confirm', { token, new_password: newPassword }, COOKIE_MODE);
   },
 
   /** Revokes every session for this account, on every device. */

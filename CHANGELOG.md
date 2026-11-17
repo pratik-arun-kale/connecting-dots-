@@ -24,6 +24,8 @@ release workflow refuses a tag with no matching section here.
   end-to-end tests that captured HTML never runs script.
 - Dashboard sessions in an httpOnly cookie: no token is stored in
   localStorage any more; existing sessions move over on the next visit.
+- Email verification and password reset (Resend): a confirmation link on
+  sign-up with a reminder banner, and "Forgot password?" on the sign-in page.
 - API: 2 MB request-body limit (413); `npm audit` and `pip-audit` in CI.
 
 ### Changed

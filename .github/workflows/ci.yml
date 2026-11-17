@@ -206,6 +206,10 @@ jobs:
 
       - name: Run Playwright
         working-directory: e2e
+        env:
+          # No RESEND_API_KEY here, so the development API logs each email;
+          # account-email.spec.ts reads the links from this log.
+          E2E_API_LOG: ${{ github.workspace }}/api.log
         run: |
           npm ci
           npx playwright install --with-deps chromium

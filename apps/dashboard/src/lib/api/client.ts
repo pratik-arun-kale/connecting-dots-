@@ -34,8 +34,13 @@ apiClient.interceptors.request.use(
 // never succeed, since login failures aren't a token problem).
 let refreshPromise: Promise<string> | null = null;
 
+// Auth routes that don't take an access token — a 401 from these is never
+// fixed by a refresh. Signed-in ones (verify-email/request, logout-all) do
+// get the usual refresh-and-retry.
+const NO_REFRESH = /\/auth\/(login|register|refresh|logout|verify-email|password-reset)(\/confirm)?$/;
+
 function isAuthEndpoint(url?: string): boolean {
-  return !!url && url.includes('/auth/');
+  return !!url && NO_REFRESH.test(url.split('?')[0]);
 }
 
 apiClient.interceptors.response.use(

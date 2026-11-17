@@ -23,6 +23,7 @@ from app.core.rate_limit import _buckets as _rate_limit_buckets
 from app.core.settings import settings
 from app.db.base import Base
 from app.db.engine import get_db_session
+from app.services.email import EmailMessage, get_email_sender
 from app.services.rag_service import RagService
 from main import create_app
 
@@ -123,8 +124,32 @@ def reindex_calls(monkeypatch) -> list[tuple[Any, ...]]:
     return calls
 
 
+class _RecordingEmailSender:
+    def __init__(self) -> None:
+        self.sent: list[EmailMessage] = []
+
+    async def send(self, message: EmailMessage) -> None:
+        self.sent.append(message)
+
+
+@pytest.fixture
+def sent_emails() -> list[EmailMessage]:
+    """Emails the app "sent" during this test. Every test app gets this fake
+    sender, so a test run never reaches Resend — even with a real
+    RESEND_API_KEY in the local .env."""
+    return []
+
+
+def _use_recording_sender(app, sent: list[EmailMessage]) -> None:
+    sender = _RecordingEmailSender()
+    sender.sent = sent
+    app.dependency_overrides[get_email_sender] = lambda: sender
+
+
 @pytest_asyncio.fixture
-async def client(db_session: AsyncSession, reindex_calls: list) -> AsyncGenerator[AsyncClient, None]:
+async def client(
+    db_session: AsyncSession, reindex_calls: list, sent_emails: list
+) -> AsyncGenerator[AsyncClient, None]:
     """
     AsyncClient bound to the test app.
     The db_session dependency is overridden so routes use the same
@@ -141,6 +166,7 @@ async def client(db_session: AsyncSession, reindex_calls: list) -> AsyncGenerato
         yield db_session
 
     app.dependency_overrides[get_db_session] = _override_db
+    _use_recording_sender(app, sent_emails)
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -166,7 +192,7 @@ async def authenticated_client(client: AsyncClient) -> AsyncGenerator[AsyncClien
 
 @pytest_asyncio.fixture
 async def second_authenticated_client(
-    db_session: AsyncSession, reindex_calls: list
+    db_session: AsyncSession, reindex_calls: list, sent_emails: list
 ) -> AsyncGenerator[AsyncClient, None]:
     """A second, distinct user with its own AsyncClient instance (so its
     Authorization header can never collide with `authenticated_client`'s),
@@ -180,6 +206,7 @@ async def second_authenticated_client(
         yield db_session
 
     app.dependency_overrides[get_db_session] = _override_db
+    _use_recording_sender(app, sent_emails)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as second:
         resp = await second.post(

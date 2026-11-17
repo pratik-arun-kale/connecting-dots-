@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Brain, Menu } from 'lucide-react';
 import { Sidebar } from './sidebar';
+import { VerifyEmailBanner } from './verify-email-banner';
 import { SearchDialog } from '@/features/search/search-dialog';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useSearchStore } from '@/store';
@@ -50,6 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             Connecting Dots
           </Link>
         </div>
+        <VerifyEmailBanner />
         <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
       </div>
 

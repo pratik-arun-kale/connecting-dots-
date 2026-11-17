@@ -45,7 +45,9 @@ Every URL comes from env files. Shipped code never names `localhost`, and `npm r
 | --- | --- | --- |
 | Extension | `apps/extension/.env.<mode>` | `VITE_API_URL`, `VITE_DASHBOARD_URL` (see `.env.example`) |
 | Dashboard | `apps/dashboard/.env.local` | `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_EXTENSION_ID` |
-| API | `services/api/.env` | `JWT_SECRET_KEY`, `POSTGRES_*`, `ALLOWED_ORIGINS`, `EXTENSION_ORIGIN`, `OPENAI_API_KEY` |
+| API | `services/api/.env` | `JWT_SECRET_KEY`, `POSTGRES_*`, `ALLOWED_ORIGINS`, `EXTENSION_ORIGIN`, `OPENAI_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, `DASHBOARD_URL` |
+
+Email: with `RESEND_API_KEY` unset, development writes each verification and reset email (with its link) to the API log instead of sending it. `EMAIL_FROM` needs a domain verified in Resend to reach anyone but your own Resend address.
 
 Extension builds: `npm run build` (development, localhost), `npm run build:staging`, `npm run build:prod`. Staging and production need both URLs set and on https; the build writes them into the manifest's `host_permissions` and `externally_connectable`.
 

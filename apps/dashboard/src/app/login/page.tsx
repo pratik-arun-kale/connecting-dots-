@@ -84,6 +84,11 @@ export default function LoginPage() {
               className="bg-muted/30 border-border focus:border-[#4f46e5] text-sm focus:ring-1 focus:ring-[#4f46e5]/30"
             />
             {errors.password && <span className="text-xs text-rose-500">{errors.password.message}</span>}
+            <div className="text-right">
+              <Link href="/forgot-password" className="text-xs font-medium text-[#4f46e5] hover:underline">
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           {submitError && (

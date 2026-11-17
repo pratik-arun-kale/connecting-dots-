@@ -21,8 +21,10 @@ from app.core.settings import settings
 from app.db.engine import get_db_session
 from app.models.user import User
 from app.repositories.user import UserRepository
+from app.services.account_email import AccountEmailService
 from app.services.auth import AuthService
 from app.services.context import ContextService
+from app.services.email import EmailSender, get_email_sender
 from app.services.project import ProjectService
 from app.services.rag_service import RagService
 from app.services.session import SessionService
@@ -59,6 +61,10 @@ def get_auth_service(db: DbSession) -> AuthService:
     return AuthService(db)
 
 
+def get_account_email_service(db: DbSession) -> AccountEmailService:
+    return AccountEmailService(db)
+
+
 # ── Annotated aliases (convenience for route signatures) ─────────────────────
 
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
@@ -66,6 +72,9 @@ SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
 ContextServiceDep = Annotated[ContextService, Depends(get_context_service)]
 RagServiceDep     = Annotated[RagService,     Depends(get_rag_service)]
 AuthServiceDep    = Annotated[AuthService,    Depends(get_auth_service)]
+AccountEmailServiceDep = Annotated[AccountEmailService, Depends(get_account_email_service)]
+# Overridden in tests with a fake that records messages.
+EmailSenderDep    = Annotated[EmailSender,    Depends(get_email_sender)]
 
 # ── Current user (authentication) ────────────────────────────────────────────
 # tokenUrl is only used to populate OpenAPI/Swagger's "Authorize" flow — the
