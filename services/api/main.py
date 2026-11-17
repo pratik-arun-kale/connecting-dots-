@@ -100,6 +100,21 @@ class ExtensionCORSMiddleware:
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
+async def _preload_rag_models() -> None:
+    """Load the embedding model and reranker before the first request, so a
+    capture or search never stalls the API while torch loads them. A failure
+    (no network to fetch a model, say) is logged, not fatal: search then
+    retries on first use, as before."""
+    from app.core.rag import embedder, pipeline
+
+    try:
+        await asyncio.to_thread(embedder.embed_query, "warm up")
+        await asyncio.to_thread(pipeline._get_reranker)
+        logger.info("rag_models_loaded")
+    except Exception:
+        logger.exception("rag_models_preload_failed")
+
+
 async def _purge_trash_periodically() -> None:
     """Removes Trash older than settings.trash_retention_days, at startup and
     then every trash_purge_interval_hours. Idempotent, so several API
@@ -123,6 +138,8 @@ async def lifespan(app: FastAPI):
     logger.info("app_starting", name=settings.app_name,
                 version=settings.app_version, env=settings.app_env)
     logger.info("cors_allowed_origins", origins=settings.allowed_origins)
+    if settings.rag_preload_models:
+        await _preload_rag_models()
     purge_task = asyncio.create_task(_purge_trash_periodically()) if settings.trash_purge_interval_hours > 0 else None
     yield
     logger.info("app_shutting_down")

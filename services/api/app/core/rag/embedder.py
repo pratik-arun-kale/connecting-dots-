@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import threading
 
+import torch
 from sentence_transformers import SentenceTransformer
+
+from app.core.settings import settings
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
@@ -16,6 +19,8 @@ def _get_model() -> SentenceTransformer:
     if _model is None:
         with _lock:
             if _model is None:
+                # Process-wide: also applies to the reranker (app/core/rag/pipeline.py).
+                torch.set_num_threads(max(1, settings.rag_torch_threads))
                 _model = SentenceTransformer(EMBEDDING_MODEL)
     return _model
 

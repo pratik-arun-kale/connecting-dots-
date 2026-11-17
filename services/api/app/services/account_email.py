@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import UnprocessableException
 from app.core.logging import get_logger
-from app.core.security import hash_password, hash_refresh_token
+from app.core.security import hash_password_async, hash_refresh_token
 from app.core.settings import settings
 from app.models.email_token import EmailTokenPurpose
 from app.models.user import User
@@ -107,7 +107,7 @@ class AccountEmailService:
         now = datetime.now(timezone.utc)
         user = await self._users.update(
             user,
-            password_hash=hash_password(new_password),
+            password_hash=await hash_password_async(new_password),
             email_verified_at=user.email_verified_at or now,
         )
         await self._tokens.use_all_for_user(user.id, EmailTokenPurpose.RESET_PASSWORD)

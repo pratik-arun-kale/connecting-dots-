@@ -18,8 +18,9 @@ from app.core.security import (
     create_access_token,
     generate_refresh_token,
     hash_password,
+    hash_password_async,
     hash_refresh_token,
-    verify_password,
+    verify_password_async,
 )
 from app.core.settings import settings
 from app.models.user import User
@@ -69,7 +70,7 @@ class AuthService:
 
         user = await self._users.create(
             email=email,
-            password_hash=hash_password(payload.password),
+            password_hash=await hash_password_async(payload.password),
         )
         logger.info("user_registered", user_id=str(user.id))
         return user
@@ -83,10 +84,10 @@ class AuthService:
         user = await self._users.get_by_email(email)
 
         if user is None:
-            verify_password(payload.password, _DUMMY_PASSWORD_HASH)  # constant-time even for unknown emails
+            await verify_password_async(payload.password, _DUMMY_PASSWORD_HASH)  # constant-time even for unknown emails
             raise UnauthorizedException("Invalid email or password.")
 
-        if not verify_password(payload.password, user.password_hash):
+        if not await verify_password_async(payload.password, user.password_hash):
             raise UnauthorizedException("Invalid email or password.")
 
         if not user.is_active:

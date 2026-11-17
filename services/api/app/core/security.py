@@ -18,6 +18,7 @@ credential (see AuthSession), not a signed/verified token.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import secrets
 import uuid
@@ -55,6 +56,17 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 # ── Access tokens (JWT) ────────────────────────────────────────────────────────
+
+async def hash_password_async(password: str) -> str:
+    """hash_password in a worker thread. Argon2 is slow on purpose (~70 ms,
+    4 threads); on the event loop every hash would freeze every other
+    request. argon2-cffi releases the GIL while hashing."""
+    return await asyncio.to_thread(hash_password, password)
+
+
+async def verify_password_async(password: str, password_hash: str) -> bool:
+    return await asyncio.to_thread(verify_password, password, password_hash)
+
 
 def create_access_token(user_id: uuid.UUID) -> str:
     now = datetime.now(timezone.utc)

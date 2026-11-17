@@ -136,11 +136,14 @@ class Settings(BaseSettings):
     # which create an account per test from one address.
     auth_register_limit_per_hour: int = 5
 
-    # Trash: deleted notes and projects can be restored for this many days,
-    # then a background job (every trash_purge_interval_hours; 0 = never,
-    # e.g. when scripts/purge_trash.py runs from cron) removes them for good.
-    trash_retention_days: int = 30
-    trash_purge_interval_hours: float = 6
+    # Load the embedding model and reranker at startup, before serving. Loading
+    # them on first use instead stalls every request for ~10 s while torch
+    # loads (it holds Python's GIL even in a worker thread). Off only to start
+    # faster in development when search isn't needed.
+    rag_preload_models: bool = True
+    # CPU threads torch may use for embedding and reranking. Its default is
+    # every core, which starves request handling while a note is indexed.
+    rag_torch_threads: int = 2
 
     # Trash: deleted notes and projects can be restored for this many days,
     # then a background job (every trash_purge_interval_hours; 0 = never,
