@@ -50,3 +50,6 @@ htmlcov/
 playwright-report/
 test-results/
 blob-report/
+
+# Database backups written by services/api/scripts/backup_db.sh
+backups/

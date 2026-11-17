@@ -134,28 +134,28 @@ Goal: no duplicate notes, no lost edits, nothing deleted by accident, and the kn
 
 **Duplicates and idempotency**
 
-- [ ] Extension: generate the idempotency key from the content, not per click: `sha256(project_id + source_url + normalised_markdown)` in `note-cs.ts` and `CaptureQueue.ts`.
-- [ ] Backend: unique index on `(owner_id, project_id, content_hash)`; on conflict return `409` with the existing note's ID and code `DUPLICATE`.
-- [ ] Extension: handle `DUPLICATE` and `PROJECT_MISMATCH` (already in `types/messages.ts:76`) with a toast — "Already saved · Open note".
-- [ ] Retry queue sends the same key on every retry, so a flaky network never makes two notes.
+- [x] Extension: generate the idempotency key from the content, not per click: `sha256(project_id + source_url + normalised_markdown)` in `note-cs.ts` and `CaptureQueue.ts`. *Done on the server instead, so every client benefits: the API fingerprints project + page URL + normalised text; the extension keeps a fresh key per click (retries reuse it). The popup's minute-bucket key, which replayed a grown conversation as the old capture, is gone.*
+- [x] Backend: unique index on `(owner_id, project_id, content_hash)`; on conflict return `409` with the existing note's ID and code `DUPLICATE`. *`contexts.content_hash` (the hash includes the project, so one unique index covers it), live rows only; 409 `duplicate` with `details.context_id`; races settled by the index. Written notes are exempt.*
+- [x] Extension: handle `DUPLICATE` and `PROJECT_MISMATCH` (already in `types/messages.ts:76`) with a toast — "Already saved · Open note". *"Already saved · Open note" in the note bar and launcher, a message in the popup; duplicates are never retried. `PROJECT_MISMATCH` was never sent by the API and is removed.*
+- [x] Retry queue sends the same key on every retry, so a flaky network never makes two notes. *Already the case; permanent 4xx (other than 401/408/429) now fail at once instead of retrying.*
 
 **Concurrent edits**
 
-- [ ] Add a `version` integer to notes (Alembic migration). Autosave in `note-editor.tsx` sends `If-Match: <version>`; the API returns `409` if it changed, and the editor shows "Edited elsewhere · Reload / Keep mine".
-- [ ] Debounce autosave at 800 ms and flush on tab close (`visibilitychange`).
+- [x] Add a `version` integer to notes (Alembic migration). Autosave in `note-editor.tsx` sends `If-Match: <version>`; the API returns `409` if it changed, and the editor shows "Edited elsewhere · Reload / Keep mine". *If-Match on body and title saves, checked under a row lock; the banner offers "Reload theirs" or "Keep mine". Covered by `e2e/tests/edit-conflict.spec.ts`.*
+- [x] Debounce autosave at 800 ms and flush on tab close (`visibilitychange`). *800 ms was already there; saves now also flush on `visibilitychange` and `pagehide`.*
 
 **Safe deletes and backups**
 
-- [ ] Soft delete: `deleted_at` on projects and notes, a Trash view in the dashboard, purge after 30 days by a scheduled job.
-- [ ] Deleting a note or project also removes its chunks from ChromaDB and BM25 (the purge job does it, so undo still works).
-- [ ] Nightly `pg_dump` to object storage, kept 14 days; write and test the restore steps in `docs/runbook.md`.
+- [x] Soft delete: `deleted_at` on projects and notes, a Trash view in the dashboard, purge after 30 days by a scheduled job. *One ORM hook hides trashed rows everywhere; `/trash` page with Restore and Delete for good; Undo toasts; purge by the API every 6 h or `scripts/purge_trash.py`.*
+- [x] Deleting a note or project also removes its chunks from ChromaDB and BM25 (the purge job does it, so undo still works). *A trashed note's chunks go at once (never in search) and come back on restore; a trashed project keeps its vectors until purged.*
+- [x] Nightly `pg_dump` to object storage, kept 14 days; write and test the restore steps in `docs/runbook.md`. *`scripts/backup_db.sh` (database + `data/` search index, optional S3, 14-day pruning); restore steps tested into a scratch database (all counts matched). Scheduling it waits on hosting.*
 
 **Known bugs from the audit**
 
-- [ ] Remove the second `CREATE_PROVIDER_SESSION` send at `create-project-dialog.tsx:90`; keep the one in `useCreateProjectWithSessions`. Add a guard in the extension so a repeat message never resets stored state to `pending`.
-- [ ] Delete the 7 `console.log('[DEBUG] …')` calls in project creation; add an ESLint `no-console` rule (warn/error allowed).
-- [ ] Delete unused `store/search-store.ts` and `NAV_ITEMS` in `lib/constants/index.ts`.
-- [ ] Perplexity: decide. Either add `perplexity.ai` host permission, content script and adapter, or delete the type, popup row and branch at `background.ts:153`. Recommendation: delete now, add later with a canary (Phase 6).
+- [x] Remove the second `CREATE_PROVIDER_SESSION` send at `create-project-dialog.tsx:90`; keep the one in `useCreateProjectWithSessions`. Add a guard in the extension so a repeat message never resets stored state to `pending`. *Done in e6350bf.*
+- [x] Delete the 7 `console.log('[DEBUG] …')` calls in project creation; add an ESLint `no-console` rule (warn/error allowed). *Logs removed in e6350bf; dashboard ESLint now has `no-console` (warn/error allowed).*
+- [x] Delete unused `store/search-store.ts` and `NAV_ITEMS` in `lib/constants/index.ts`. *`NAV_ITEMS` was already gone; `search-store` is now used by the Cmd+K palette, so it stays.*
+- [x] Perplexity: decide. Either add `perplexity.ai` host permission, content script and adapter, or delete the type, popup row and branch at `background.ts:153`. Recommendation: delete now, add later with a canary (Phase 6). *Removed from the extension (one host permission fewer); the API still accepts old captures.*
 
 **Done when**: saving the same selection twice gives one note and a toast, and editing a note in two tabs never silently loses text.
 
