@@ -11,12 +11,14 @@ Architecture:
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncGenerator
 from typing import Any
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.rate_limit import _buckets as _rate_limit_buckets
@@ -27,11 +29,36 @@ from app.services.email import EmailMessage, get_email_sender
 from app.services.rag_service import RagService
 from main import create_app
 
-# ── Use a separate test database (override via TEST_DATABASE_URL env) ─────────
-TEST_DB_URL = settings.database_url.replace(
-    f"/{settings.postgres_db}",
-    f"/{settings.postgres_db}_test",
-)
+
+# ── Use a separate, local test database ───────────────────────────────────────
+# The schema is created and DROPPED here, so this must never be a real
+# database. It comes from TEST_DATABASE_URL, or else from the POSTGRES_*
+# settings with "_test" appended — never from DATABASE_URL, which may point at
+# a hosted (e.g. Neon production) database whose name the "_test" suffix
+# wouldn't change. Anything that isn't on this machine is refused unless
+# ALLOW_REMOTE_TEST_DATABASE=1.
+def _test_database_url() -> str:
+    explicit = os.environ.get("TEST_DATABASE_URL")
+    url = explicit or URL.create(
+        "postgresql+asyncpg",
+        username=settings.postgres_user,
+        password=settings.postgres_password,
+        host=settings.postgres_host,
+        port=settings.postgres_port,
+        database=f"{settings.postgres_db}_test",
+    ).render_as_string(hide_password=False)
+    host = make_url(url).host or ""
+    local = host in {"localhost", "127.0.0.1", "::1", "postgres"}  # "postgres": the compose service
+    if not local and os.environ.get("ALLOW_REMOTE_TEST_DATABASE") != "1":
+        raise RuntimeError(
+            f"Refusing to run tests against database host {host!r}: the test run drops every table. "
+            "Point TEST_DATABASE_URL (or POSTGRES_HOST) at a local Postgres, "
+            "or set ALLOW_REMOTE_TEST_DATABASE=1 for a throwaway remote database."
+        )
+    return url
+
+
+TEST_DB_URL = _test_database_url()
 
 # ── Engine / session scoped to the test session ───────────────────────────────
 # No custom `event_loop` fixture here, and asyncio_default_fixture_loop_scope

@@ -71,6 +71,7 @@ dropdb acw_restore_drill
 ## Configuration to check on every deploy
 
 - `APP_ENV=production`. This turns on secure cookies and turns off the API docs pages.
+- Database: `DATABASE_URL` (Neon's pooled URL) and `DATABASE_URL_UNPOOLED` (direct, used by `alembic upgrade head`), or the `POSTGRES_*` parts. With Neon, the backup script's `pg_dump` needs the direct host, and Neon's own point-in-time restore covers the database itself.
 - `JWT_SECRET_KEY`: a long random value, never the development one.
 - `ALLOWED_ORIGINS`: the dashboard's origin only. `EXTENSION_ORIGIN=chrome-extension://<id>`.
 - The dashboard and the API on the same site (e.g. `app.example.com` and `api.example.com`), or the session cookie isn't sent.

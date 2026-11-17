@@ -32,6 +32,7 @@ def get_engine() -> AsyncEngine:
     if _engine is None:
         _engine = create_async_engine(
             settings.database_url,
+            connect_args=settings.database_connect_args,
             echo=settings.debug,
             pool_pre_ping=True,
             pool_size=10,
@@ -40,11 +41,7 @@ def get_engine() -> AsyncEngine:
             # when JSONB columns carry domain objects.
         )
         # Log only host/db, never the full URL — it embeds the DB password.
-        logger.info(
-            "database_engine_created",
-            host=settings.postgres_host,
-            db=settings.postgres_db,
-        )
+        logger.info("database_engine_created", **settings.database_log_fields)
     return _engine
 
 

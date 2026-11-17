@@ -7,15 +7,20 @@ All secrets come from environment variables or a .env file.
 
 from functools import lru_cache
 from typing import Literal
-from urllib.parse import quote_plus
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, PrivateAttr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
+
+from app.core import db_url
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Later files win; real environment variables beat all of them.
+        # .env.local is where `neon deploy` writes DATABASE_URL: next to
+        # this .env, or at the repo root when run from there.
+        env_file=(".env", ".env.local", "../../.env.local"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -79,25 +84,51 @@ class Settings(BaseSettings):
     postgres_user: str = "postgres"
     postgres_password: str = "postgres"
 
-    # Constructed automatically; can be overridden via DATABASE_URL env var
+    # DATABASE_URL, when set, wins over the POSTGRES_* parts: a hosted
+    # database's connection string (Neon writes DATABASE_URL, the pooled one,
+    # and DATABASE_URL_UNPOOLED, the direct one). Any libpq-style URL works;
+    # app/core/db_url.py adapts it per driver. After validation this field
+    # holds the asyncpg form.
     database_url: str = ""
+    # Direct (unpooled) connection for Alembic and scripts: migrations take
+    # locks and use session state that a transaction-mode pooler drops.
+    database_url_unpooled: str = ""
+
+    _database_connect_args: dict = PrivateAttr(default_factory=dict)
+    _sync_database_url: str = PrivateAttr(default="")
+    _database_log_fields: dict = PrivateAttr(default_factory=dict)
 
     @model_validator(mode="after")
     def _build_database_url(self) -> "Settings":
-        if not self.database_url:
-            encoded_password = quote_plus(self.postgres_password)
-            self.database_url = (
-                f"postgresql+asyncpg://{self.postgres_user}:{encoded_password}"
-                f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-            )
+        # URL.create escapes each part correctly (quote_plus would turn a
+        # space in the password into "+", which then reads back as "+").
+        raw = self.database_url or URL.create(
+            "postgresql",
+            username=self.postgres_user,
+            password=self.postgres_password,
+            host=self.postgres_host,
+            port=self.postgres_port,
+            database=self.postgres_db,
+        ).render_as_string(hide_password=False)
+        self._sync_database_url = db_url.sync_url(self.database_url_unpooled or raw)
+        self._database_log_fields = db_url.describe(raw)
+        self.database_url, self._database_connect_args = db_url.async_engine_config(raw)
         return self
 
-    # Sync URL for Alembic (uses psycopg2 driver)
+    @property
+    def database_connect_args(self) -> dict:
+        """asyncpg connect arguments that can't go in the URL (SSL, pooler)."""
+        return self._database_connect_args
+
+    @property
+    def database_log_fields(self) -> dict:
+        """Host, database name and pooled flag — safe to log, unlike the URL."""
+        return self._database_log_fields
+
+    # Sync URL for Alembic and scripts (psycopg2), the direct one if given.
     @property
     def sync_database_url(self) -> str:
-        return self.database_url.replace(
-            "postgresql+asyncpg://", "postgresql+psycopg2://"
-        )
+        return self._sync_database_url
 
     # ── Redis (future-ready) ─────────────────────────────────────────────────
     redis_host: str = "localhost"
