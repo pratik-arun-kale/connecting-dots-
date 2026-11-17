@@ -4,6 +4,7 @@ main.py
 FastAPI application factory and entry-point.
 """
 
+import asyncio
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 
@@ -99,13 +100,34 @@ class ExtensionCORSMiddleware:
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
+async def _purge_trash_periodically() -> None:
+    """Removes Trash older than settings.trash_retention_days, at startup and
+    then every trash_purge_interval_hours. Idempotent, so several API
+    processes doing it is harmless (scripts/purge_trash.py is the cron
+    alternative; set TRASH_PURGE_INTERVAL_HOURS=0 to use only that)."""
+    from app.db.engine import get_session_factory
+    from app.services.trash import TrashService
+
+    while True:
+        try:
+            async with get_session_factory()() as session:
+                await TrashService(session).purge_expired()
+                await session.commit()
+        except Exception:  # never let a failed purge take the API down
+            logger.exception("trash_purge_failed")
+        await asyncio.sleep(settings.trash_purge_interval_hours * 3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("app_starting", name=settings.app_name,
                 version=settings.app_version, env=settings.app_env)
     logger.info("cors_allowed_origins", origins=settings.allowed_origins)
+    purge_task = asyncio.create_task(_purge_trash_periodically()) if settings.trash_purge_interval_hours > 0 else None
     yield
     logger.info("app_shutting_down")
+    if purge_task is not None:
+        purge_task.cancel()
     await dispose_engine()
     await close_redis()
     logger.info("app_stopped")

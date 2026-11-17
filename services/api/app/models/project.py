@@ -7,9 +7,10 @@ Project — top-level container for all AI sessions and captured contexts.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -33,6 +34,8 @@ class Project(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=False,
         index=True,
     )
+    # In the Trash since then (hidden everywhere else, see app/db/soft_delete.py).
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     # ── Relationships ────────────────────────────────────────────────────────
     owner: Mapped[User] = relationship("User", back_populates="projects", lazy="noload")

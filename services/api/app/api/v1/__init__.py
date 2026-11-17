@@ -13,6 +13,7 @@ from app.api.v1.routes.health import router as health_router
 from app.api.v1.routes.projects import router as project_router
 from app.api.v1.routes.search import router as search_router
 from app.api.v1.routes.sessions import router as session_router
+from app.api.v1.routes.trash import router as trash_router
 
 api_router = APIRouter()
 
@@ -22,3 +23,4 @@ api_router.include_router(project_router)
 api_router.include_router(session_router)
 api_router.include_router(context_router)
 api_router.include_router(search_router)
+api_router.include_router(trash_router)

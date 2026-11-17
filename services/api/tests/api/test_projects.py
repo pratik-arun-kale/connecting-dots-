@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from app.services import project as project_service_module
+from app.services import trash as trash_module
 
 BASE = "/api/v1/projects"
 
@@ -202,12 +202,12 @@ async def test_update_another_users_project_returns_404(
 # ── Delete ─────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_delete_project(authenticated_client: AsyncClient, monkeypatch) -> None:
-    cleaned: list[tuple[str, str]] = []
-    monkeypatch.setattr(project_service_module.vector_store, "delete_project_collection",
-                        lambda pid: cleaned.append(("vectors", pid)))
-    monkeypatch.setattr(project_service_module.vocabulary, "delete_vocabulary",
-                        lambda pid: cleaned.append(("vocabulary", pid)))
+async def test_delete_project_moves_it_to_the_trash(authenticated_client: AsyncClient, monkeypatch) -> None:
+    """Gone from every route, but its RAG data stays so a restore needs no
+    re-index; the Trash's purge removes it (tests/api/test_trash.py)."""
+    cleaned: list[str] = []
+    monkeypatch.setattr(trash_module.vector_store, "delete_project_collection", cleaned.append)
+    monkeypatch.setattr(trash_module.vocabulary, "delete_vocabulary", cleaned.append)
 
     created = await _create_project(authenticated_client, "To Delete")
     delete_resp = await authenticated_client.delete(f"{BASE}/{created['id']}")
@@ -215,8 +215,9 @@ async def test_delete_project(authenticated_client: AsyncClient, monkeypatch) ->
 
     get_resp = await authenticated_client.get(f"{BASE}/{created['id']}")
     assert get_resp.status_code == 404
-    # Its RAG data on disk goes with it.
-    assert cleaned == [("vectors", created["id"]), ("vocabulary", created["id"])]
+    listed = await authenticated_client.get(BASE)
+    assert created["id"] not in [p["id"] for p in listed.json()["items"]]
+    assert cleaned == []
 
 
 @pytest.mark.asyncio

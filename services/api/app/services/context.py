@@ -7,6 +7,7 @@ ContextService – business logic for the Context resource.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from sqlalchemy.exc import IntegrityError
@@ -339,17 +340,18 @@ class ContextService:
         return session.project_id if session is not None else None
 
     async def delete_note(self, context_id: uuid.UUID, owner_id: uuid.UUID) -> None:
-        """Deletes the SQL row AND its RAG chunks (ChromaDB) — otherwise a
-        "deleted" note would still turn up in Ask AI/search results, pointing
-        at a context_id that no longer exists. The SQL delete is the part
-        the caller is actually waiting on, so it happens first, inside the
-        normal request transaction; the vector cleanup is best-effort
-        (see vector_store.delete_context_chunks) and never blocks it."""
+        """Moves the note to the Trash and removes its RAG chunks, so a trashed
+        note never turns up in search or Ask AI. The chunk cleanup is
+        best-effort (see vector_store.delete_context_chunks); TrashService
+        restores the note (and re-indexes it) or deletes it for good."""
         context = await self._repo.get_by_id_for_owner(context_id, owner_id)
         if context is None:
             raise NotFoundException(f"Note {context_id} not found.")
         session = await self._session_repo.get_by_id(context.session_id)
-        await self._repo.delete(context)
+        # Into the Trash (app/services/trash.py), not gone: restorable for
+        # settings.trash_retention_days. Its chunks go now so search and
+        # Ask AI stop finding it; restoring re-indexes it.
+        await self._repo.update(context, deleted_at=datetime.now(timezone.utc))
         if session is not None:
             vector_store.delete_context_chunks(str(session.project_id), str(context_id))
         logger.info("note_deleted", context_id=str(context_id))

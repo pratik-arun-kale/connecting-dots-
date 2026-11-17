@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,6 +29,12 @@ if TYPE_CHECKING:
 
 class Context(Base, UUIDPrimaryKeyMixin):
     __tablename__ = "contexts"
+    __table_args__ = (
+        # One live copy of each capture per project; trashed copies don't count.
+        Index(
+            "ix_contexts_content_hash", "content_hash", unique=True, postgresql_where=text("deleted_at IS NULL")
+        ),
+    )
 
     session_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("sessions.id", ondelete="CASCADE"),
@@ -44,10 +50,13 @@ class Context(Base, UUIDPrimaryKeyMixin):
     # Fingerprint of a captured passage/conversation (app.core.fingerprint);
     # unique, so the same capture can't be saved twice into one project.
     # NULL for written notes and for older duplicates kept by migration 0011.
-    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Bumped on every edit; a client sends it back in If-Match so an edit made
     # elsewhere in the meantime is a 409, never a silent overwrite.
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    # In the Trash since then (hidden everywhere else, see app/db/soft_delete.py);
+    # purged for good after settings.trash_retention_days.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     title: Mapped[str | None]    = mapped_column(String(512), nullable=True)
     # user_title: a title the reader typed themselves. Kept separate from the
     # automatic `title` so clearing it restores the original, and anything

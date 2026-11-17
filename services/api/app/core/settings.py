@@ -136,6 +136,18 @@ class Settings(BaseSettings):
     # which create an account per test from one address.
     auth_register_limit_per_hour: int = 5
 
+    # Trash: deleted notes and projects can be restored for this many days,
+    # then a background job (every trash_purge_interval_hours; 0 = never,
+    # e.g. when scripts/purge_trash.py runs from cron) removes them for good.
+    trash_retention_days: int = 30
+    trash_purge_interval_hours: float = 6
+
+    # Trash: deleted notes and projects can be restored for this many days,
+    # then a background job (every trash_purge_interval_hours; 0 = never,
+    # e.g. when scripts/purge_trash.py runs from cron) removes them for good.
+    trash_retention_days: int = 30
+    trash_purge_interval_hours: float = 6
+
     # ── Auth: dashboard refresh-token cookie ─────────────────────────────────
     # The dashboard keeps its refresh token in an httpOnly cookie (page script
     # can't read it); the extension keeps sending it in the JSON body. The
