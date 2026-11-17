@@ -73,6 +73,13 @@ if (!window.__CW_NOTE_CS__) {
     bulletListMarker: '-',
   });
   turndownService.use(gfm);
+  // Never carry executable or invisible page machinery into a note. Turndown
+  // parses into an inert document (nothing here runs), but without this the
+  // text inside these elements would end up in the note body.
+  turndownService.remove(['script', 'style', 'noscript', 'template', 'iframe', 'object', 'embed', 'link', 'meta']);
+
+  /** Selections larger than this are saved as plain text instead of converted. */
+  const MAX_SELECTION_HTML = 1_000_000;
 
   /** Range.cloneContents() + reading .innerHTML — a getter, safe under Trusted Types. */
   function getSelectionHtml(selection: Selection): string {
@@ -86,7 +93,7 @@ if (!window.__CW_NOTE_CS__) {
   /** Falls back to plain text if the HTML capture is empty or Turndown throws on something unexpected. */
   function getSelectionMarkdown(selection: Selection, plainTextFallback: string): string {
     const html = getSelectionHtml(selection);
-    if (!html.trim()) return cleanupText(plainTextFallback);
+    if (!html.trim() || html.length > MAX_SELECTION_HTML) return cleanupText(plainTextFallback);
     try {
       const markdown = turndownService.turndown(html).trim();
       return cleanupText(markdown) || cleanupText(plainTextFallback);

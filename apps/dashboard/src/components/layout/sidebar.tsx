@@ -233,7 +233,6 @@ export function Sidebar({ variant = 'desktop', onNavigate }: { variant?: 'deskto
 function AccountRow({ collapsed }: { collapsed: boolean }) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const refreshToken = useAuthStore((s) => s.refreshToken);
   const clearSession = useAuthStore((s) => s.clearSession);
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
@@ -242,7 +241,7 @@ function AccountRow({ collapsed }: { collapsed: boolean }) {
 
   const logout = () => {
     // Best-effort server-side revoke — the local session is cleared regardless.
-    if (refreshToken) void authService.logout(refreshToken).catch(() => {});
+    void authService.logout().catch(() => {});
     clearSession();
     router.push('/login');
   };

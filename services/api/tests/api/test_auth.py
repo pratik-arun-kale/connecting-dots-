@@ -36,9 +36,11 @@ async def test_register_response_never_includes_password_hash(client: AsyncClien
 
 
 @pytest.mark.asyncio
-async def test_register_rejects_a_password_under_8_characters(client: AsyncClient) -> None:
-    resp = await client.post(f"{BASE}/register", json={"email": "short@test.com", "password": "short"})
+async def test_register_rejects_a_password_under_10_characters(client: AsyncClient) -> None:
+    resp = await client.post(f"{BASE}/register", json={"email": "short@test.com", "password": "nine-char"})
     assert resp.status_code == 422
+    resp = await client.post(f"{BASE}/register", json={"email": "ten@test.com", "password": "ten-chars!"})
+    assert resp.status_code == 201
 
 
 @pytest.mark.asyncio

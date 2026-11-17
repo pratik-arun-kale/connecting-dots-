@@ -27,10 +27,32 @@ test('sign up, create a project, write a note and find it', async ({ page }) => 
   await test.step('register', async () => {
     await page.goto('/register');
     await page.getByPlaceholder('you@example.com').fill(email);
-    await page.getByPlaceholder('At least 8 characters').fill(password);
+    await page.getByPlaceholder('At least 10 characters').fill(password);
     await page.getByPlaceholder('••••••••').fill(password);
     await page.getByRole('button', { name: /create account/i }).click();
     await expect(page).toHaveURL(/\/notes$/, NAVIGATION);
+  });
+
+  await test.step('no token is readable by page script', async () => {
+    // The refresh token is an httpOnly cookie; the access token is memory-only.
+    const cookies = await page.context().cookies();
+    const refresh = cookies.find((c) => c.name === 'cd_refresh');
+    expect(refresh, 'refresh cookie set by the API').toBeTruthy();
+    expect(refresh!.httpOnly).toBe(true);
+
+    const readable = await page.evaluate(() => ({
+      cookie: document.cookie,
+      storage: JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }),
+    }));
+    expect(readable.cookie).not.toContain('cd_refresh');
+    expect(readable.storage).not.toContain(refresh!.value);
+    expect(readable.storage, 'no JWT in web storage').not.toMatch(/eyJ[\w-]+\.[\w-]+\./);
+  });
+
+  await test.step('a reload keeps the session (silent refresh from the cookie)', async () => {
+    await page.reload();
+    await expect(page).toHaveURL(/\/notes$/, NAVIGATION);
+    await expect(page.getByRole('button', { name: 'New project' })).toBeVisible(NAVIGATION);
   });
 
   await test.step('create a project', async () => {

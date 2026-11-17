@@ -22,8 +22,14 @@ release workflow refuses a tag with no matching section here.
 - Security: tenant-isolation tests across every route, per-user rate limits,
   CSP and security headers on the dashboard, an explicit extension CSP, and
   end-to-end tests that captured HTML never runs script.
+- Dashboard sessions in an httpOnly cookie: no token is stored in
+  localStorage any more; existing sessions move over on the next visit.
+- API: 2 MB request-body limit (413); `npm audit` and `pip-audit` in CI.
 
 ### Changed
+- New accounts need a password of at least 10 characters.
+- Captured selections drop `<script>`, `<style>`, `<iframe>` and similar
+  elements; selections over 1 MB are saved as plain text.
 - One repository: `apps/extension`, `apps/dashboard`, `services/api`,
   `research/advanced-rag`.
 - Editing a note re-indexes it; deleting a project removes its vectors.

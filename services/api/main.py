@@ -15,6 +15,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import settings
 from app.db.engine import dispose_engine
+from app.middleware.body_limit import BodySizeLimitMiddleware
 from app.middleware.logging import RequestLoggingMiddleware
 from app.utils.redis import close_redis
 
@@ -127,6 +128,9 @@ def create_app() -> FastAPI:
     )
 
     # ── Middleware ────────────────────────────────────────────────────────────
+    # Added first, so it sits inside CORS and logging: a 413 still carries
+    # CORS headers (the browser can read it) and is logged.
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_body_bytes)
     # Standard CORS for listed origins (localhost, AI platforms, known ext ID)
     app.add_middleware(
         CORSMiddleware,

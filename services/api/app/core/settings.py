@@ -67,6 +67,11 @@ class Settings(BaseSettings):
             self.allowed_origins = [*self.allowed_origins, self.extension_origin]
         return self
 
+    # Largest accepted request body. The extension caps a capture at 1 MB;
+    # this leaves room for JSON overhead and is the backstop for free-form
+    # JSON fields that have no per-field limit.
+    max_request_body_bytes: int = 2_000_000
+
     # ── PostgreSQL ───────────────────────────────────────────────────────────
     postgres_host: str = "localhost"
     postgres_port: int = 5432
@@ -127,6 +132,23 @@ class Settings(BaseSettings):
             )
         return v
 
+    # ── Auth: dashboard refresh-token cookie ─────────────────────────────────
+    # The dashboard keeps its refresh token in an httpOnly cookie (page script
+    # can't read it); the extension keeps sending it in the JSON body. The
+    # cookie is scoped to the auth routes only, so no other route is ever
+    # cookie-authenticated and CSRF can only touch /auth/* (guarded there).
+    #
+    # SameSite=Strict works because the dashboard and the API share a site
+    # (localhost:3000 / localhost:8000, or app.example.com / api.example.com).
+    # Hosting them on different registrable domains would need
+    # SameSite=None, which browsers increasingly block as third-party.
+    auth_cookie_name: str = "cd_refresh"
+    auth_cookie_samesite: Literal["strict", "lax"] = "strict"
+    # None = Secure everywhere except development (plain-http localhost).
+    auth_cookie_secure: bool | None = None
+    # None = host-only cookie on the API host, the safest default.
+    auth_cookie_domain: str | None = None
+
     # ── Auth: bootstrapped admin (absorbs pre-auth legacy data) ──────────────
     # Only used by the 0007 migration to create/reuse one admin user and
     # assign any orphaned (pre-auth) projects to them. Optional: if unset,
@@ -167,6 +189,14 @@ class Settings(BaseSettings):
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"
+
+    @property
+    def auth_cookie_is_secure(self) -> bool:
+        return self.auth_cookie_secure if self.auth_cookie_secure is not None else not self.is_development
+
+    @property
+    def auth_cookie_path(self) -> str:
+        return f"{self.api_v1_prefix}/auth"
 
 
 @lru_cache

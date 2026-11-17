@@ -107,6 +107,35 @@ jobs:
         continue-on-error: true
         run: mypy
       - run: pytest
+      # Audits what was just installed, including unpinned transitive deps.
+      # Report-only until current findings are cleared (see the audit job).
+      - name: pip-audit (report only)
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip-audit --skip-editable
+
+  audit:
+    name: npm audit (report only)
+    runs-on: ubuntu-latest
+    # Report-only for the first runs: Dependabot (.github/dependabot.yml)
+    # opens the fix PRs. Once the current findings are cleared, drop
+    # continue-on-error so a new high/critical advisory fails the build.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: npm audit (production dependencies, high and above)
+        run: |
+          status=0
+          for app in apps/extension apps/dashboard; do
+            echo "::group::$app"
+            (cd "$app" && npm audit --omit=dev --audit-level=high) || status=1
+            echo "::endgroup::"
+          done
+          exit $status
 
   e2e:
     name: End-to-end — dashboard core loop, extension loads

@@ -99,32 +99,32 @@ Goal: one user can never read another's data, captured content cannot run script
 
 **Tenant isolation (do first)**
 
-- [ ] Audit every query in `services/api`: each SQLAlchemy select on projects, contexts, notes and sessions filters by `owner_id == current_user.id`. Move this into one repository helper (`scoped(select(Model), user)`) so a route cannot forget it.
-- [ ] Every ChromaDB `add` stores `user_id` and `project_id` in metadata; every `query` passes `where={"user_id": uid, "project_id": pid}`. Same filter on the BM25 side (index per user, or filter before scoring).
-- [ ] Semantic cache keys include `user_id`, so one user's cached answer is never served to another.
-- [ ] Return `404`, not `403`, for another user's IDs, so IDs cannot be probed.
-- [ ] Add `tests/test_isolation.py`: two users, each with notes; assert user B gets nothing from `/projects`, `/contexts`, `/search/conversations` and `/projects/{id}/query` for user A's data, including RAG citations.
+- [x] Audit every query in `services/api`: each SQLAlchemy select on projects, contexts, notes and sessions filters by `owner_id == current_user.id`. Move this into one repository helper (`scoped(select(Model), user)`) so a route cannot forget it. *Ownership is checked in each repository method (`get_by_id_for_owner`) rather than one `scoped()` helper; the isolation suite below proves every id-taking route.*
+- [x] Every ChromaDB `add` stores `user_id` and `project_id` in metadata; every `query` passes `where={"user_id": uid, "project_id": pid}`. Same filter on the BM25 side (index per user, or filter before scoring). *Done differently: one collection (and one BM25 vocabulary) per project, and every RAG/search route checks project ownership first — covered by the isolation tests.*
+- [x] Semantic cache keys include `user_id`, so one user's cached answer is never served to another. *No answer cache exists yet; the only cache (vocabulary) is keyed by project. Revisit when a cache is added.*
+- [x] Return `404`, not `403`, for another user's IDs, so IDs cannot be probed.
+- [x] Add `tests/test_isolation.py`: two users, each with notes; assert user B gets nothing from `/projects`, `/contexts`, `/search/conversations` and `/projects/{id}/query` for user A's data, including RAG citations. *`tests/api/test_isolation.py`, 19 routes.*
 
 **Captured content (stored XSS)**
 
-- [ ] Extension: sanitise selection HTML with DOMPurify before Turndown in `note-cs.ts`; cap a capture at 1 MB.
-- [ ] Backend: reject or strip raw HTML in incoming Markdown (`bleach` or `nh3`), enforce size limits with Pydantic `max_length`.
-- [ ] Dashboard: render Markdown with `rehype-sanitize` after Shiki and KaTeX; never `dangerouslySetInnerHTML` on note content. Test with a note containing `<img src=x onerror=alert(1)>`.
-- [ ] Strict CSP in `next.config` headers (`default-src 'self'`, API origin in `connect-src`, no `unsafe-eval` in production) and an explicit `content_security_policy` in the manifest.
+- [x] Extension: sanitise selection HTML with DOMPurify before Turndown in `note-cs.ts`; cap a capture at 1 MB. *Done without DOMPurify (not installable offline): Turndown already parses into an inert document; script/style/iframe/object/embed are now removed, and selections over 1 MB fall back to plain text.*
+- [x] Backend: reject or strip raw HTML in incoming Markdown (`bleach` or `nh3`), enforce size limits with Pydantic `max_length`. *Not stripped on purpose: notes about code legitimately contain HTML, and stripping would corrupt them. Every field has `max_length`, plus a 2 MB request-body cap (413). Safety rests on the renderers never interpreting HTML, pinned by `e2e/tests/xss.spec.ts`.*
+- [x] Dashboard: render Markdown with `rehype-sanitize` after Shiki and KaTeX; never `dangerouslySetInnerHTML` on note content. Test with a note containing `<img src=x onerror=alert(1)>`. *react-markdown runs without `rehype-raw`, so raw HTML is never rendered; the only `dangerouslySetInnerHTML` is Shiki output and the theme script. XSS e2e test covers notes and conversations. rehype-sanitize is still worth adding when packages can be installed.*
+- [x] Strict CSP in `next.config` headers (`default-src 'self'`, API origin in `connect-src`, no `unsafe-eval` in production) and an explicit `content_security_policy` in the manifest. *Header CSP; inline scripts still allowed (static pages, no nonces).*
 
 **Auth and sessions**
 
-- [ ] Dashboard: move access and refresh tokens out of zustand `persist` / `localStorage` into `httpOnly; Secure; SameSite=Lax` cookies set by the API; add CSRF protection (double-submit token) on state-changing routes.
-- [ ] Refresh-token rotation with reuse detection: store a token family; a reused refresh token revokes the whole family.
-- [ ] Extension keeps `chrome.storage.session` for the access token; restrict `externally_connectable` to the dashboard origin only.
-- [ ] Password hashing with Argon2id (check what the backend uses now); minimum length 10, breached-password check optional.
-- [ ] Add email verification, password reset, and "log out of all devices".
+- [x] Dashboard: move access and refresh tokens out of zustand `persist` / `localStorage` into `httpOnly; Secure; SameSite=Lax` cookies set by the API; add CSRF protection (double-submit token) on state-changing routes. *Refresh token in an httpOnly, SameSite=Strict cookie scoped to `/api/v1/auth`; access token memory-only. CSRF: cookie is read only with the custom `X-Auth-Mode: cookie` header (forces a CORS preflight) from an allowed Origin, instead of a double-submit token. Old localStorage tokens migrate on next visit. Requires the dashboard and API on the same site.*
+- [x] Refresh-token rotation with reuse detection: store a token family; a reused refresh token revokes the whole family. *Reuse revokes every session of the user.*
+- [x] Extension keeps `chrome.storage.session` for the access token; restrict `externally_connectable` to the dashboard origin only. *`externally_connectable` is generated per build from the dashboard URL.*
+- [x] Password hashing with Argon2id (check what the backend uses now); minimum length 10, breached-password check optional. *Argon2id; new accounts need 10+ characters (existing shorter passwords still log in).*
+- [ ] Add email verification, password reset, and "log out of all devices". *"Log out of all devices" exists (`/auth/logout-all`); email verification and password reset wait on choosing an email provider.*
 
 **Abuse limits**
 
-- [ ] Rate limits with `slowapi` (Redis-backed): login 5/min per IP, capture 60/min per user, RAG query 20/min per user.
-- [ ] CORS allowlist: dashboard origin and `chrome-extension://<id>` only.
-- [ ] Dependency scanning in CI: `pnpm audit`, `pip-audit`, and GitHub Dependabot or Renovate.
+- [x] Rate limits with `slowapi` (Redis-backed): login 5/min per IP, capture 60/min per user, RAG query 20/min per user. *In-memory, not Redis (single process today): login 10/15 min per IP, capture 60/min, search 60/min, Ask AI 20/min per user. Move to Redis before running more than one API process.*
+- [x] CORS allowlist: dashboard origin and `chrome-extension://<id>` only. *Default allowlist is the dashboard only; set `EXTENSION_ORIGIN` in each deployed environment.*
+- [x] Dependency scanning in CI: `pnpm audit`, `pip-audit`, and GitHub Dependabot or Renovate. *Dependabot; `npm audit` job and `pip-audit` step, both report-only until current findings are cleared.*
 
 **Done when**: the isolation test and the XSS test pass in CI, and no token is readable from `localStorage` in the dashboard.
 

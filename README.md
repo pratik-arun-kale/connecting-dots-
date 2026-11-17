@@ -39,6 +39,8 @@ Needs Node 20+, Docker, and Chrome.
 
 Every URL comes from env files. Shipped code never names `localhost`, and `npm run lint` checks this.
 
+**Host the dashboard and the API on the same site** (for example `app.example.com` and `api.example.com`). The dashboard's refresh token is an httpOnly `SameSite=Strict` cookie set by the API, which browsers only send between same-site origins. The extension doesn't use the cookie.
+
 | App | File | Variables |
 | --- | --- | --- |
 | Extension | `apps/extension/.env.<mode>` | `VITE_API_URL`, `VITE_DASHBOARD_URL` (see `.env.example`) |

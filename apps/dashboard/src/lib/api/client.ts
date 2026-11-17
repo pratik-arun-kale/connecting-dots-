@@ -26,9 +26,9 @@ apiClient.interceptors.request.use(
 
 // Response interceptor — on a 401, try exactly one silent refresh (deduped
 // across concurrent requests via a single shared in-flight promise) and
-// retry the original request with the new access token. If the refresh
-// itself fails, or there's no refresh token to try, the session is cleared
-// and the user is bounced to /login. Requests to /auth/* are excluded from
+// retry the original request with the new access token. The refresh token
+// is an httpOnly cookie this code never sees; the browser sends it. If the
+// refresh fails, the session is cleared and the user is bounced to /login. Requests to /auth/* are excluded from
 // this logic entirely — a wrong password on /auth/login also comes back as
 // 401, and retrying THAT via a token refresh would be nonsensical (and can
 // never succeed, since login failures aren't a token problem).
@@ -48,20 +48,14 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const { refreshToken, setSession, clearSession } = useAuthStore.getState();
-    if (!refreshToken) {
-      clearSession();
-      if (typeof window !== 'undefined') window.location.href = '/login';
-      return Promise.reject(error);
-    }
-
+    const { setSession, clearSession } = useAuthStore.getState();
     originalRequest._retry = true;
 
     try {
       if (!refreshPromise) {
         refreshPromise = (async () => {
           const { authService } = await import('./services/auth.service');
-          const tokens = await authService.refresh(refreshToken);
+          const tokens = await authService.refresh();
           setSession(tokens);
           return tokens.access_token;
         })().finally(() => {

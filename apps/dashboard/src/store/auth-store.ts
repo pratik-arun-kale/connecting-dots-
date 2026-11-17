@@ -4,17 +4,32 @@ import type { AuthUser, TokenPair } from '@/lib/api/services/auth.service';
 
 type AuthStatus = 'idle' | 'authenticated' | 'unauthenticated';
 
+/**
+ * No token is ever written to localStorage. The refresh token is an
+ * httpOnly cookie set by the API (page script can't read it); the access
+ * token lives only in memory and is re-derived on each page load by a
+ * silent refresh (see AuthProvider). Only `user` is persisted, as a hint
+ * that a cookie session probably exists — so a logged-out visitor isn't
+ * sent through a refresh request that can only fail.
+ */
 interface AuthState {
   // 'idle' = not yet resolved on this page load (AuthProvider is trying a
-  // silent refresh from the persisted refresh token) — the (workspace)
-  // layout guard treats this as "loading", not "redirect to /login", so a
-  // logged-in user doesn't flash through the login page on every reload.
+  // silent refresh) — the (workspace) layout guard treats this as
+  // "loading", not "redirect to /login", so a logged-in user doesn't flash
+  // through the login page on every reload.
   status: AuthStatus;
   accessToken: string | null;
-  refreshToken: string | null;
   user: AuthUser | null;
+  // A refresh token that an older build left in localStorage. AuthProvider
+  // trades it once for a cookie session; never persisted again.
+  legacyRefreshToken: string | null;
   setSession: (tokens: TokenPair) => void;
   clearSession: () => void;
+}
+
+interface PersistedV0 {
+  refreshToken?: string | null;
+  user?: AuthUser | null;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -22,28 +37,31 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       status: 'idle',
       accessToken: null,
-      refreshToken: null,
       user: null,
+      legacyRefreshToken: null,
       setSession: (tokens) =>
         set({
           status: 'authenticated',
           accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
           user: tokens.user,
+          legacyRefreshToken: null,
         }),
       clearSession: () =>
-        set({ status: 'unauthenticated', accessToken: null, refreshToken: null, user: null }),
+        set({ status: 'unauthenticated', accessToken: null, user: null, legacyRefreshToken: null }),
     }),
     {
       name: 'cw-auth',
-      // Only the refresh token survives a reload. The access token is
-      // deliberately kept memory-only (re-derived via a silent refresh on
-      // load) to shrink its window of exposure in localStorage — the
-      // refresh token itself still sits in JS-reachable storage (a real
-      // trade-off for a Chrome-extension-compatible bearer-token design
-      // instead of httpOnly cookies), mitigated by short access-token TTL
-      // and refresh rotation + reuse detection on the backend.
-      partialize: (state) => ({ refreshToken: state.refreshToken, user: state.user }),
+      version: 1,
+      partialize: (state) => ({ user: state.user }),
+      // v0 persisted the refresh token itself. Move it into memory (for the
+      // one-time exchange) and drop it from storage on the next write.
+      migrate: (persisted, version) => {
+        if (version === 0) {
+          const old = (persisted ?? {}) as PersistedV0;
+          return { user: old.user ?? null, legacyRefreshToken: old.refreshToken ?? null } as AuthState;
+        }
+        return persisted as AuthState;
+      },
     },
   ),
 );

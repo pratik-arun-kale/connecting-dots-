@@ -17,7 +17,7 @@ import { extractErrorMessage } from '@/lib/api/error-message';
 const schema = z
   .object({
     email: z.string().min(1, 'Email is required').email('Enter a valid email'),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
+    password: z.string().min(10, 'Password must be at least 10 characters'),
     confirmPassword: z.string().min(1, 'Confirm your password'),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -84,7 +84,7 @@ export default function RegisterPage() {
             </label>
             <Input
               type="password"
-              placeholder="At least 8 characters"
+              placeholder="At least 10 characters"
               autoComplete="new-password"
               {...register('password')}
               className="bg-muted/30 border-border focus:border-[#4f46e5] text-sm focus:ring-1 focus:ring-[#4f46e5]/30"
