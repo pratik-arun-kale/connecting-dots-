@@ -71,6 +71,14 @@ class ConflictException(AppBaseException):
     message = "A resource with this identifier already exists."
 
 
+class DuplicateCaptureException(ConflictException):
+    """The same passage or conversation is already saved in this project.
+    details.context_id names the existing note, so a client can open it."""
+
+    code = "duplicate"
+    message = "Already saved in this project."
+
+
 class UnprocessableException(AppBaseException):
     status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
     code = "unprocessable"

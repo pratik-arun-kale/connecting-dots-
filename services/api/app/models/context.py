@@ -41,6 +41,10 @@ class Context(Base, UUIDPrimaryKeyMixin):
     idempotency_key: Mapped[str | None] = mapped_column(
         String(64), nullable=True, unique=True, index=True
     )
+    # Fingerprint of a captured passage/conversation (app.core.fingerprint);
+    # unique, so the same capture can't be saved twice into one project.
+    # NULL for written notes and for older duplicates kept by migration 0011.
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
     title: Mapped[str | None]    = mapped_column(String(512), nullable=True)
     # user_title: a title the reader typed themselves. Kept separate from the
     # automatic `title` so clearing it restores the original, and anything

@@ -13,11 +13,10 @@ interface CaptureResult {
   chatUrl:      string
 }
 
-async function computeIdempotencyKey(projectId: string, url: string): Promise<string> {
-  const minuteBucket = new Date().toISOString().slice(0, 16)
-  const raw  = new TextEncoder().encode(`${projectId}:${url}:${minuteBucket}`)
-  const buf  = await crypto.subtle.digest('SHA-256', raw)
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32)
+// A new key per click: a retry inside CaptureQueue reuses it, and the API
+// itself refuses a second copy of an unchanged conversation (DUPLICATE).
+function newIdempotencyKey(): string {
+  return crypto.randomUUID().replace(/-/g, '')
 }
 
 export function useCaptureContext() {
@@ -40,7 +39,7 @@ export function useCaptureContext() {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (!activeTab?.id || !activeTab.url) throw new Error('No active tab found.')
 
-      const idempotencyKey = await computeIdempotencyKey(activeProjectId, activeTab.url)
+      const idempotencyKey = newIdempotencyKey()
 
       // Platform is determined inside the injected script by hostname
       const response = await chrome.runtime.sendMessage({
@@ -56,6 +55,7 @@ export function useCaptureContext() {
           response?.error === 'LOCK_HELD'     ? 'Capture already in progress for this tab.' :
           response?.error === 'TAB_DEAD'      ? 'Tab was closed.' :
           response?.error === 'EXTRACT_FAILED'? response?.detail ?? 'Nothing found on this page.' :
+          response?.error === 'DUPLICATE'     ? 'Already saved in this project — nothing changed since the last capture.' :
           response?.detail ?? 'Capture failed.'
         throw new Error(msg)
       }

@@ -47,6 +47,34 @@ export interface ProjectSummary {
   name: string;
 }
 
+/**
+ * A capture the API refused. `duplicateOf` is set for 409 `duplicate`: the
+ * same passage/conversation is already saved in that project, as that note.
+ * `permanent` means retrying the same request can't succeed (other 4xx,
+ * except 401 — the user may sign in again — 408 and 429).
+ */
+export class CaptureRejectedError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+  readonly duplicateOf: string | null;
+
+  constructor(status: number, code: string | null, message: string, duplicateOf: string | null) {
+    super(message);
+    this.name = 'CaptureRejectedError';
+    this.status = status;
+    this.code = code;
+    this.duplicateOf = duplicateOf;
+  }
+
+  get permanent(): boolean {
+    return this.status >= 400 && this.status < 500 && ![401, 408, 429].includes(this.status);
+  }
+}
+
+interface ApiErrorBody {
+  error?: { code?: string; message?: string; details?: { context_id?: string } | null };
+}
+
 export class BackendClient {
   constructor(private readonly baseUrl: string = API_BASE_URL) {}
 
@@ -87,8 +115,17 @@ export class BackendClient {
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`captureConversation → ${res.status}: ${body.slice(0, 200)}`);
+      const text = await res.text().catch(() => '');
+      let body: ApiErrorBody = {};
+      try { body = JSON.parse(text) as ApiErrorBody; } catch { /* not JSON */ }
+      const code = body.error?.code ?? null;
+      const duplicateOf = code === 'duplicate' ? body.error?.details?.context_id ?? null : null;
+      throw new CaptureRejectedError(
+        res.status,
+        code,
+        body.error?.message ?? `captureConversation → ${res.status}: ${text.slice(0, 200)}`,
+        duplicateOf,
+      );
     }
     return res.json() as Promise<CaptureResponse>;
   }

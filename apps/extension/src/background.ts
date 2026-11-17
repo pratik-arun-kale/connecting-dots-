@@ -14,7 +14,7 @@ import { EventBus }            from './core/EventBus';
 import { TabManager }          from './core/TabManager';
 import { SessionOrchestrator } from './core/SessionOrchestrator';
 import { CaptureQueue }        from './core/CaptureQueue';
-import { BackendClient }       from './api/BackendClient';
+import { BackendClient, CaptureRejectedError } from './api/BackendClient';
 import { ProviderRegistry }    from './providers/ProviderRegistry';
 import type {
   ExternalRequest, ContentScriptMessage, CaptureContextRequest, CaptureContextResult,
@@ -263,6 +263,12 @@ async function performCapture(
     await captureQueue.flush();
 
     const entry = await captureQueue.getEntry(idempotencyKey);
+    if (entry?.duplicateOf) {
+      return {
+        type: 'CAPTURE_CONTEXT_RESULT', ok: false, error: 'DUPLICATE',
+        detail: 'Already saved in this project.', contextId: entry.duplicateOf,
+      };
+    }
     if (!entry?.result) {
       return { type: 'CAPTURE_CONTEXT_RESULT', ok: false, error: 'UPLOAD_FAILED', detail: entry?.error ?? 'Upload failed.' };
     }
@@ -357,8 +363,15 @@ async function handleNoteSave(msg: NoteSaveRequest): Promise<NoteSaveResult> {
     prompt_text: msg.promptText,
   };
 
-  const result = await api.captureConversation(msg.projectId, payload);
-  return { type: 'NOTE_SAVE_RESULT', ok: true, contextId: result.context_id };
+  try {
+    const result = await api.captureConversation(msg.projectId, payload);
+    return { type: 'NOTE_SAVE_RESULT', ok: true, contextId: result.context_id };
+  } catch (err) {
+    if (err instanceof CaptureRejectedError && err.duplicateOf) {
+      return { type: 'NOTE_SAVE_RESULT', ok: false, error: 'Already saved in this project.', duplicateOf: err.duplicateOf };
+    }
+    throw err;
+  }
 }
 
 // ── Launcher capture (on-page floating button → Background) ─────────────────
@@ -386,7 +399,7 @@ chrome.runtime.onMessage.addListener(
       .then((result) => {
         const response: LauncherCaptureResult = result.ok
           ? { type: 'LAUNCHER_CAPTURE_RESULT', ok: true, contextId: result.contextId, title: result.title, messageCount: result.messageCount }
-          : { type: 'LAUNCHER_CAPTURE_RESULT', ok: false, error: result.detail ?? 'Capture failed.' };
+          : { type: 'LAUNCHER_CAPTURE_RESULT', ok: false, error: result.detail ?? 'Capture failed.', duplicateOf: result.contextId };
         sendResponse(response);
       })
       .catch((err: unknown) => sendResponse({

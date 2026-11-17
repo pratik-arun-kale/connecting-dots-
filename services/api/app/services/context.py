@@ -9,9 +9,11 @@ from __future__ import annotations
 import uuid
 from urllib.parse import urlparse
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import DuplicateCaptureException, NotFoundException
+from app.core.fingerprint import capture_fingerprint
 from app.core.logging import get_logger
 from app.core.rag import vector_store
 from app.models.context import Context
@@ -110,6 +112,17 @@ class ContextService:
                 created=False,
             )
 
+        # 2b. Content duplicate: the same passage/conversation from the same
+        # page, already in this project, under a different idempotency key
+        # (a second click, a re-selection, a re-capture of an unchanged chat).
+        # Written notes are exempt — writing the same text twice is allowed.
+        content_md = _build_content_md(payload.messages)
+        content_hash = (
+            capture_fingerprint(project_id, payload.chat_url, content_md) if payload.kind == "captured" else None
+        )
+        if content_hash is not None:
+            await self._raise_if_duplicate(content_hash)
+
         # 3. Upsert session keyed on (project_id, platform, chat_url)
         session = await self._session_repo.get_capture_session(
             project_id, payload.platform, payload.chat_url
@@ -131,23 +144,17 @@ class ContextService:
             "metadata":   payload.metadata or {},
         }
 
-        # 5. Insert context
-        context = await self._repo.create(
-            session_id=session.id,
-            idempotency_key=payload.idempotency_key,
-            title=payload.title,
-            messages_count=len(payload.messages),
-            platform=payload.platform,
-            chat_url=payload.chat_url,
-            raw_content=raw_content,
-            # Always include platform + url in metadata so legacy readers still work
-            metadata_={"platform": payload.platform, "url": payload.chat_url, **(payload.metadata or {})},
-            content_md=_build_content_md(payload.messages),
-            source=_infer_source(payload.platform, payload.chat_url),
-            page_title=payload.page_title,
-            prompt_text=payload.prompt_text,
-            kind=payload.kind,
-        )
+        # 5. Insert context. The unique index on content_hash settles a race
+        # between two identical captures; the savepoint keeps the request's
+        # transaction usable so the loser can answer with the winner's id.
+        try:
+            async with self._repo.session.begin_nested():
+                context = await self._insert_captured(session.id, payload, raw_content, content_md, content_hash)
+        except IntegrityError:
+            if content_hash is None:
+                raise
+            await self._raise_if_duplicate(content_hash)
+            raise
 
         logger.info(
             "conversation_captured",
@@ -167,6 +174,37 @@ class ContextService:
             chat_url=payload.chat_url,
             captured_at=context.created_at,
             created=True,
+        )
+
+    async def _raise_if_duplicate(self, content_hash: str) -> None:
+        existing = await self._repo.get_by_content_hash(content_hash)
+        if existing is not None:
+            raise DuplicateCaptureException(details={"context_id": str(existing.id)})
+
+    async def _insert_captured(
+        self,
+        session_id: uuid.UUID,
+        payload: CaptureConversationRequest,
+        raw_content: dict,
+        content_md: str | None,
+        content_hash: str | None,
+    ) -> Context:
+        return await self._repo.create(
+            session_id=session_id,
+            idempotency_key=payload.idempotency_key,
+            title=payload.title,
+            messages_count=len(payload.messages),
+            platform=payload.platform,
+            chat_url=payload.chat_url,
+            raw_content=raw_content,
+            # Always include platform + url in metadata so legacy readers still work
+            metadata_={"platform": payload.platform, "url": payload.chat_url, **(payload.metadata or {})},
+            content_md=content_md,
+            content_hash=content_hash,
+            source=_infer_source(payload.platform, payload.chat_url),
+            page_title=payload.page_title,
+            prompt_text=payload.prompt_text,
+            kind=payload.kind,
         )
 
     async def list_contexts_for_session(

@@ -197,6 +197,7 @@ if (!window.__CW_NOTE_CS__) {
     .status { flex: 1 1 auto; min-width: 0; color: #9a9a9e; }
     .status.error { color: #ff8080; }
     .status.success { color: #63d68a; }
+    .status a { color: inherit; text-decoration: underline; }
   `;
 
   const CSS_LAUNCHER = `
@@ -264,6 +265,7 @@ if (!window.__CW_NOTE_CS__) {
     .menu-item:disabled { opacity: 0.45; cursor: default; }
     .menu-status { padding: 2px 8px 4px; color: #9a9a9e; font-size: 12px; }
     .menu-status.error { color: #ff8080; }
+    .menu-status a { color: inherit; text-decoration: underline; }
     .menu-status.success { color: #63d68a; }
   `;
 
@@ -543,6 +545,11 @@ if (!window.__CW_NOTE_CS__) {
       },
       (response: NoteSaveResult | undefined) => {
         if (!bar) return;
+        if (response && !response.ok && response.duplicateOf) {
+          showAlreadySaved(bar.status, response.duplicateOf);
+          bar.saveBtn.textContent = 'Already saved';
+          return; // left open so the link can be clicked; Esc / ✕ closes it
+        }
         if (chrome.runtime.lastError || !response?.ok) {
           setBarStatus((response && !response.ok && response.error) || 'Save failed.', 'error');
           bar.saveBtn.disabled = false;
@@ -665,6 +672,19 @@ if (!window.__CW_NOTE_CS__) {
     });
   }
 
+  /** "Already saved · Open note", linking to the note that holds this text. */
+  function showAlreadySaved(el: HTMLElement, contextId: string): void {
+    el.textContent = 'Already saved · ';
+    const link = document.createElement('a');
+    link.href = `${DASHBOARD_URL}/notes/${encodeURIComponent(contextId)}`;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'Open note';
+    el.appendChild(link);
+    el.className = el.className.split(' ')[0] + ' success';
+    el.hidden = false;
+  }
+
   function setMenuStatus(text: string, kind?: 'error' | 'success'): void {
     if (!launcher) return;
     launcher.menuStatus.textContent = text || '';
@@ -729,6 +749,10 @@ if (!window.__CW_NOTE_CS__) {
       if (!launcher) return;
       launcher.captureItem.disabled = false;
       launcher.saveNoteItem.disabled = false;
+      if (response && !response.ok && response.duplicateOf) {
+        showAlreadySaved(launcher.menuStatus, response.duplicateOf);
+        return;
+      }
       if (chrome.runtime.lastError || !response?.ok) {
         setMenuStatus((response && !response.ok && response.error) || 'Capture failed.', 'error');
         return;

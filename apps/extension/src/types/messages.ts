@@ -73,8 +73,10 @@ export type CaptureContextResult = {
 } | {
   type: 'CAPTURE_CONTEXT_RESULT';
   ok:   false;
-  error: 'LOCK_HELD' | 'TAB_DEAD' | 'EXTRACT_FAILED' | 'UPLOAD_FAILED' | 'DUPLICATE' | 'PROJECT_MISMATCH';
+  error: 'LOCK_HELD' | 'TAB_DEAD' | 'EXTRACT_FAILED' | 'UPLOAD_FAILED' | 'DUPLICATE';
   detail?: string;
+  /** For DUPLICATE: the note that already holds this conversation. */
+  contextId?: string;
 }
 
 export interface ExtractConversationMessage {
@@ -123,7 +125,7 @@ export interface NoteSaveRequest {
 
 export type NoteSaveResult =
   | { type: 'NOTE_SAVE_RESULT'; ok: true; contextId: string }
-  | { type: 'NOTE_SAVE_RESULT'; ok: false; error: string };
+  | { type: 'NOTE_SAVE_RESULT'; ok: false; error: string; duplicateOf?: string };
 
 // ── Launcher capture (on-page floating button → Background) ──────────────────
 
@@ -134,7 +136,7 @@ export interface LauncherCaptureRequest {
 
 export type LauncherCaptureResult =
   | { type: 'LAUNCHER_CAPTURE_RESULT'; ok: true; contextId: string; title: string; messageCount: number }
-  | { type: 'LAUNCHER_CAPTURE_RESULT'; ok: false; error: string };
+  | { type: 'LAUNCHER_CAPTURE_RESULT'; ok: false; error: string; duplicateOf?: string };
 
 export type InternalMessage =
   | ContentScriptMessage

@@ -9,6 +9,7 @@
  */
 
 import { BackendClient } from '../api/BackendClient';
+import { CaptureRejectedError } from '../api/BackendClient';
 import type { CapturePayload, CaptureResponse } from '../api/BackendClient';
 
 const QUEUE_KEY     = 'cw_capture_queue_v1';
@@ -28,6 +29,8 @@ export interface QueueEntry {
   attempts:    number;
   lastAttempt: number;
   result?:     CaptureResponse;
+  /** Set when the API answered "already saved": the existing note's id. */
+  duplicateOf?: string;
   error?:      string;
   createdAt:   number;
 }
@@ -116,8 +119,16 @@ export class CaptureQueue {
         entry.status = 'done';
         entry.result = result;
       } catch (err) {
-        entry.status = entry.attempts >= MAX_ATTEMPTS ? 'failed' : 'pending';
-        entry.error  = err instanceof Error ? err.message : String(err);
+        entry.error = err instanceof Error ? err.message : String(err);
+        if (err instanceof CaptureRejectedError && err.duplicateOf) {
+          // Nothing to retry: the content is already safely in the project.
+          entry.status = 'done';
+          entry.duplicateOf = err.duplicateOf;
+        } else if (err instanceof CaptureRejectedError && err.permanent) {
+          entry.status = 'failed'; // the same request would be refused again
+        } else {
+          entry.status = entry.attempts >= MAX_ATTEMPTS ? 'failed' : 'pending';
+        }
       }
       dirty = true;
     }

@@ -25,6 +25,10 @@ class ContextRepository(BaseRepository[Context]):
         )
         return result.scalar_one_or_none()
 
+    async def get_by_content_hash(self, content_hash: str) -> Context | None:
+        result = await self.session.execute(select(Context).where(Context.content_hash == content_hash))
+        return result.scalar_one_or_none()
+
     async def get_by_id_for_owner(self, context_id: uuid.UUID, owner_id: uuid.UUID) -> Context | None:
         """Ownership check via a two-hop JOIN: Context → Session → Project."""
         result = await self.session.execute(
