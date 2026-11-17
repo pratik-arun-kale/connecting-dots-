@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS, DEFAULT_STALE_TIME } from '@/lib/constants';
-import { projectService, sessionService, conversationSearchService } from '@/lib/api/services';
+import { projectService, sessionService, conversationSearchService, trashService } from '@/lib/api/services';
 import { extensionService } from '@/lib/services/extension.service';
 import type { ApiContext, ApiSession, ConversationSearchResponse, CreateProjectWithSessionsRequest, RagQueryResponse } from '@/types';
 
@@ -107,6 +107,7 @@ export function useDeleteNote(projectId?: string) {
     onSuccess: (_data, contextId) => {
       queryClient.removeQueries({ queryKey: [QUERY_KEYS.notes, 'detail', contextId] });
       invalidateNotes(queryClient, projectId);
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.trash] });
     },
   });
 }
@@ -170,9 +171,40 @@ export function useDeleteProject() {
       queryClient.removeQueries({ queryKey: [QUERY_KEYS.projects, id] });
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects] });
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.notes] }); // its notes are gone too
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.trash] });
     },
   });
 }
+
+// ──────────────────────────────────────────────
+// Trash Hooks
+// ──────────────────────────────────────────────
+
+export function useTrash() {
+  return useQuery({
+    queryKey: [QUERY_KEYS.trash],
+    queryFn: () => trashService.list(),
+    staleTime: 0,
+  });
+}
+
+/** After anything leaves or enters the Trash, every list it touches changes. */
+function useTrashMutation<T>(fn: (id: string) => Promise<T>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.trash] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.notes] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects] });
+    },
+  });
+}
+
+export const useRestoreNote = () => useTrashMutation(trashService.restoreNote);
+export const useRestoreProject = () => useTrashMutation(trashService.restoreProject);
+export const useDeleteNoteForever = () => useTrashMutation(trashService.deleteNoteForever);
+export const useDeleteProjectForever = () => useTrashMutation(trashService.deleteProjectForever);
 
 // ──────────────────────────────────────────────
 // RAG Query Hook

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Brain, Menu } from 'lucide-react';
 import { Sidebar } from './sidebar';
 import { VerifyEmailBanner } from './verify-email-banner';
+import { Toaster } from '@/components/ui/toaster';
 import { SearchDialog } from '@/features/search/search-dialog';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useSearchStore } from '@/store';
@@ -56,6 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <SearchDialog />
+      <Toaster />
     </div>
   );
 }

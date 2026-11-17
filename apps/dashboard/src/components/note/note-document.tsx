@@ -13,7 +13,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { NOTE_ORIGINS, getNoteOrigin, getSourceChip } from '@/lib/context-platform';
 import { formatDate, getAutoTitle, getDisplayTitle, getMessages } from '@/lib/note-display';
-import { useCreateNote, useDeleteNote, useUpdateNoteContent, useUpdateNoteTitle } from '@/lib/query';
+import { useCreateNote, useDeleteNote, useRestoreNote, useUpdateNoteContent, useUpdateNoteTitle } from '@/lib/query';
+import { toast } from '@/store/toast-store';
 import { isEditConflict, projectService } from '@/lib/api/services/project.service';
 import { useWorkspaceStore } from '@/store';
 import type { ApiContext, Project } from '@/types';
@@ -54,6 +55,7 @@ export function NoteDocument({ note, project }: { note: ApiContext | null; proje
   const { mutateAsync: updateContentAsync } = useUpdateNoteContent(projectId);
   const { mutateAsync: updateTitleAsync } = useUpdateNoteTitle(projectId);
   const deleteNote = useDeleteNote(projectId);
+  const { mutateAsync: restoreNoteAsync } = useRestoreNote();
 
   const [status, setStatus] = useState<SaveStatus>('idle');
   const [title, setTitle] = useState(note?.user_title ?? '');
@@ -186,9 +188,26 @@ export function NoteDocument({ note, project }: { note: ApiContext | null; proje
   const handleDelete = () => {
     const id = idRef.current;
     if (!id) { router.push('/notes'); return; }
-    if (!window.confirm('Delete this note? This removes it everywhere — it cannot be undone.')) return;
+    // No confirm dialog: it goes to the Trash, and the toast can undo it.
     deletedRef.current = true;
-    deleteNote.mutate(id, { onSuccess: () => router.push('/notes') });
+    deleteNote.mutate(id, {
+      onSuccess: () => {
+        router.push('/notes');
+        toast('Note moved to Trash.', {
+          action: {
+            label: 'Undo',
+            onClick: async () => {
+              await restoreNoteAsync(id);
+              router.push(`/notes/${id}`);
+            },
+          },
+        });
+      },
+      onError: () => {
+        deletedRef.current = false;
+        toast('Could not delete the note. Try again.', { tone: 'error' });
+      },
+    });
   };
 
   const isNew = note === null;

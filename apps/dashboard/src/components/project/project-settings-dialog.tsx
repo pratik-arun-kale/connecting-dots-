@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Trash2, AlertTriangle } from 'lucide-react';
-import { useUpdateProject, useDeleteProject } from '@/lib/query';
+import { useUpdateProject, useDeleteProject, useRestoreProject } from '@/lib/query';
+import { toast } from '@/store/toast-store';
 import { useWorkspaceStore } from '@/store';
 import type { Project } from '@/types';
 
@@ -22,6 +23,7 @@ export function ProjectSettingsDialog({ project, open, onClose }: ProjectSetting
 
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
+  const restoreProject = useRestoreProject();
 
   // No reset/sync effects: the caller mounts this dialog when it opens and
   // keys it by project id, so closing it or switching project gives a fresh
@@ -47,6 +49,9 @@ export function ProjectSettingsDialog({ project, open, onClose }: ProjectSetting
           useWorkspaceStore.getState().setActiveProject(null);
         }
         router.push('/notes');
+        toast(`“${project.name}” moved to Trash.`, {
+          action: { label: 'Undo', onClick: () => restoreProject.mutate(project.id) },
+        });
       },
     });
   };
@@ -161,7 +166,7 @@ export function ProjectSettingsDialog({ project, open, onClose }: ProjectSetting
                 <div className="space-y-1">
                   <p className="text-[13px] font-semibold text-[#dc2626]">Delete this project</p>
                   <p className="text-[12px] text-[#ef4444]/80 leading-relaxed">
-                    This permanently deletes <strong>{project.name}</strong> and all its sessions, captured contexts, and indexed data. This cannot be undone.
+                    Moves <strong>{project.name}</strong> and all its notes to the Trash. You can restore it from there for 30 days; after that it is deleted for good.
                   </p>
                 </div>
               </div>
@@ -199,7 +204,7 @@ export function ProjectSettingsDialog({ project, open, onClose }: ProjectSetting
                 >
                   {deleteProject.isPending
                     ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Deleting…</>
-                    : <><Trash2 className="w-3.5 h-3.5" /> Delete Project</>
+                    : <><Trash2 className="w-3.5 h-3.5" /> Move to Trash</>
                   }
                 </button>
               </div>

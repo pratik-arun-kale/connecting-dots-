@@ -202,3 +202,33 @@ export interface CreateProviderSessionMessage {
 }
 
 export type ExtensionMessage = CreateProviderSessionMessage;
+
+// ── Trash (GET /trash) ───────────────────────────────────────────
+
+export interface TrashedProject {
+  id: string;
+  name: string;
+  deleted_at: string;
+  /** When it is removed for good. */
+  purge_at: string;
+  notes_count: number;
+}
+
+export interface TrashedNote {
+  id: string;
+  project_id: string;
+  project_name: string;
+  title: string | null;
+  user_title: string | null;
+  content_md: string | null;
+  platform: string | null;
+  kind: string;
+  deleted_at: string;
+  purge_at: string;
+}
+
+export interface TrashResponse {
+  retention_days: number;
+  projects: TrashedProject[];
+  notes: TrashedNote[];
+}

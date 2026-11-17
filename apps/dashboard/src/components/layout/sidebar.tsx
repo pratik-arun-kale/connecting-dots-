@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Brain, House, Layers, LogOut, MessageSquare, Moon, MoreHorizontal,
+  Brain, House, Layers, LogOut, MessageSquare, Moon, MoreHorizontal, Trash2,
   PanelLeft, Plus, Search, Sparkles, Sun,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -162,6 +162,7 @@ export function Sidebar({ variant = 'desktop', onNavigate }: { variant?: 'deskto
         {navLink('/notes', House, 'Home')}
         {navLink('/sessions', MessageSquare, 'Sessions')}
         {navLink('/ask', Sparkles, 'Ask AI')}
+        {navLink('/trash', Trash2, 'Trash')}
       </nav>
 
       {/* Projects + notes */}

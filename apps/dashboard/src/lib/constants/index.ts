@@ -24,4 +24,5 @@ export const QUERY_KEYS = {
   notes: "notes",
   messages: "messages",
   search: "search",
+  trash: "trash",
 } as const;
