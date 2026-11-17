@@ -1,4 +1,6 @@
-export type PlatformId = 'chatgpt' | 'claude' | 'gemini' | 'perplexity'
+// Perplexity was removed until it has a session adapter and a selector canary
+// (docs/PRODUCTION_PLAN.md, Phase 6); the API still accepts old captures.
+export type PlatformId = 'chatgpt' | 'claude' | 'gemini'
 
 export interface Platform {
   id:            PlatformId
@@ -33,13 +35,6 @@ export const PLATFORM_DEFS: Record<PlatformId, Omit<Platform, 'connected' | 'act
     color:        '#4285f4',
     url:          'https://gemini.google.com',
     hostPatterns: ['gemini.google.com'],
-  },
-  perplexity: {
-    id:           'perplexity',
-    label:        'Perplexity',
-    color:        '#8b5cf6',
-    url:          'https://www.perplexity.ai',
-    hostPatterns: ['perplexity.ai'],
   },
 }
 

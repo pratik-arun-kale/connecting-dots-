@@ -2,7 +2,7 @@ import { useWorkspaceStore } from '@/store/useWorkspaceStore'
 import { PLATFORM_DEFS, type PlatformId } from '@/types/platform'
 import { cn } from '@/lib/utils'
 
-const ORDER: PlatformId[] = ['chatgpt', 'claude', 'gemini', 'perplexity']
+const ORDER: PlatformId[] = ['chatgpt', 'claude', 'gemini']
 
 /**
  * Replaces the old 2x2 grid (inside the Workspace tab) AND the separate,

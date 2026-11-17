@@ -16,7 +16,7 @@ export function usePlatformTabs() {
       resetPlatforms()
 
       const counts: Record<PlatformId, number[]> = {
-        chatgpt: [], claude: [], gemini: [], perplexity: [],
+        chatgpt: [], claude: [], gemini: [],
       }
 
       for (const tab of tabs) {

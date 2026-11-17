@@ -811,6 +811,4 @@ if (!window.__CW_NOTE_CS__) {
   } catch (err) {
     console.error('[note-cs] failed to render launcher:', err);
   }
-
-  console.debug('[note-cs] loaded on', location.hostname);
 }

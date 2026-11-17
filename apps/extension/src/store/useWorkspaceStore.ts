@@ -48,7 +48,6 @@ const defaultPlatforms = (): Record<PlatformId, Platform> => ({
   chatgpt:    makePlatform('chatgpt'),
   claude:     makePlatform('claude'),
   gemini:     makePlatform('gemini'),
-  perplexity: makePlatform('perplexity'),
 })
 
 export const useWorkspaceStore = create<WorkspaceState>()(

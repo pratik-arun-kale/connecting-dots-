@@ -150,7 +150,6 @@ async function performCapture(
           if (host.includes('chatgpt.com') || host.includes('chat.openai.com')) plat = 'chatgpt';
           else if (host.includes('claude.ai')) plat = 'claude';
           else if (host.includes('gemini.google.com')) plat = 'gemini';
-          else if (host.includes('perplexity.ai')) plat = 'perplexity';
 
           const q = (sel: string) => Array.from(document.querySelectorAll<HTMLElement>(sel));
           let msgs: Array<{ role: string; content: string; timestamp: null; index: number }> = [];
@@ -197,15 +196,6 @@ async function performCapture(
                 timestamp: null, index: i,
               })).filter(m => m.content);
             }
-          } else if (plat === 'perplexity') {
-            const queries = q('[class*="UserMessage"],.whitespace-pre-line');
-            const answers = q('[class*="AnswerBody"],[class*="prose"]');
-            const max = Math.max(queries.length, answers.length);
-            for (let i = 0; i < max; i++) {
-              if (queries[i]) msgs.push({ role: 'user',      content: queries[i].innerText.trim(), timestamp: null, index: msgs.length });
-              if (answers[i]) msgs.push({ role: 'assistant', content: answers[i].innerText.trim(), timestamp: null, index: msgs.length });
-            }
-            msgs = msgs.filter(m => m.content);
           }
 
           // Universal fallback: capture all visible body text
@@ -217,7 +207,7 @@ async function performCapture(
           }
 
           const rawTitle = document.title || 'Captured Page';
-          const title = rawTitle.replace(/\s*[-|]\s*(ChatGPT|Claude|Gemini|Perplexity).*$/i, '').trim() || rawTitle;
+          const title = rawTitle.replace(/\s*[-|]\s*(ChatGPT|Claude|Gemini).*$/i, '').trim() || rawTitle;
 
           return {
             ok: msgs.length > 0,
