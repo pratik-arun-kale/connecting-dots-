@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { NOTE_ORIGINS, getNoteOrigin, getSourceChip } from '@/lib/context-platform';
 import { formatDate, getAutoTitle, getDisplayTitle, getMessages } from '@/lib/note-display';
 import { useCreateNote, useDeleteNote, useUpdateNoteContent, useUpdateNoteTitle } from '@/lib/query';
+import { isEditConflict, projectService } from '@/lib/api/services/project.service';
 import { useWorkspaceStore } from '@/store';
 import type { ApiContext, Project } from '@/types';
 import type { InsertableBlock, NoteEditorHandle } from '@/components/project/note-editor';
@@ -32,7 +33,9 @@ const TOOLBAR: Array<{ type: InsertableBlock; label: string; icon: React.Element
   { type: 'quote', label: 'Quote', icon: Quote },
 ];
 
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+// 'conflict': the note was edited elsewhere since this page loaded it, and
+// saving stops until the user picks Reload or Keep mine.
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
 
 /**
  * A note as a full page: editable serif title, meta chips, formatting
@@ -61,6 +64,12 @@ export function NoteDocument({ note, project }: { note: ApiContext | null; proje
   const titleRef = useRef(title);
   useEffect(() => { titleRef.current = title; }, [title]);
   const deletedRef = useRef(false);
+  // The version every save is based on (sent as If-Match); a 409 means
+  // someone else saved in between, so this page must not overwrite them.
+  const versionRef = useRef(note?.version ?? 1);
+  const conflictRef = useRef(false);
+  // The newest body typed here, so "Keep mine" saves exactly that.
+  const pendingBodyRef = useRef<string | null>(null);
   // Saves run one at a time: a second save arriving while the note is still
   // being created must not see "no id yet" and create a duplicate.
   const chainRef = useRef<Promise<void>>(Promise.resolve());
@@ -72,8 +81,13 @@ export function NoteDocument({ note, project }: { note: ApiContext | null; proje
       if (deletedRef.current) return;
       try {
         await task();
-      } catch {
-        setStatus('error');
+      } catch (err) {
+        if (isEditConflict(err)) {
+          conflictRef.current = true;
+          setStatus('conflict');
+        } else {
+          setStatus('error');
+        }
       }
     });
     return chainRef.current;
@@ -81,31 +95,61 @@ export function NoteDocument({ note, project }: { note: ApiContext | null; proje
 
   const saveTitleNow = useCallback(async (value: string) => {
     const trimmed = value.trim();
-    if (!idRef.current || trimmed === lastTitleRef.current) return;
+    if (!idRef.current || conflictRef.current || trimmed === lastTitleRef.current) return;
     setStatus('saving');
-    await updateTitleAsync({ contextId: idRef.current, userTitle: trimmed });
+    const saved = await updateTitleAsync({ contextId: idRef.current, userTitle: trimmed, ifMatch: versionRef.current });
+    versionRef.current = saved.version ?? versionRef.current + 1;
     lastTitleRef.current = trimmed;
     setStatus('saved');
   }, [updateTitleAsync]);
 
-  const saveBody = useCallback((markdown: string) => enqueue(async () => {
+  const saveBody = useCallback((markdown: string) => {
     const trimmed = markdown.trim();
-    if (!trimmed || trimmed === lastBodyRef.current) return;
+    if (trimmed) pendingBodyRef.current = trimmed;
+    return enqueue(async () => {
+      if (!trimmed || conflictRef.current || trimmed === lastBodyRef.current) return;
+      setStatus('saving');
+      if (!idRef.current) {
+        if (!projectId) return;
+        const { contextId } = await createNoteAsync(trimmed);
+        idRef.current = contextId;
+        versionRef.current = 1;
+        window.history.replaceState(null, '', `/notes/${contextId}`);
+        lastBodyRef.current = trimmed;
+        // A title typed before the note existed is saved now that it does.
+        await saveTitleNow(titleRef.current);
+      } else {
+        const saved = await updateContentAsync({ contextId: idRef.current, contentMd: trimmed, ifMatch: versionRef.current });
+        versionRef.current = saved.version ?? versionRef.current + 1;
+        lastBodyRef.current = trimmed;
+      }
+      setStatus('saved');
+    });
+  }, [enqueue, projectId, createNoteAsync, updateContentAsync, saveTitleNow]);
+
+  /** Conflict, then "Keep mine": overwrite the other edit with this page's
+   *  text, now knowingly (based on the current version). */
+  const keepMine = useCallback(() => enqueue(async () => {
+    const id = idRef.current;
+    if (!id) return;
     setStatus('saving');
-    if (!idRef.current) {
-      if (!projectId) return;
-      const { contextId } = await createNoteAsync(trimmed);
-      idRef.current = contextId;
-      window.history.replaceState(null, '', `/notes/${contextId}`);
-      lastBodyRef.current = trimmed;
-      // A title typed before the note existed is saved now that it does.
-      await saveTitleNow(titleRef.current);
-    } else {
-      await updateContentAsync({ contextId: idRef.current, contentMd: trimmed });
-      lastBodyRef.current = trimmed;
+    const current = await projectService.getNote(id);
+    versionRef.current = current.version ?? versionRef.current;
+    conflictRef.current = false;
+    const body = pendingBodyRef.current;
+    if (body) {
+      const saved = await updateContentAsync({ contextId: id, contentMd: body, ifMatch: versionRef.current });
+      versionRef.current = saved.version ?? versionRef.current + 1;
+      lastBodyRef.current = body;
     }
+    const mineTitle = titleRef.current.trim();
+    if (mineTitle !== (current.user_title ?? '').trim()) {
+      const saved = await updateTitleAsync({ contextId: id, userTitle: mineTitle, ifMatch: versionRef.current });
+      versionRef.current = saved.version ?? versionRef.current + 1;
+    }
+    lastTitleRef.current = mineTitle;
     setStatus('saved');
-  }), [enqueue, projectId, createNoteAsync, updateContentAsync, saveTitleNow]);
+  }), [enqueue, updateContentAsync, updateTitleAsync]);
 
   const flushTitle = useCallback(() => {
     if (titleTimer.current) { clearTimeout(titleTimer.current); titleTimer.current = null; }
@@ -123,6 +167,22 @@ export function NoteDocument({ note, project }: { note: ApiContext | null; proje
   useEffect(() => { flushTitleRef.current = flushTitle; }, [flushTitle]);
   useEffect(() => () => { if (titleTimer.current) void flushTitleRef.current(); }, []);
 
+  // Switching tabs, minimising or closing: save now rather than after the
+  // debounce, which may never come for a page being closed.
+  useEffect(() => {
+    const saveNow = () => {
+      if (document.visibilityState !== 'hidden') return;
+      void editorHandle.current?.flush();
+      void flushTitleRef.current();
+    };
+    document.addEventListener('visibilitychange', saveNow);
+    window.addEventListener('pagehide', saveNow);
+    return () => {
+      document.removeEventListener('visibilitychange', saveNow);
+      window.removeEventListener('pagehide', saveNow);
+    };
+  }, []);
+
   const handleDelete = () => {
     const id = idRef.current;
     if (!id) { router.push('/notes'); return; }
@@ -139,7 +199,9 @@ export function NoteDocument({ note, project }: { note: ApiContext | null; proje
   const placeholder = note ? getAutoTitle(note) : 'Untitled';
   const headerTitle = title.trim() || (note ? getDisplayTitle(note) : 'New note');
 
-  const statusText = { idle: '', saving: 'Saving…', saved: 'Saved', error: 'Couldn’t save — retrying on next edit' }[status];
+  const statusText = {
+    idle: '', saving: 'Saving…', saved: 'Saved', error: 'Couldn’t save — retrying on next edit', conflict: 'Not saved',
+  }[status];
 
   return (
     <div className="flex min-h-full flex-col">
@@ -189,6 +251,31 @@ export function NoteDocument({ note, project }: { note: ApiContext | null; proje
         )}
         <span className="truncate text-foreground">{headerTitle}</span>
       </PageHeader>
+
+      {status === 'conflict' && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-[13px] text-amber-900 md:px-6 dark:text-amber-200"
+        >
+          <span className="min-w-0 flex-1">
+            This note was edited somewhere else since you opened it. Your latest changes aren&apos;t saved.
+          </span>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-md px-2 py-0.5 font-medium underline underline-offset-2 hover:no-underline cursor-pointer"
+          >
+            Reload theirs
+          </button>
+          <button
+            type="button"
+            onClick={() => void keepMine()}
+            className="rounded-md bg-amber-900/90 px-2.5 py-0.5 font-medium text-white hover:bg-amber-900 dark:bg-amber-200 dark:text-amber-950 cursor-pointer"
+          >
+            Keep mine
+          </button>
+        </div>
+      )}
 
       {editable && (
         <div className="sticky top-12 z-10 flex items-center gap-0.5 border-b border-border/60 bg-background/95 px-4 py-1 backdrop-blur md:px-6">

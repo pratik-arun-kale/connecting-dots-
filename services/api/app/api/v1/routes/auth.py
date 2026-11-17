@@ -123,7 +123,9 @@ def _presented_refresh_token(request: Request, from_body: str | None) -> str | N
     response_model=TokenPairResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create an account (auto-login: returns a token pair)",
-    dependencies=[Depends(rate_limit("auth_register", max_requests=5, window_seconds=3600))],
+    dependencies=[
+        Depends(rate_limit("auth_register", max_requests=settings.auth_register_limit_per_hour, window_seconds=3600))
+    ],
 )
 async def register(
     payload: RegisterRequest,

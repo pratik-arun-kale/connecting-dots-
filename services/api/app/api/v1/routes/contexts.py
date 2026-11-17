@@ -13,8 +13,9 @@ DELETE /contexts/detail/{context_id}   – delete a note/context
 
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Query, status
+from fastapi import APIRouter, BackgroundTasks, Header, Query, status
 
+from app.core.exceptions import UnprocessableException
 from app.dependencies import ContextServiceDep, CurrentUserDep, RagServiceDep
 from app.schemas.context import (
     ContextCapture,
@@ -119,10 +120,21 @@ async def get_context(
     return ContextResponse.model_validate(context)
 
 
+def _parse_version(if_match: str | None) -> int | None:
+    """If-Match as `3`, `"3"` or `W/"3"`; absent means "don't check"."""
+    if if_match is None or not if_match.strip() or if_match.strip() == "*":
+        return None
+    value = if_match.strip().removeprefix("W/").strip('"')
+    if not value.isdigit():
+        raise UnprocessableException("If-Match must be the note's version number.")
+    return int(value)
+
+
 @router.patch(
     "/detail/{context_id}",
     response_model=ContextResponse,
     summary="Update a note's annotation (user_note) and/or a written note's body (content_md)",
+    responses={409: {"description": "If-Match named an older version (code edit_conflict)"}},
 )
 async def update_note(
     context_id: uuid.UUID,
@@ -131,8 +143,12 @@ async def update_note(
     rag_service: RagServiceDep,
     background_tasks: BackgroundTasks,
     current_user: CurrentUserDep,
+    if_match: str | None = Header(
+        default=None,
+        description="The note's `version` as loaded. If it changed since, the edit is refused with 409.",
+    ),
 ) -> ContextResponse:
-    context = await service.update_note(context_id, payload, current_user.id)
+    context = await service.update_note(context_id, payload, current_user.id, if_match=_parse_version(if_match))
 
     # The body and the title are what Ask AI and search match on, so an edit
     # to either replaces the context's chunks (coalesced across autosaves —

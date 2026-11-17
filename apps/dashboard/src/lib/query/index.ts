@@ -114,8 +114,8 @@ export function useDeleteNote(projectId?: string) {
 export function useUpdateNoteContent(projectId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ contextId, contentMd }: { contextId: string; contentMd: string }) =>
-      projectService.updateNoteContent(contextId, contentMd),
+    mutationFn: ({ contextId, contentMd, ifMatch }: { contextId: string; contentMd: string; ifMatch?: number }) =>
+      projectService.updateNoteContent(contextId, contentMd, ifMatch),
     onSuccess: () => invalidateNotes(queryClient, projectId),
   });
 }
@@ -123,8 +123,8 @@ export function useUpdateNoteContent(projectId?: string) {
 export function useUpdateNoteTitle(projectId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ contextId, userTitle }: { contextId: string; userTitle: string }) =>
-      projectService.updateNoteTitle(contextId, userTitle),
+    mutationFn: ({ contextId, userTitle, ifMatch }: { contextId: string; userTitle: string; ifMatch?: number }) =>
+      projectService.updateNoteTitle(contextId, userTitle, ifMatch),
     onSuccess: () => invalidateNotes(queryClient, projectId),
   });
 }

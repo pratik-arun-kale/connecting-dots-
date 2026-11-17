@@ -79,6 +79,14 @@ class DuplicateCaptureException(ConflictException):
     message = "Already saved in this project."
 
 
+class EditConflictException(ConflictException):
+    """If-Match named an older version: the note changed since the client
+    loaded it. details.version is the current one."""
+
+    code = "edit_conflict"
+    message = "This note was edited somewhere else since you opened it."
+
+
 class UnprocessableException(AppBaseException):
     status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
     code = "unprocessable"

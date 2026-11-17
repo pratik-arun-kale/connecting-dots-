@@ -160,6 +160,8 @@ jobs:
       POSTGRES_PASSWORD: postgres
       ALLOWED_ORIGINS: http://localhost:3000
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+      # Each Playwright test signs up its own user, all from one IP.
+      AUTH_REGISTER_LIMIT_PER_HOUR: "100"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

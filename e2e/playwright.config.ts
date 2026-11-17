@@ -4,6 +4,10 @@ import { defineConfig, devices } from '@playwright/test';
  * Runs against a stack that is already up — the API (docker compose up) and
  * the dashboard (npm run dev:dashboard, or `next start` in CI). Point it
  * elsewhere with E2E_BASE_URL.
+ *
+ * Every test signs up its own user, so start the API with
+ * AUTH_REGISTER_LIMIT_PER_HOUR=100 (the default 5 per IP per hour runs out
+ * part-way through). CI sets it.
  */
 export default defineConfig({
   testDir: './tests',

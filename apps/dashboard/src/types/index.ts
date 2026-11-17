@@ -117,6 +117,8 @@ export interface ApiContext {
   project_id?: string;
   // Notebook fields (backend migration 0008) — see app/models/context.py
   updated_at?: string | null;
+  /** Bumped on every edit; sent back as If-Match so a stale save is refused. */
+  version?: number;
   content_md?: string | null;
   source?: string | null;
   page_title?: string | null;

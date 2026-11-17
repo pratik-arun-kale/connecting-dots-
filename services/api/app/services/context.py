@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import DuplicateCaptureException, NotFoundException
+from app.core.exceptions import DuplicateCaptureException, EditConflictException, NotFoundException
 from app.core.fingerprint import capture_fingerprint
 from app.core.logging import get_logger
 from app.core.rag import vector_store
@@ -305,7 +305,11 @@ class ContextService:
         return context
 
     async def update_note(
-        self, context_id: uuid.UUID, payload: NoteUpdateRequest, owner_id: uuid.UUID
+        self,
+        context_id: uuid.UUID,
+        payload: NoteUpdateRequest,
+        owner_id: uuid.UUID,
+        if_match: int | None = None,
     ) -> Context:
         """PATCH — set the reader's own annotation (user_note), or edit a
         written note's body (content_md). Editing content_md is intentionally
@@ -313,11 +317,14 @@ class ContextService:
         kind="written") since there's no harm in letting an owner correct a
         captured passage's text too — the raw_content JSONB stays the
         untouched original record regardless."""
-        context = await self._repo.get_by_id_for_owner(context_id, owner_id)
+        context = await self._repo.get_by_id_for_owner(context_id, owner_id, for_update=True)
         if context is None:
             raise NotFoundException(f"Note {context_id} not found.")
+        if if_match is not None and if_match != context.version:
+            raise EditConflictException(details={"version": context.version})
 
         updates = payload.model_dump(exclude_unset=True)
+        updates["version"] = context.version + 1
         if "user_title" in updates:
             # Blank means "no title of my own" — back to the automatic one.
             updates["user_title"] = (updates["user_title"] or "").strip() or None

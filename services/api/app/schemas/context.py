@@ -84,6 +84,8 @@ class ContextResponse(AppBaseModel):
     user_note:   str | None = None
     kind:        str = "captured"
     chapter_id:  uuid.UUID | None = None
+    # Send back as If-Match when editing (PATCH /contexts/detail/{id}).
+    version:     int = 1
 
     model_config = {
         "from_attributes": True,

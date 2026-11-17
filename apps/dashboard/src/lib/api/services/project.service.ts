@@ -1,3 +1,4 @@
+import { AxiosError } from 'axios';
 import type {
   ApiContext,
   ApiContextListResponse,
@@ -22,6 +23,19 @@ function toFrontendProject(p: ApiProject): Project {
     createdAt: p.created_at,
     updatedAt: p.updated_at,
   };
+}
+
+function ifMatchHeader(version?: number) {
+  return version === undefined ? undefined : { headers: { 'If-Match': String(version) } };
+}
+
+/** The API's answer to an edit based on an old version of a note. */
+export function isEditConflict(err: unknown): boolean {
+  return (
+    err instanceof AxiosError &&
+    err.response?.status === 409 &&
+    (err.response.data as { error?: { code?: string } } | undefined)?.error?.code === 'edit_conflict'
+  );
 }
 
 export const projectService = {
@@ -100,8 +114,16 @@ export const projectService = {
   // Debounced autosave (see NoteComposer in notes-feed.tsx) PATCHes the same
   // note's content_md as the user keeps typing, rather than creating a new
   // context per keystroke-pause.
-  async updateNoteContent(contextId: string, contentMd: string): Promise<void> {
-    await apiClient.patch(`/contexts/detail/${contextId}`, { content_md: contentMd });
+  // ifMatch: the version this edit is based on. If the note changed since
+  // (another tab, another device), the API answers 409 edit_conflict
+  // instead of overwriting it — see isEditConflict().
+  async updateNoteContent(contextId: string, contentMd: string, ifMatch?: number): Promise<ApiContext> {
+    const response = await apiClient.patch<ApiContext>(
+      `/contexts/detail/${contextId}`,
+      { content_md: contentMd },
+      ifMatchHeader(ifMatch),
+    );
+    return response.data;
   },
 
   /** Every note the user has, across projects (or one), most recently edited first. */
@@ -118,8 +140,13 @@ export const projectService = {
   },
 
   /** An empty title clears it, falling back to the automatic title. */
-  async updateNoteTitle(contextId: string, userTitle: string): Promise<void> {
-    await apiClient.patch(`/contexts/detail/${contextId}`, { user_title: userTitle });
+  async updateNoteTitle(contextId: string, userTitle: string, ifMatch?: number): Promise<ApiContext> {
+    const response = await apiClient.patch<ApiContext>(
+      `/contexts/detail/${contextId}`,
+      { user_title: userTitle },
+      ifMatchHeader(ifMatch),
+    );
+    return response.data;
   },
 
   async updateNoteAnnotation(contextId: string, userNote: string | null): Promise<void> {

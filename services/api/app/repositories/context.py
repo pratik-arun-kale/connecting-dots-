@@ -29,14 +29,21 @@ class ContextRepository(BaseRepository[Context]):
         result = await self.session.execute(select(Context).where(Context.content_hash == content_hash))
         return result.scalar_one_or_none()
 
-    async def get_by_id_for_owner(self, context_id: uuid.UUID, owner_id: uuid.UUID) -> Context | None:
-        """Ownership check via a two-hop JOIN: Context → Session → Project."""
-        result = await self.session.execute(
+    async def get_by_id_for_owner(
+        self, context_id: uuid.UUID, owner_id: uuid.UUID, *, for_update: bool = False
+    ) -> Context | None:
+        """Ownership check via a two-hop JOIN: Context → Session → Project.
+        for_update locks the row until the transaction ends, so a version
+        check and the write that follows it can't interleave with another."""
+        stmt = (
             select(Context)
             .join(Session, Context.session_id == Session.id)
             .join(Project, Session.project_id == Project.id)
             .where(Context.id == context_id, Project.user_id == owner_id)
         )
+        if for_update:
+            stmt = stmt.with_for_update(of=Context)
+        result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def list_by_session(

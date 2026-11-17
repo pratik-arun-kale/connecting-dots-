@@ -132,6 +132,10 @@ class Settings(BaseSettings):
             )
         return v
 
+    # New accounts per IP per hour. Raised only for end-to-end test runs,
+    # which create an account per test from one address.
+    auth_register_limit_per_hour: int = 5
+
     # ── Auth: dashboard refresh-token cookie ─────────────────────────────────
     # The dashboard keeps its refresh token in an httpOnly cookie (page script
     # can't read it); the extension keeps sending it in the JSON body. The
