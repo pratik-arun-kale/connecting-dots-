@@ -13,8 +13,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 
-RUN pip install --upgrade pip \
- && pip install --prefix=/install --no-cache-dir -r requirements.txt
+# CPU-only PyTorch. torch comes in through sentence-transformers, and the
+# default PyPI wheel for Linux is the CUDA build, which pulls ~2 GB of NVIDIA
+# libraries (cuDNN, NCCL, cuBLAS, triton, ...) that this CPU-only API never
+# loads. Installing torch from the CPU index first means requirements.txt
+# finds it already satisfied. A venv rather than `pip install --prefix`: a
+# second --prefix install can't see the first one's torch and would fetch the
+# CUDA build again.
+ENV VIRTUAL_ENV=/opt/venv
+RUN python -m venv "$VIRTUAL_ENV"
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+ && pip install --no-cache-dir -r requirements.txt
+
+# Fail the build if anything GPU-related got in after all.
+RUN python -c "import torch, sys; sys.exit(f'CUDA build of torch: {torch.__version__}' if torch.version.cuda else 0)" \
+ && ! pip list --format=freeze | grep -iE '^(nvidia-|cuda-|triton=)'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2 — runtime image
@@ -33,8 +49,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy pre-built packages from builder
-COPY --from=builder /install /usr/local
+# Copy the pre-built virtualenv from the builder (same python:3.12-slim
+# base, so its interpreter symlinks resolve here too).
+ENV VIRTUAL_ENV=/opt/venv
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application source
 COPY --chown=appuser:appgroup . .

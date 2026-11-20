@@ -65,6 +65,33 @@ jobs:
             exit 1
           fi
 
+      - name: CPU-only torch, models load and rank correctly
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}:${{ steps.names.outputs.sha_tag }}
+        run: |
+          set -o pipefail
+          # A throwaway JWT key: app settings refuse to load without one.
+          out=$(docker run --rm -e JWT_SECRET_KEY=ci-model-check-not-a-real-secret-0123456789 --entrypoint sh "$IMAGE" -c '
+            if pip list --format=freeze | grep -iE "^(nvidia-|cuda-|triton=)"; then echo "GPU packages found"; exit 1; fi
+            python - <<EOF
+          import torch
+          assert torch.version.cuda is None, f"CUDA build of torch: {torch.__version__}"
+          from app.core.rag import embedder, pipeline
+          v = embedder.embed_query("how do I reset my password")
+          assert len(v) == 384, len(v)
+          r = pipeline._get_reranker()
+          good, bad = r.predict([
+              ("how do I reset my password", "To reset your password, click Forgot password on the login page."),
+              ("how do I reset my password", "Bananas are a good source of potassium."),
+          ])
+          assert good > bad, (good, bad)
+          print(f"torch {torch.__version__} (cuda={torch.version.cuda}) | embedder {embedder._get_model().device} 384-d | reranker {r.model.device} good={good:.2f} bad={bad:.2f}")
+          EOF
+          ' 2>&1) || { echo "$out"; echo "::error title=CPU/model check failed::$(echo "$out" | tail -n 15 | tr '\n' '|')"; exit 1; }
+          echo "$out" | tail -n 1
+          size=$(docker image inspect --format '{{.Size}}' "$IMAGE")
+          echo "::notice title=CPU check passed::$(echo "$out" | tail -n 1) | uncompressed image $((size / 1048576)) MB"
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io

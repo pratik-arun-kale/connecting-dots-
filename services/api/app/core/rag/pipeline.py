@@ -42,7 +42,7 @@ def _get_reranker() -> CrossEncoder:
     if _reranker is None:
         with _reranker_lock:
             if _reranker is None:
-                _reranker = CrossEncoder(_RERANKER_MODEL)
+                _reranker = CrossEncoder(_RERANKER_MODEL, device=embedder.DEVICE)
     return _reranker
 
 
