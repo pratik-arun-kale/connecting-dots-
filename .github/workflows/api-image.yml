@@ -1,0 +1,63 @@
+name: API image
+
+# Builds the API image and pushes it to ghcr.io on every push that changes
+# services/api, without cutting a release. Tags:
+#   sha-<short commit>  one per build, for pinning a deploy
+#   edge                the newest build
+# `latest` and version tags stay with release.yml.
+# Run it by hand from the Actions tab too (workflow_dispatch).
+
+on:
+  push:
+    branches: [main, "week*/**"]
+    paths:
+      - "services/api/**"
+      - ".github/workflows/api-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write   # push the API image to ghcr.io
+
+concurrency:
+  group: api-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build, check, push
+        working-directory: services/api
+        run: |
+          # The repo name ends in "-", which is not a valid image name, so
+          # the image is named after the project instead (as in release.yml).
+          image="ghcr.io/$(echo '${{ github.repository_owner }}' | tr 'A-Z' 'a-z')/connecting-dots-api"
+          sha_tag="sha-${GITHUB_SHA::7}"
+          docker build --target runtime \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -t "$image:$sha_tag" -t "$image:edge" .
+          # Never ship a secret baked into the image (see .dockerignore).
+          if docker run --rm --entrypoint sh "$image:$sha_tag" -c 'test -e /app/.env'; then
+            echo "::error::.env is inside the image"
+            exit 1
+          fi
+          docker push "$image:$sha_tag"
+          docker push "$image:edge"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image:$sha_tag")
+          id=$(docker inspect --format '{{.Id}}' "$image:$sha_tag")
+          {
+            echo "### API image"
+            echo "- \`$image:$sha_tag\`"
+            echo "- \`$image:edge\`"
+            echo "- digest: \`$digest\`"
+            echo "- image ID: \`$id\`"
+          } >> "$GITHUB_STEP_SUMMARY"
