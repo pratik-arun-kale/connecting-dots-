@@ -40,13 +40,9 @@ email-validator==2.3.0
 redis==5.2.1
 hiredis==3.0.0
 
-# Testing
-pytest==8.3.4
-pytest-asyncio==0.24.0
-httpx==0.28.1
-pytest-cov==6.0.0
+# Async runtime under Starlette, httpx, openai and uvicorn's watchfiles.
+# Pinned here (it used to sit with the test tools) so production keeps the
+# version it has always run.
 anyio==4.7.0
 
-# Dev utilities
-ruff==0.8.3
-mypy==1.13.0
+# Test and lint tools are in requirements-dev.txt, kept out of the image.

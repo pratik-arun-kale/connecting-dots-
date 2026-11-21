@@ -21,7 +21,7 @@ Needs Node 20+, Docker, and Chrome.
    ```
    Demo data (optional, API running): `cd services/api && python scripts/seed.py` creates `demo@example.com` / `demo-password-123` with two projects and twenty notes. Safe to run again.
 
-   Without Docker: create a Python 3.12 virtualenv in `services/api`, `pip install -r requirements.txt`, point the `POSTGRES_*` variables at your own Postgres, then `alembic upgrade head && uvicorn main:app --reload`.
+   Without Docker: create a Python 3.12 virtualenv in `services/api`, `pip install -r requirements-dev.txt`, point the `POSTGRES_*` variables at your own Postgres, then `alembic upgrade head && uvicorn main:app --reload`.
 
 2. **Dashboard** (http://localhost:3000)
    ```bash

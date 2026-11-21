@@ -15,7 +15,7 @@ if [ -n "$py" ]; then
     echo "[pre-commit] ruff ($(echo "$py" | wc -l | tr -d ' ') files)"
     (cd services/api && echo "$py" | tr '\n' '\0' | xargs -0 ruff check) || failed=1
   else
-    echo "[pre-commit] ruff not found; skipping API lint (pip install -r services/api/requirements.txt)"
+    echo "[pre-commit] ruff not found; skipping API lint (pip install -r services/api/requirements-dev.txt)"
   fi
 fi
 

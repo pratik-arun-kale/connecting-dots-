@@ -74,8 +74,8 @@ cd ai-context-workspace
 python -m venv .venv
 source .venv/bin/activate
 
-# 3. Install dependencies
-pip install -r requirements.txt
+# 3. Install dependencies (the app plus test and lint tools)
+pip install -r requirements-dev.txt
 
 # 4. Copy and configure environment
 cp .env.example .env
@@ -202,8 +202,8 @@ All endpoints are prefixed with `/api/v1`.
 ## Running Tests
 
 ```bash
-# Install test dependencies (included in requirements.txt)
-pip install -r requirements.txt
+# Install test dependencies (requirements-dev.txt; the Docker image uses requirements.txt only)
+pip install -r requirements-dev.txt
 
 # Set up a test database (one-time)
 createdb ai_context_workspace_test
@@ -258,7 +258,8 @@ docker run -p 8000:8000 --env-file .env ai-context-workspace:latest
 ```
 ai-context-workspace/
 ├── main.py                        # App factory + lifespan
-├── requirements.txt
+├── requirements.txt               # Runtime dependencies (what the image installs)
+├── requirements-dev.txt           # + pytest, ruff, mypy
 ├── .env.example
 ├── alembic.ini
 ├── pyproject.toml                 # pytest + ruff config

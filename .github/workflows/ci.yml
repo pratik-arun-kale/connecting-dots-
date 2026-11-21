@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [master, main]
+    # week*/** too, so work branches get the full suite before a PR exists.
+    branches: [master, main, "week*/**"]
   pull_request:
   workflow_dispatch:
 
@@ -93,11 +94,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: services/api/requirements.txt
+          cache-dependency-path: |
+            services/api/requirements.txt
+            services/api/requirements-dev.txt
       - name: Install (CPU-only torch keeps the install small)
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
       # The full ruleset in pyproject.toml. `ruff format` is not enforced:
       # much of the code is hand-aligned in columns on purpose.
       - run: ruff check app main.py tests scripts
@@ -182,6 +185,7 @@ jobs:
         working-directory: services/api
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # Runtime requirements only, as in the image: proves the API runs without the dev tools.
           pip install -r requirements.txt
           alembic upgrade head
           nohup uvicorn main:app --host 127.0.0.1 --port 8000 > ../../api.log 2>&1 &
