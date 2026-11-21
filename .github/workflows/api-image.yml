@@ -103,35 +103,37 @@ jobs:
           echo "$out" | tail -n 1
           echo "::notice title=Offline model check passed::$(echo "$out" | tail -n 1)"
 
-      - name: Startup time and memory (previous image vs this one)
+      - name: Startup time and memory (models downloaded vs baked in)
         env:
           IMAGE: ${{ steps.names.outputs.image }}:${{ steps.names.outputs.sha_tag }}
-          # The last image before models were baked in: downloads them at startup.
-          PREVIOUS: ${{ steps.names.outputs.image }}:sha-2b805d5
         run: |
-          # Report only: never fails the build. Both containers start the real
-          # API (no database: its trash-purge task just logs a connection error).
+          # Report only: never fails the build. Each container starts the real
+          # API (no database: its trash-purge task just logs a connection error)
+          # and is timed until /health answers, i.e. until both models are loaded.
+          # "Before" is this same image with the baked models switched off, so it
+          # downloads them from Hugging Face at startup the way older images did;
+          # everything else (packages, code) is identical.
           measure() {
-            label=$1; image=$2; shift 2
-            cid=$(docker run -d "$@" -e JWT_SECRET_KEY=ci-startup-check-not-a-real-secret-0123456789 "$image")
+            label=$1; shift
+            cid=$(docker run -d -e JWT_SECRET_KEY=ci-startup-check-not-a-real-secret-0123456789 "$@" "$IMAGE")
             start=$(date +%s.%N); ok=no
             for _ in $(seq 1 600); do
-              if docker exec "$cid" curl -sf -o /dev/null http://localhost:8000/api/v1/health; then ok=yes; break; fi
+              if docker exec "$cid" curl -sf -o /dev/null http://localhost:8000/api/v1/health 2>/dev/null; then ok=yes; break; fi
+              [ "$(docker inspect -f '{{.State.Running}}' "$cid")" = true ] || { ok="no (container exited)"; break; }
               sleep 0.5
             done
             secs=$(awk -v s="$start" -v e="$(date +%s.%N)" 'BEGIN { printf "%.1f", e - s }')
             mem=$(docker stats --no-stream --format '{{.MemUsage}}' "$cid")
-            preload=$(docker logs "$cid" 2>&1 | grep -c rag_models_preload_failed || true)
-            docker rm -f "$cid" > /dev/null
-            line="$label: healthy=$ok after $secs s | memory $mem | preload failures $preload"
+            loaded=$(docker logs "$cid" 2>&1 | grep -c rag_models_loaded || true)
+            line="$label: healthy=$ok after $secs s | memory $mem | models loaded=$loaded"
             echo "$line"; echo "::notice title=Startup ($label)::$line"
+            if [ "$ok" != yes ]; then
+              echo "::warning title=Startup ($label) log tail::$(docker logs "$cid" 2>&1 | tail -n 12 | tr '\n' '|' | cut -c1-3000)"
+            fi
+            docker rm -f "$cid" > /dev/null
           }
-          if docker pull -q "$PREVIOUS" > /dev/null; then
-            measure "previous (sha-2b805d5, downloads models)" "$PREVIOUS"
-          else
-            echo "::warning::could not pull $PREVIOUS for comparison"
-          fi
-          measure "this image (baked models, --network none)" "$IMAGE" --network none
+          measure "before: models downloaded at startup" -e RAG_MODELS_DIR= -e HF_HUB_OFFLINE=0 -e TRANSFORMERS_OFFLINE=0
+          measure "after: baked models, --network none" --network none
 
       - uses: docker/login-action@v3
         with:

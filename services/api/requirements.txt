@@ -1,5 +1,9 @@
 # Web Framework
-fastapi==0.115.5
+# fastapi >= 0.121 is required: app/dependencies uses Depends(..., scope=...).
+# The old 0.115.5 pin made every fresh install (CI, the Docker image) fail at
+# import. These two are the versions the test suite has been passing on.
+fastapi==0.140.7
+starlette==1.3.1
 uvicorn[standard]==0.32.1
 
 # Database
