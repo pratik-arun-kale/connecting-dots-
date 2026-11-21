@@ -175,6 +175,12 @@ class Settings(BaseSettings):
     # CPU threads torch may use for embedding and reranking. Its default is
     # every core, which starves request handling while a note is indexed.
     rag_torch_threads: int = 2
+    # Folder holding the embedding and reranker models (see
+    # app/core/rag/model_specs.py). The Docker image bakes them into
+    # /opt/models at build time and sets this, so the API never downloads a
+    # model at startup. Unset in development: models load by ID at the pinned
+    # revision from the Hugging Face cache.
+    rag_models_dir: str | None = None
 
     # Trash: deleted notes and projects can be restored for this many days,
     # then a background job (every trash_purge_interval_hours; 0 = never,

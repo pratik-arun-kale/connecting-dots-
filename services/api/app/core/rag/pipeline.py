@@ -24,6 +24,7 @@ from sentence_transformers import CrossEncoder
 
 from app.core.logging import get_logger
 from app.core.rag import embedder, vector_store
+from app.core.rag.model_specs import RERANKER_MODEL
 from app.core.rag.openai_generator import generate_answer
 from app.core.rag.query_candidates import QueryCandidate, generate_query_candidates
 from app.core.rag.query_normalizer import _max_edit_distance, levenshtein_distance
@@ -32,7 +33,7 @@ logger = get_logger(__name__)
 
 # ── Reranker singleton ─────────────────────────────────────────────────────────
 
-_RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+_RERANKER_MODEL = RERANKER_MODEL  # pinned in app/core/rag/model_specs.py
 _reranker_lock: threading.Lock = threading.Lock()
 _reranker: CrossEncoder | None = None
 
@@ -42,7 +43,8 @@ def _get_reranker() -> CrossEncoder:
     if _reranker is None:
         with _reranker_lock:
             if _reranker is None:
-                _reranker = CrossEncoder(_RERANKER_MODEL, device=embedder.DEVICE)
+                source, kwargs = embedder.model_source(_RERANKER_MODEL)
+                _reranker = CrossEncoder(source, device=embedder.DEVICE, **kwargs)
     return _reranker
 
 

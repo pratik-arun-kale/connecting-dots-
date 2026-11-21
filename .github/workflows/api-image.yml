@@ -65,32 +65,73 @@ jobs:
             exit 1
           fi
 
-      - name: CPU-only torch, models load and rank correctly
+      - name: CPU-only torch; baked-in models load offline and match
         env:
           IMAGE: ${{ steps.names.outputs.image }}:${{ steps.names.outputs.sha_tag }}
         run: |
           set -o pipefail
-          # A throwaway JWT key: app settings refuse to load without one.
-          out=$(docker run --rm -e JWT_SECRET_KEY=ci-model-check-not-a-real-secret-0123456789 --entrypoint sh "$IMAGE" -c '
+          # --network none: the models must come from /opt/models, not the
+          # internet. A throwaway JWT key: app settings refuse to load without one.
+          # The reference numbers are the pinned models' output, measured with
+          # the same 2 torch threads the app uses; the tolerance only allows for
+          # floating-point differences between machines.
+          out=$(docker run --rm --network none -e JWT_SECRET_KEY=ci-model-check-not-a-real-secret-0123456789 --entrypoint sh "$IMAGE" -c '
             if pip list --format=freeze | grep -iE "^(nvidia-|cuda-|triton=)"; then echo "GPU packages found"; exit 1; fi
             python - <<EOF
-          import torch
+          import os, torch
           assert torch.version.cuda is None, f"CUDA build of torch: {torch.__version__}"
+          assert os.environ["HF_HUB_OFFLINE"] == "1", "offline mode is off"
           from app.core.rag import embedder, pipeline
+          from app.core.rag.model_specs import EMBEDDING_MODEL, RERANKER_MODEL
+          for m in (EMBEDDING_MODEL, RERANKER_MODEL):
+              src, kw = embedder.model_source(m)
+              assert src.startswith("/opt/models/") and not kw, (m, src, kw)
+          e = embedder._get_model()
           v = embedder.embed_query("how do I reset my password")
-          assert len(v) == 384, len(v)
+          assert len(v) == 384 and e.max_seq_length == 256, (len(v), e.max_seq_length)
+          ref = [0.007739, -0.052279, -0.062379, -0.033137, -0.042413]
+          assert all(abs(a - b) < 1e-4 for a, b in zip(v[:5], ref)), v[:5]
           r = pipeline._get_reranker()
           good, bad = r.predict([
               ("how do I reset my password", "To reset your password, click Forgot password on the login page."),
               ("how do I reset my password", "Bananas are a good source of potassium."),
           ])
-          assert good > bad, (good, bad)
-          print(f"torch {torch.__version__} (cuda={torch.version.cuda}) | embedder {embedder._get_model().device} 384-d | reranker {r.model.device} good={good:.2f} bad={bad:.2f}")
+          assert abs(good - 7.8951) < 1e-2 and abs(bad - -11.209) < 1e-2, (good, bad)
+          print(f"offline | torch {torch.__version__} (cuda={torch.version.cuda}) | embedder {e.device} 384-d matches pinned reference | reranker {r.model.device} good={good:.4f} bad={bad:.4f}")
           EOF
-          ' 2>&1) || { echo "$out"; echo "::error title=CPU/model check failed::$(echo "$out" | tail -n 15 | tr '\n' '|')"; exit 1; }
+          ' 2>&1) || { echo "$out"; echo "::error title=Offline model check failed::$(echo "$out" | tail -n 15 | tr '\n' '|')"; exit 1; }
           echo "$out" | tail -n 1
-          size=$(docker image inspect --format '{{.Size}}' "$IMAGE")
-          echo "::notice title=CPU check passed::$(echo "$out" | tail -n 1) | uncompressed image $((size / 1048576)) MB"
+          echo "::notice title=Offline model check passed::$(echo "$out" | tail -n 1)"
+
+      - name: Startup time and memory (previous image vs this one)
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}:${{ steps.names.outputs.sha_tag }}
+          # The last image before models were baked in: downloads them at startup.
+          PREVIOUS: ${{ steps.names.outputs.image }}:sha-2b805d5
+        run: |
+          # Report only: never fails the build. Both containers start the real
+          # API (no database: its trash-purge task just logs a connection error).
+          measure() {
+            label=$1; image=$2; shift 2
+            cid=$(docker run -d "$@" -e JWT_SECRET_KEY=ci-startup-check-not-a-real-secret-0123456789 "$image")
+            start=$(date +%s.%N); ok=no
+            for _ in $(seq 1 600); do
+              if docker exec "$cid" curl -sf -o /dev/null http://localhost:8000/api/v1/health; then ok=yes; break; fi
+              sleep 0.5
+            done
+            secs=$(awk -v s="$start" -v e="$(date +%s.%N)" 'BEGIN { printf "%.1f", e - s }')
+            mem=$(docker stats --no-stream --format '{{.MemUsage}}' "$cid")
+            preload=$(docker logs "$cid" 2>&1 | grep -c rag_models_preload_failed || true)
+            docker rm -f "$cid" > /dev/null
+            line="$label: healthy=$ok after $secs s | memory $mem | preload failures $preload"
+            echo "$line"; echo "::notice title=Startup ($label)::$line"
+          }
+          if docker pull -q "$PREVIOUS" > /dev/null; then
+            measure "previous (sha-2b805d5, downloads models)" "$PREVIOUS"
+          else
+            echo "::warning::could not pull $PREVIOUS for comparison"
+          fi
+          measure "this image (baked models, --network none)" "$IMAGE" --network none
 
       - uses: docker/login-action@v3
         with:

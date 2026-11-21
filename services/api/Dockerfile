@@ -32,6 +32,13 @@ RUN pip install --no-cache-dir --upgrade pip \
 RUN python -c "import torch, sys; sys.exit(f'CUDA build of torch: {torch.__version__}' if torch.version.cuda else 0)" \
  && ! pip list --format=freeze | grep -iE '^(nvidia-|cuda-|triton=)'
 
+# The embedding and reranker models, at the revisions pinned in
+# app/core/rag/model_specs.py, so the API never downloads a model at startup.
+# Only these two files are copied in, so editing app code doesn't re-download.
+COPY app/core/rag/model_specs.py app/core/rag/model_specs.py
+COPY scripts/download_models.py scripts/download_models.py
+RUN HF_HUB_DISABLE_TELEMETRY=1 python scripts/download_models.py /opt/models
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2 — runtime image
 # ─────────────────────────────────────────────────────────────────────────────
@@ -54,6 +61,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV VIRTUAL_ENV=/opt/venv
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+
+# Models baked in at build time (read-only, owned by root). Offline mode makes
+# Hugging Face libraries fail fast instead of reaching the network, so a
+# missing model is a startup error, never a silent download.
+COPY --from=builder /opt/models /opt/models
+ENV RAG_MODELS_DIR=/opt/models \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    HF_HUB_DISABLE_TELEMETRY=1
 
 # Copy application source
 COPY --chown=appuser:appgroup . .
