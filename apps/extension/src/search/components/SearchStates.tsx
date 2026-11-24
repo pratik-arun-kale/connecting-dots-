@@ -1,12 +1,23 @@
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { fadeIn } from '@/lib/motion'
 import type { SafeSearchSuggestions, SearchError } from '../types'
 
+/** After this long, a search is most likely waiting for the API to start. */
+export const SLOW_SEARCH_MS = 3_000
+
 export function LoadingState() {
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), SLOW_SEARCH_MS)
+    return () => clearTimeout(timer)
+  }, [])
   return (
     <div className="flex flex-col items-center justify-center py-8 gap-2" role="status" aria-live="polite">
       <div className="w-5 h-5 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-      <p className="text-xs text-ink-3 dark:text-white/50">Searching your captured conversations…</p>
+      <p className="text-xs text-ink-3 dark:text-white/50">
+        {slow ? 'Waking up the server… this can take up to a minute.' : 'Searching your captured conversations…'}
+      </p>
     </div>
   )
 }

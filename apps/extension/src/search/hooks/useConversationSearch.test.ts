@@ -176,7 +176,8 @@ describe('useConversationSearch', () => {
     })))
 
     act(() => result.current.submit('rag topic'))
-    await act(async () => { await vi.advanceTimersByTimeAsync(10_001) })
+    // The first try, then the cold-start retry, both time out.
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_001 + 45_001) })
 
     expect(result.current.status).toBe('error')
     expect(result.current.error?.kind).toBe('timeout')
