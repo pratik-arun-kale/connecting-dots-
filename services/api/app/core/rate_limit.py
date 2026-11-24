@@ -5,20 +5,14 @@ Lightweight in-process rate limiting: per client IP for the auth endpoints
 (/auth/register, /auth/login, /auth/refresh), per user for capture, search
 and Ask AI (see app.dependencies.user_rate_limit).
 
-NOT Redis-backed, deliberately: app/utils/redis.py is an explicitly-labeled
-stub ("NOT active" — see its docstring) that just logs a warning and no-ops,
-and no Redis server is actually running in this environment (confirmed —
-`docker ps` finds nothing). Standing up a real Redis dependency just for
-this would be exactly the "unnecessary distributed infrastructure" the spec
-asked to avoid. A single-process, in-memory fixed-window counter is the
-smallest thing that actually works today.
+In memory, deliberately: one API process (Cloud Run max-instances 1 during
+the beta), so a per-process fixed-window counter is the smallest thing that
+works, with no extra service to run.
 
 Limitation, stated plainly: this only limits requests within ONE backend
-process. It does nothing across multiple replicas/workers. If this app is
-ever horizontally scaled, activate the real client in app/utils/redis.py
-(it already documents exactly how) and swap this module's storage for a
-Redis INCR+EXPIRE — the call site (the `rate_limit()` dependency factory)
-would not need to change.
+process. Before running several instances, move the counters to a shared
+store (Redis INCR+EXPIRE, or a Postgres table); the call sites (the
+`rate_limit()` dependency factory) would not need to change.
 """
 from __future__ import annotations
 

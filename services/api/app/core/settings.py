@@ -130,17 +130,6 @@ class Settings(BaseSettings):
     def sync_database_url(self) -> str:
         return self._sync_database_url
 
-    # ── Redis (future-ready) ─────────────────────────────────────────────────
-    redis_host: str = "localhost"
-    redis_port: int = 6379
-    redis_db: int = 0
-    redis_password: str | None = None
-
-    @property
-    def redis_url(self) -> str:
-        auth = f":{self.redis_password}@" if self.redis_password else ""
-        return f"redis://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
-
     # ── Logging ──────────────────────────────────────────────────────────────
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_format: Literal["json", "console"] = "json"

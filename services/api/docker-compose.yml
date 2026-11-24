@@ -5,7 +5,6 @@
 # Services:
 #   backend   – FastAPI app (hot-reload via volume mount)
 #   postgres  – PostgreSQL 16
-#   redis     – Redis 7 (future-ready; not used by app yet)
 # ─────────────────────────────────────────────────────────────────────────────
 
 x-common-env: &common-env
@@ -16,8 +15,6 @@ x-common-env: &common-env
   POSTGRES_DB: ai_context_workspace
   POSTGRES_USER: postgres
   POSTGRES_PASSWORD: postgres
-  REDIS_HOST: redis
-  REDIS_PORT: "6379"
   LOG_LEVEL: DEBUG
   LOG_FORMAT: console
   ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173"
@@ -38,7 +35,7 @@ services:
       # Mount source so uvicorn --reload picks up changes
       - .:/app
     # Secrets (JWT_SECRET_KEY, OPENAI_API_KEY, …) come from services/api/.env —
-    # copy .env.example. The environment block below wins for DB/Redis hosts.
+    # copy .env.example. The environment block below wins for the database host.
     env_file:
       - path: .env
         required: false
@@ -82,29 +79,8 @@ services:
     networks:
       - acw_net
 
-  # ── Redis (future-ready — not wired to app yet) ───────────────────────────────
-  redis:
-    image: redis:7-alpine
-    container_name: acw_redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --save 60 1 --loglevel warning
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - acw_net
-    profiles:
-      - redis   # opt-in: `docker compose --profile redis up` to start Redis
-
 volumes:
   postgres_data:
-  redis_data:
 
 networks:
   acw_net:

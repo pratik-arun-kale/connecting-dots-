@@ -18,7 +18,6 @@ from app.core.settings import settings
 from app.db.engine import dispose_engine
 from app.middleware.body_limit import BodySizeLimitMiddleware
 from app.middleware.logging import RequestLoggingMiddleware
-from app.utils.redis import close_redis
 
 configure_logging()
 logger = get_logger(__name__)
@@ -146,7 +145,6 @@ async def lifespan(app: FastAPI):
     if purge_task is not None:
         purge_task.cancel()
     await dispose_engine()
-    await close_redis()
     logger.info("app_stopped")
 
 
