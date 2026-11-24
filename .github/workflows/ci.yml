@@ -1,0 +1,232 @@
+name: CI
+
+on:
+  push:
+    # week*/** too, so work branches get the full suite before a PR exists.
+    branches: [master, main, "week*/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+  PYTHON_VERSION: "3.12"
+  # A throwaway secret for tests and the e2e stack only — never a real one.
+  JWT_SECRET_KEY: ci-only-secret-not-used-anywhere-real-0123456789abcdef
+
+jobs:
+  extension:
+    name: Extension — typecheck, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/extension/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-dist-development
+          path: apps/extension/dist
+          retention-days: 7
+
+  dashboard:
+    name: Dashboard — lint, typecheck, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/dashboard
+    env:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - name: No localhost in shipped frontend code
+        working-directory: .
+        run: node scripts/check-no-localhost.mjs
+
+  api:
+    name: API — ruff, pytest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          # conftest.py runs tests against "<POSTGRES_DB>_test".
+          POSTGRES_DB: ai_context_workspace_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    env:
+      APP_ENV: development
+      POSTGRES_HOST: localhost
+      POSTGRES_DB: ai_context_workspace
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            services/api/requirements.txt
+            services/api/requirements-dev.txt
+      - name: Install (CPU-only torch keeps the install small)
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-dev.txt
+      # The full ruleset in pyproject.toml. `ruff format` is not enforced:
+      # much of the code is hand-aligned in columns on purpose.
+      - run: ruff check app main.py tests scripts
+      # Report-only until the existing errors are fixed; then drop
+      # continue-on-error so a type error fails the build.
+      - name: mypy (report only)
+        continue-on-error: true
+        run: mypy
+      - run: pytest
+      # Audits what was just installed, including unpinned transitive deps.
+      # Report-only until current findings are cleared (see the audit job).
+      - name: pip-audit (report only)
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip-audit --skip-editable
+
+  audit:
+    name: npm audit (report only)
+    runs-on: ubuntu-latest
+    # Report-only for the first runs: Dependabot (.github/dependabot.yml)
+    # opens the fix PRs. Once the current findings are cleared, drop
+    # continue-on-error so a new high/critical advisory fails the build.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: npm audit (production dependencies, high and above)
+        run: |
+          status=0
+          for app in apps/extension apps/dashboard; do
+            echo "::group::$app"
+            (cd "$app" && npm audit --omit=dev --audit-level=high) || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+
+  e2e:
+    name: End-to-end — dashboard core loop, extension loads
+    runs-on: ubuntu-latest
+    needs: [dashboard, api]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ai_context_workspace
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    env:
+      APP_ENV: development
+      POSTGRES_HOST: localhost
+      POSTGRES_DB: ai_context_workspace
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      ALLOWED_ORIGINS: http://localhost:3000
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+      # Each Playwright test signs up its own user, all from one IP.
+      AUTH_REGISTER_LIMIT_PER_HOUR: "100"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: services/api/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            apps/dashboard/package-lock.json
+            apps/extension/package-lock.json
+            e2e/package-lock.json
+
+      - name: Start the API
+        working-directory: services/api
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # Runtime requirements only, as in the image: proves the API runs without the dev tools.
+          pip install -r requirements.txt
+          alembic upgrade head
+          nohup uvicorn main:app --host 127.0.0.1 --port 8000 > ../../api.log 2>&1 &
+
+      - name: Build the extension (loaded by extension-loads.spec.ts)
+        working-directory: apps/extension
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build and start the dashboard
+        working-directory: apps/dashboard
+        run: |
+          npm ci
+          npm run build
+          nohup npm run start -- --port 3000 > ../../dashboard.log 2>&1 &
+
+      - name: Wait for both
+        run: |
+          for url in http://127.0.0.1:8000/api/v1/health http://127.0.0.1:3000/login; do
+            for i in $(seq 1 60); do curl -fsS "$url" > /dev/null && break; sleep 2; done
+            curl -fsS "$url" > /dev/null || { echo "$url did not come up"; exit 1; }
+          done
+
+      - name: Run Playwright
+        working-directory: e2e
+        env:
+          # No RESEND_API_KEY here, so the development API logs each email;
+          # account-email.spec.ts reads the links from this log.
+          E2E_API_LOG: ${{ github.workspace }}/api.log
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test
+
+      - name: Logs and report on failure
+        if: failure()
+        run: tail -n 200 api.log dashboard.log || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          retention-days: 7

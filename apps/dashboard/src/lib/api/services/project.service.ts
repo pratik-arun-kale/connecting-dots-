@@ -1,0 +1,159 @@
+import { AxiosError } from 'axios';
+import type {
+  ApiContext,
+  ApiContextListResponse,
+  ApiProject,
+  CreateProjectWithSessionsRequest,
+  CreateProjectWithSessionsResponse,
+  Project,
+  RagQueryResponse,
+} from '@/types';
+import apiClient from '../client';
+
+// Maps a backend ApiProject to the frontend Project shape expected by existing components.
+function toFrontendProject(p: ApiProject): Project {
+  return {
+    id: p.id,
+    name: p.name,
+    description: p.description ?? '',
+    color: '#6366f1',
+    sessionsCount: 0,
+    contextsCount: 0,
+    lastActiveAt: p.updated_at,
+    createdAt: p.created_at,
+    updatedAt: p.updated_at,
+  };
+}
+
+function ifMatchHeader(version?: number) {
+  return version === undefined ? undefined : { headers: { 'If-Match': String(version) } };
+}
+
+/** The API's answer to an edit based on an old version of a note. */
+export function isEditConflict(err: unknown): boolean {
+  return (
+    err instanceof AxiosError &&
+    err.response?.status === 409 &&
+    (err.response.data as { error?: { code?: string } } | undefined)?.error?.code === 'edit_conflict'
+  );
+}
+
+export const projectService = {
+  async getProjects(): Promise<Project[]> {
+    const response = await apiClient.get<{ items: ApiProject[]; total: number }>('/projects');
+    return response.data.items.map(toFrontendProject);
+  },
+
+  async getProject(id: string): Promise<Project> {
+    const response = await apiClient.get<ApiProject>(`/projects/${id}`);
+    return toFrontendProject(response.data);
+  },
+
+  // New flow: create project + sessions in one call (backed by real backend).
+  async createProjectWithSessions(
+    data: CreateProjectWithSessionsRequest
+  ): Promise<CreateProjectWithSessionsResponse> {
+    const response = await apiClient.post<CreateProjectWithSessionsResponse>(
+      '/projects/create-with-sessions',
+      data
+    );
+    return response.data;
+  },
+
+  async getProjectContexts(projectId: string): Promise<ApiContext[]> {
+    const response = await apiClient.get<ApiContextListResponse>(
+      `/projects/${projectId}/contexts`
+    );
+    return response.data.items;
+  },
+
+  async updateProject(id: string, data: { name?: string; description?: string }): Promise<Project> {
+    const response = await apiClient.patch<ApiProject>(`/projects/${id}`, data);
+    return toFrontendProject(response.data);
+  },
+
+  async deleteProject(id: string): Promise<void> {
+    await apiClient.delete(`/projects/${id}`);
+  },
+
+  async queryProject(projectId: string, question: string): Promise<RagQueryResponse> {
+    const response = await apiClient.post<RagQueryResponse>(
+      `/projects/${projectId}/query`,
+      { question },
+      { timeout: 120_000 },
+    );
+    return response.data;
+  },
+
+  // The dashboard's Notes composer goes through the SAME capture pipeline as
+  // the extension (POST /projects/{id}/capture, platform "note") — not
+  // localStorage — so these notes sync, are searchable, and get embedded
+  // exactly like extension-captured notes. There's no source page for a
+  // dashboard-authored note, so chat_url is left empty (the schema allows
+  // an empty string; getSourceChip() in lib/context-platform.ts falls back
+  // to a plain "Note" label with no link when chat_url is empty).
+  async createNote(projectId: string, text: string): Promise<{ contextId: string }> {
+    const trimmed = text.trim();
+    const idempotencyKey =
+      typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `note_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    const response = await apiClient.post<{ context_id: string }>(`/projects/${projectId}/capture`, {
+      idempotency_key: idempotencyKey,
+      platform: 'note',
+      chat_url: '',
+      captured_at: new Date().toISOString(),
+      title: `[Note] ${trimmed.slice(0, 80)}`,
+      messages: [{ role: 'user', content: trimmed, timestamp: new Date().toISOString(), index: 0 }],
+      metadata: { source: 'dashboard-note' },
+      kind: 'written',
+      page_title: 'Dashboard',
+    });
+    return { contextId: response.data.context_id };
+  },
+
+  // Debounced autosave (see NoteComposer in notes-feed.tsx) PATCHes the same
+  // note's content_md as the user keeps typing, rather than creating a new
+  // context per keystroke-pause.
+  // ifMatch: the version this edit is based on. If the note changed since
+  // (another tab, another device), the API answers 409 edit_conflict
+  // instead of overwriting it — see isEditConflict().
+  async updateNoteContent(contextId: string, contentMd: string, ifMatch?: number): Promise<ApiContext> {
+    const response = await apiClient.patch<ApiContext>(
+      `/contexts/detail/${contextId}`,
+      { content_md: contentMd },
+      ifMatchHeader(ifMatch),
+    );
+    return response.data;
+  },
+
+  /** Every note the user has, across projects (or one), most recently edited first. */
+  async listNotes(projectId: string | null): Promise<ApiContext[]> {
+    const response = await apiClient.get<ApiContextListResponse>('/contexts', {
+      params: { limit: 500, ...(projectId ? { project_id: projectId } : {}) },
+    });
+    return response.data.items;
+  },
+
+  async getNote(contextId: string): Promise<ApiContext> {
+    const response = await apiClient.get<ApiContext>(`/contexts/detail/${contextId}`);
+    return response.data;
+  },
+
+  /** An empty title clears it, falling back to the automatic title. */
+  async updateNoteTitle(contextId: string, userTitle: string, ifMatch?: number): Promise<ApiContext> {
+    const response = await apiClient.patch<ApiContext>(
+      `/contexts/detail/${contextId}`,
+      { user_title: userTitle },
+      ifMatchHeader(ifMatch),
+    );
+    return response.data;
+  },
+
+  async updateNoteAnnotation(contextId: string, userNote: string | null): Promise<void> {
+    await apiClient.patch(`/contexts/detail/${contextId}`, { user_note: userNote });
+  },
+
+  async deleteNote(contextId: string): Promise<void> {
+    await apiClient.delete(`/contexts/detail/${contextId}`);
+  },
+};

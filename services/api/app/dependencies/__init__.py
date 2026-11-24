@@ -1,0 +1,131 @@
+"""
+app/dependencies/__init__.py
+─────────────────────────────
+FastAPI dependency functions.
+Routes declare these as Depends() parameters; FastAPI resolves them automatically.
+Services are re-created per-request to stay within the session transaction boundary.
+"""
+
+import uuid
+from typing import Annotated
+
+import jwt
+from fastapi import Depends
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import UnauthorizedException
+from app.core.rate_limit import check_rate_limit
+from app.core.security import decode_access_token
+from app.core.settings import settings
+from app.db.engine import get_db_session
+from app.models.user import User
+from app.repositories.user import UserRepository
+from app.services.account_email import AccountEmailService
+from app.services.auth import AuthService
+from app.services.context import ContextService
+from app.services.email import EmailSender, get_email_sender
+from app.services.project import ProjectService
+from app.services.rag_service import RagService
+from app.services.session import SessionService
+
+# ── Database session ──────────────────────────────────────────────────────────
+
+# scope="function": commit when the route returns, BEFORE the response is
+# sent. The default ("request") commits after sending, so a client that
+# immediately refetched (or PATCHed a note it just created) could hit the
+# not-yet-committed state — a 404 or a list missing the new row — and a
+# failed commit would still have returned 200.
+DbSession = Annotated[AsyncSession, Depends(get_db_session, scope="function")]
+
+# ── Service factories ─────────────────────────────────────────────────────────
+
+
+def get_project_service(db: DbSession) -> ProjectService:
+    return ProjectService(db)
+
+
+def get_session_service(db: DbSession) -> SessionService:
+    return SessionService(db)
+
+
+def get_context_service(db: DbSession) -> ContextService:
+    return ContextService(db)
+
+
+def get_rag_service() -> RagService:
+    return RagService()
+
+
+def get_auth_service(db: DbSession) -> AuthService:
+    return AuthService(db)
+
+
+def get_account_email_service(db: DbSession) -> AccountEmailService:
+    return AccountEmailService(db)
+
+
+# ── Annotated aliases (convenience for route signatures) ─────────────────────
+
+ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
+SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
+ContextServiceDep = Annotated[ContextService, Depends(get_context_service)]
+RagServiceDep     = Annotated[RagService,     Depends(get_rag_service)]
+AuthServiceDep    = Annotated[AuthService,    Depends(get_auth_service)]
+AccountEmailServiceDep = Annotated[AccountEmailService, Depends(get_account_email_service)]
+# Overridden in tests with a fake that records messages.
+EmailSenderDep    = Annotated[EmailSender,    Depends(get_email_sender)]
+
+# ── Current user (authentication) ────────────────────────────────────────────
+# tokenUrl is only used to populate OpenAPI/Swagger's "Authorize" flow — the
+# actual token is always a JSON body field (see app/schemas/auth.py), this
+# just tells the docs UI where to send the login form.
+_oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/login", auto_error=False)
+
+
+async def get_current_user(
+    token: Annotated[str | None, Depends(_oauth2_scheme)],
+    db: DbSession,
+) -> User:
+    if token is None:
+        raise UnauthorizedException("Not authenticated.")
+    try:
+        payload = decode_access_token(token)
+        user_id = uuid.UUID(payload["sub"])
+    except (jwt.PyJWTError, KeyError, ValueError):
+        raise UnauthorizedException("Invalid or expired access token.") from None
+
+    user = await UserRepository(db).get_by_id(user_id)
+    if user is None:
+        raise UnauthorizedException("Invalid or expired access token.")
+    return user
+
+
+async def get_current_active_user(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if not current_user.is_active:
+        raise UnauthorizedException("This account has been deactivated.")
+    return current_user
+
+
+CurrentUserDep = Annotated[User, Depends(get_current_active_user)]
+
+
+# ── Per-user rate limits ─────────────────────────────────────────────────────
+
+def user_rate_limit(key_prefix: str, max_requests: int, window_seconds: int):
+    """A route dependency allowing each signed-in user max_requests per
+    window_seconds — `dependencies=[user_rate_limit(...)]`. Keyed by user id,
+    not IP, so people sharing an office network don't share a budget.
+    In-process, like the auth limits (see app/core/rate_limit.py)."""
+
+    async def _dependency(current_user: CurrentUserDep) -> None:
+        check_rate_limit(
+            f"{key_prefix}:{current_user.id}",
+            max_requests,
+            window_seconds,
+            "You're going a bit fast — wait a minute and try again.",
+        )
+
+    return Depends(_dependency)

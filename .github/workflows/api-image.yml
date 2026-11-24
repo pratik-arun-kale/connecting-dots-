@@ -1,0 +1,165 @@
+name: API image
+
+# Builds the API image and pushes it to ghcr.io on every push that changes
+# services/api, without cutting a release. Tags:
+#   sha-<short commit>  one per build, for pinning a deploy
+#   edge                the newest build
+# `latest` and version tags stay with release.yml.
+# Run it by hand from the Actions tab too (workflow_dispatch).
+
+on:
+  push:
+    branches: [main, "week*/**"]
+    paths:
+      - "services/api/**"
+      - ".github/workflows/api-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write   # push the API image to ghcr.io
+
+concurrency:
+  group: api-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and push
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image names
+        id: names
+        run: |
+          # The repo name ends in "-", which is not a valid image name, so
+          # the image is named after the project instead (as in release.yml).
+          image="ghcr.io/$(echo '${{ github.repository_owner }}' | tr 'A-Z' 'a-z')/connecting-dots-api"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}
+          SHA_TAG: ${{ steps.names.outputs.sha_tag }}
+        run: |
+          set -o pipefail
+          if ! docker build --progress=plain --target runtime \
+              --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+              --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              -t "$IMAGE:$SHA_TAG" -t "$IMAGE:edge" . 2>&1 | tee build.log; then
+            # Annotations are readable without signing in; the log is not.
+            echo "::error title=docker build failed::$(tail -n 25 build.log | tr '\n' '|' | cut -c1-3500)"
+            exit 1
+          fi
+
+      - name: No secrets in the image
+        run: |
+          # Never ship a secret baked into the image (see .dockerignore).
+          if docker run --rm --entrypoint sh "${{ steps.names.outputs.image }}:${{ steps.names.outputs.sha_tag }}" -c 'test -e /app/.env'; then
+            echo "::error::.env is inside the image"
+            exit 1
+          fi
+
+      - name: CPU-only torch; baked-in models load offline and match
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}:${{ steps.names.outputs.sha_tag }}
+        run: |
+          set -o pipefail
+          # --network none: the models must come from /opt/models, not the
+          # internet. A throwaway JWT key: app settings refuse to load without one.
+          # The reference numbers are the pinned models' output, measured with
+          # the same 2 torch threads the app uses; the tolerance only allows for
+          # floating-point differences between machines.
+          out=$(docker run --rm --network none -e JWT_SECRET_KEY=ci-model-check-not-a-real-secret-0123456789 --entrypoint sh "$IMAGE" -c '
+            if pip list --format=freeze | grep -iE "^(nvidia-|cuda-|triton=)"; then echo "GPU packages found"; exit 1; fi
+            python - <<EOF
+          import os, torch
+          assert torch.version.cuda is None, f"CUDA build of torch: {torch.__version__}"
+          assert os.environ["HF_HUB_OFFLINE"] == "1", "offline mode is off"
+          from app.core.rag import embedder, pipeline
+          from app.core.rag.model_specs import EMBEDDING_MODEL, RERANKER_MODEL
+          for m in (EMBEDDING_MODEL, RERANKER_MODEL):
+              src, kw = embedder.model_source(m)
+              assert src.startswith("/opt/models/") and not kw, (m, src, kw)
+          e = embedder._get_model()
+          v = embedder.embed_query("how do I reset my password")
+          assert len(v) == 384 and e.max_seq_length == 256, (len(v), e.max_seq_length)
+          ref = [0.007739, -0.052279, -0.062379, -0.033137, -0.042413]
+          assert all(abs(a - b) < 1e-4 for a, b in zip(v[:5], ref)), v[:5]
+          r = pipeline._get_reranker()
+          good, bad = r.predict([
+              ("how do I reset my password", "To reset your password, click Forgot password on the login page."),
+              ("how do I reset my password", "Bananas are a good source of potassium."),
+          ])
+          assert abs(good - 7.8951) < 1e-2 and abs(bad - -11.209) < 1e-2, (good, bad)
+          print(f"offline | torch {torch.__version__} (cuda={torch.version.cuda}) | embedder {e.device} 384-d matches pinned reference | reranker {r.model.device} good={good:.4f} bad={bad:.4f}")
+          EOF
+          ' 2>&1) || { echo "$out"; echo "::error title=Offline model check failed::$(echo "$out" | tail -n 15 | tr '\n' '|')"; exit 1; }
+          echo "$out" | tail -n 1
+          echo "::notice title=Offline model check passed::$(echo "$out" | tail -n 1)"
+
+      - name: Startup time and memory (models downloaded vs baked in)
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}:${{ steps.names.outputs.sha_tag }}
+        run: |
+          # Report only: never fails the build. Each container starts the real
+          # API (no database: its trash-purge task just logs a connection error)
+          # and is timed until /health answers, i.e. until both models are loaded.
+          # "Before" is this same image with the baked models switched off, so it
+          # downloads them from Hugging Face at startup the way older images did;
+          # everything else (packages, code) is identical.
+          measure() {
+            label=$1; shift
+            cid=$(docker run -d -e JWT_SECRET_KEY=ci-startup-check-not-a-real-secret-0123456789 "$@" "$IMAGE")
+            start=$(date +%s.%N); ok=no
+            for _ in $(seq 1 600); do
+              if docker exec "$cid" curl -sf -o /dev/null http://localhost:8000/api/v1/health 2>/dev/null; then ok=yes; break; fi
+              [ "$(docker inspect -f '{{.State.Running}}' "$cid")" = true ] || { ok="no (container exited)"; break; }
+              sleep 0.5
+            done
+            secs=$(awk -v s="$start" -v e="$(date +%s.%N)" 'BEGIN { printf "%.1f", e - s }')
+            mem=$(docker stats --no-stream --format '{{.MemUsage}}' "$cid")
+            loaded=$(docker logs "$cid" 2>&1 | grep -c rag_models_loaded || true)
+            line="$label: healthy=$ok after $secs s | memory $mem | models loaded=$loaded"
+            echo "$line"; echo "::notice title=Startup ($label)::$line"
+            if [ "$ok" != yes ]; then
+              echo "::warning title=Startup ($label) log tail::$(docker logs "$cid" 2>&1 | tail -n 12 | tr '\n' '|' | cut -c1-3000)"
+            fi
+            docker rm -f "$cid" > /dev/null
+          }
+          measure "before: models downloaded at startup" -e RAG_MODELS_DIR= -e HF_HUB_OFFLINE=0 -e TRANSFORMERS_OFFLINE=0
+          measure "after: baked models, --network none" --network none
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}
+          SHA_TAG: ${{ steps.names.outputs.sha_tag }}
+        run: |
+          for tag in "$SHA_TAG" edge; do
+            if ! out=$(docker push "$IMAGE:$tag" 2>&1); then
+              echo "$out"
+              echo "::error title=docker push failed::$(echo "$out" | tail -n 10 | tr '\n' '|')"
+              exit 1
+            fi
+          done
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$SHA_TAG")
+          id=$(docker inspect --format '{{.Id}}' "$IMAGE:$SHA_TAG")
+          echo "::notice title=API image pushed::$IMAGE:$SHA_TAG | digest $digest | image ID $id"
+          {
+            echo "### API image"
+            echo "- \`$IMAGE:$SHA_TAG\`"
+            echo "- \`$IMAGE:edge\`"
+            echo "- digest: \`$digest\`"
+            echo "- image ID: \`$id\`"
+          } >> "$GITHUB_STEP_SUMMARY"

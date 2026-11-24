@@ -1,0 +1,130 @@
+"""
+app/repositories/context.py
+────────────────────────────
+ContextRepository – data-access layer for the Context model.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+from sqlalchemy import func, select
+
+from app.models.context import Context
+from app.models.project import Project
+from app.models.session import Session
+from app.repositories.base import BaseRepository
+
+
+class ContextRepository(BaseRepository[Context]):
+    model = Context
+
+    async def get_by_idempotency_key(self, key: str) -> Context | None:
+        result = await self.session.execute(
+            select(Context).where(Context.idempotency_key == key)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_content_hash(self, content_hash: str) -> Context | None:
+        result = await self.session.execute(select(Context).where(Context.content_hash == content_hash))
+        return result.scalar_one_or_none()
+
+    async def get_by_id_for_owner(
+        self, context_id: uuid.UUID, owner_id: uuid.UUID, *, for_update: bool = False
+    ) -> Context | None:
+        """Ownership check via a two-hop JOIN: Context → Session → Project.
+        for_update locks the row until the transaction ends, so a version
+        check and the write that follows it can't interleave with another."""
+        stmt = (
+            select(Context)
+            .join(Session, Context.session_id == Session.id)
+            .join(Project, Session.project_id == Project.id)
+            .where(Context.id == context_id, Project.user_id == owner_id)
+        )
+        if for_update:
+            stmt = stmt.with_for_update(of=Context)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def list_by_session(
+        self,
+        session_id: uuid.UUID,
+        *,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> tuple[list[Context], int]:
+        """Return all contexts for a session, oldest first, with total count."""
+        count_result = await self.session.execute(
+            select(func.count())
+            .select_from(Context)
+            .where(Context.session_id == session_id)
+        )
+        total = count_result.scalar_one()
+
+        stmt = (
+            select(Context)
+            .where(Context.session_id == session_id)
+            .order_by(Context.created_at.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all()), total
+
+    async def list_for_owner(
+        self,
+        owner_id: uuid.UUID,
+        *,
+        project_id: uuid.UUID | None = None,
+        offset: int = 0,
+        limit: int = 200,
+    ) -> tuple[list[tuple[Context, uuid.UUID]], int]:
+        """Every context the owner has, across projects (or one project),
+        most recently edited first — each paired with its project_id."""
+        base = (
+            select(Context, Session.project_id)
+            .join(Session, Context.session_id == Session.id)
+            .join(Project, Session.project_id == Project.id)
+            .where(Project.user_id == owner_id)
+        )
+        if project_id is not None:
+            base = base.where(Session.project_id == project_id)
+
+        count_result = await self.session.execute(
+            select(func.count()).select_from(base.subquery())
+        )
+        total = count_result.scalar_one()
+
+        result = await self.session.execute(
+            base.order_by(Context.updated_at.desc(), Context.created_at.desc(), Context.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        return [(context, pid) for context, pid in result.all()], total
+
+    async def list_by_project(
+        self,
+        project_id: uuid.UUID,
+        *,
+        offset: int = 0,
+        limit: int = 200,
+    ) -> tuple[list[Context], int]:
+        """Return all contexts across all sessions for a project, newest first."""
+        count_result = await self.session.execute(
+            select(func.count())
+            .select_from(Context)
+            .join(Session, Context.session_id == Session.id)
+            .where(Session.project_id == project_id)
+        )
+        total = count_result.scalar_one()
+
+        stmt = (
+            select(Context)
+            .join(Session, Context.session_id == Session.id)
+            .where(Session.project_id == project_id)
+            .order_by(Context.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all()), total

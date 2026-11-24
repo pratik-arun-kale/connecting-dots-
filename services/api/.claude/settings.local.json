@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Copy-Item .env.example .env)",
+      "PowerShell(python --version)",
+      "PowerShell(uvicorn --version 2>&1)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8000/api/v1/health\" 2>&1)",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:8000/docs\" -Method Get 2>&1)",
+      "PowerShell(netstat -ano)",
+      "PowerShell(Start-Process -FilePath \"C:\\\\Users\\\\kale_p\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python310\\\\Scripts\\\\uvicorn.exe\" -ArgumentList \"main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\", \"--reload\" -WorkingDirectory \"c:\\\\Users\\\\kale_p\\\\Music\\\\Connecting dots\\\\Backend context-workspace\" -WindowStyle Normal)",
+      "PowerShell(taskkill /F /IM python.exe /T 2>&1)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8000/api/v1/health\")"
+    ]
+  }
+}

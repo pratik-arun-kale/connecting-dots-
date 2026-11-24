@@ -1,0 +1,41 @@
+#!/bin/sh
+# Pre-commit: lint only the staged files, with the tools each app already has.
+# Enabled by `npm run setup` (git config core.hooksPath .githooks).
+# Skip once with `git commit --no-verify`.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+staged() { git diff --cached --name-only --diff-filter=ACMR -- "$@"; }
+failed=0
+
+# ── API: ruff ────────────────────────────────────────────────────────────────
+py=$(staged 'services/api/*.py' | sed 's#^services/api/##')
+if [ -n "$py" ]; then
+  if command -v ruff >/dev/null 2>&1; then
+    echo "[pre-commit] ruff ($(echo "$py" | wc -l | tr -d ' ') files)"
+    (cd services/api && echo "$py" | tr '\n' '\0' | xargs -0 ruff check) || failed=1
+  else
+    echo "[pre-commit] ruff not found; skipping API lint (pip install -r services/api/requirements-dev.txt)"
+  fi
+fi
+
+# ── Dashboard: ESLint ────────────────────────────────────────────────────────
+ts=$(staged 'apps/dashboard/*.ts' 'apps/dashboard/*.tsx' 'apps/dashboard/*.mjs' | sed 's#^apps/dashboard/##')
+if [ -n "$ts" ]; then
+  if [ -x apps/dashboard/node_modules/.bin/eslint ]; then
+    echo "[pre-commit] eslint ($(echo "$ts" | wc -l | tr -d ' ') files)"
+    (cd apps/dashboard && echo "$ts" | tr '\n' '\0' | xargs -0 node_modules/.bin/eslint --max-warnings 0) || failed=1
+  else
+    echo "[pre-commit] dashboard dependencies missing; skipping ESLint (npm run setup)"
+  fi
+fi
+
+# ── Extension + dashboard: no local origins in shipped code ──────────────────
+if [ -n "$(staged 'apps/extension/src' 'apps/extension/manifest.dist.json' 'apps/dashboard/src')" ]; then
+  node scripts/check-no-localhost.mjs || failed=1
+fi
+
+if [ "$failed" -ne 0 ]; then
+  echo "[pre-commit] fix the errors above, or commit with --no-verify to skip"
+  exit 1
+fi

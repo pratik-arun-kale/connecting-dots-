@@ -1,0 +1,52 @@
+# Web Framework
+# fastapi >= 0.121 is required: app/dependencies uses Depends(..., scope=...).
+# The old 0.115.5 pin made every fresh install (CI, the Docker image) fail at
+# import. These two are the versions the test suite has been passing on.
+fastapi==0.140.7
+starlette==1.3.1
+uvicorn[standard]==0.32.1
+
+# Database
+sqlalchemy==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+psycopg2-binary==2.9.10  # for alembic sync ops
+
+# Validation & Settings
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# Utilities
+python-dotenv==1.0.1
+python-multipart==0.0.18
+
+# Logging
+structlog==24.4.0
+
+# HTTP client (future AI pipeline calls)
+httpx==0.28.1
+
+# RAG Pipeline — vector store, embeddings, hybrid retrieval, reranking
+chromadb>=0.5.0
+sentence-transformers>=2.3.1
+rank-bm25>=0.2.2
+
+# RAG answer generation (Ask AI) — OpenAI chat completions + token counting
+openai==2.24.0
+tiktoken>=0.8.0
+
+# Authentication — password hashing + JWT + email validation (pydantic EmailStr)
+argon2-cffi==25.1.0
+pyjwt==2.13.0
+email-validator==2.3.0
+
+# Redis (future-ready)
+redis==5.2.1
+hiredis==3.0.0
+
+# Async runtime under Starlette, httpx, openai and uvicorn's watchfiles.
+# Pinned here (it used to sit with the test tools) so production keeps the
+# version it has always run.
+anyio==4.7.0
+
+# Test and lint tools are in requirements-dev.txt, kept out of the image.

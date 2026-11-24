@@ -1,0 +1,45 @@
+/* Rebinds BlockNote's own color variables to this app's shadcn tokens
+   (--card/--border/--foreground/--muted-foreground, defined in globals.css
+   and swapped by the `.dark` class) instead of its hardcoded defaults, so
+   the editor blends into the note card instead of looking like a pasted-in
+   widget with its own slightly-off shade of white/gray. */
+.bn-note-editor {
+  --bn-colors-editor-background: transparent;
+  --bn-colors-editor-text: var(--foreground);
+  --bn-colors-border: var(--border);
+  --bn-colors-side-menu: var(--muted-foreground);
+  --bn-colors-menu-background: var(--card);
+  --bn-colors-menu-text: var(--foreground);
+  --bn-colors-hovered-background: var(--accent);
+  --bn-colors-selected-background: var(--accent);
+  --bn-colors-disabled-text: var(--muted-foreground);
+  --bn-colors-shadow: var(--border);
+  --bn-border-radius: var(--radius-md);
+  --bn-font-family: inherit;
+}
+
+/* BlockNote's heading scale (3em / 2em / 1.3em) is page-title sized; notes
+   read calmer with headings closer to the body text. */
+/* H1's size is set on the base selector (no data-level rule), so override
+   that, then pin every level explicitly. */
+.bn-note-editor [data-content-type=heading] { --level: 1.5em; padding-top: 10px; }
+.bn-note-editor [data-content-type=heading][data-level="2"] { --level: 1.3em; }
+.bn-note-editor [data-content-type=heading][data-level="3"] { --level: 1.15em; }
+.bn-note-editor [data-content-type=heading][data-level="4"] { --level: 1em; }
+.bn-note-editor [data-content-type=heading][data-level="5"] { --level: 0.95em; }
+.bn-note-editor [data-content-type=heading][data-level="6"] { --level: 0.9em; }
+
+/* BlockNote hardcodes table borders as #ddd, which glares in dark mode. */
+.bn-note-editor .bn-editor [data-content-type=table] th,
+.bn-note-editor .bn-editor [data-content-type=table] td {
+  border-color: var(--border);
+}
+
+/* Content only — .bn-root (menus, toolbars) keeps the interface sans. */
+.bn-note-editor .bn-editor {
+  font-family: var(--font-note);
+  padding: 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  background: transparent;
+}

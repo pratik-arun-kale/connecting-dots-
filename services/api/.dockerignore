@@ -1,0 +1,22 @@
+# Keep secrets and local state out of the image (COPY . . in the Dockerfile).
+# Secrets reach the container as environment variables at run time.
+.env
+.env.*
+!.env.example
+
+# Local vector store and vocabulary: per-machine data, not code.
+data/
+
+# Not needed to run the API.
+tests/
+htmlcov/
+.coverage
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+**/__pycache__/
+*.py[cod]
+.venv/
+venv/
+.claude/
+docker-compose.yml
