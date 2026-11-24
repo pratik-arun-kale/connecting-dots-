@@ -9,8 +9,13 @@ import { z } from 'zod';
 // backend. See .env.example for what each one is.
 
 const schema = z.object({
-  /** Backend API base including the version prefix, e.g. https://api.example.com/api/v1 */
-  NEXT_PUBLIC_API_BASE_URL: z.url({ protocol: /^https?$/ }),
+  /** Backend API base including the version prefix: /api/v1 to go through this
+   *  dashboard's own proxy (src/proxy.ts, deployed), or the API's own URL
+   *  ending in /api/v1 (local development; see .env.example). */
+  NEXT_PUBLIC_API_BASE_URL: z.union([
+    z.string().regex(/^\/[\w\-/]*$/, 'must be an http(s) URL or a path such as /api/v1'),
+    z.url({ protocol: /^https?$/ }),
+  ]),
   /** Chrome extension ID (32 letters a–p). Optional: without it the dashboard
    *  works but can't ask the extension to open AI sessions. */
   NEXT_PUBLIC_EXTENSION_ID: z
