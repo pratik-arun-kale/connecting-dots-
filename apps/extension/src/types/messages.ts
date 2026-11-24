@@ -79,23 +79,6 @@ export type CaptureContextResult = {
   contextId?: string;
 }
 
-export interface ExtractConversationMessage {
-  type: 'EXTRACT_CONVERSATION';
-}
-
-export type ExtractConversationResult = {
-  ok:   true;
-  payload: {
-    title:    string;
-    messages: Array<{ role: string; content: string; timestamp: string | null; index: number }>;
-    metadata: { model: string | null; messageCount: number; charCount: number; extractorVersion: string };
-  };
-} | {
-  ok:    false;
-  error: 'NO_MESSAGES' | 'DOM_CHANGED' | 'EXTRACTION_FAILED';
-  detail: string;
-}
-
 // ── Note capture (Note content script → Background) ──────────────────────────
 
 export interface NoteGetProjectsRequest {
