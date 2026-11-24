@@ -53,6 +53,9 @@ This plan takes Connecting Dots from "works on my machine" to **5–10 invited t
 
 All of these are code changes that come with tests. None need new infrastructure.
 
+### M1.0 Dashboard dependency vulnerabilities  ·  Low  ·  ✅ Done Nov 24
+*`npm audit` reported 2 critical and 17 high advisories in the dashboard's production packages. The worst were in `next` 16.2.6: remote code execution via image optimization, SSRF in rewrites, and cache poisoning. Fixed by upgrading `next` and `eslint-config-next` to 16.4.6 and running `npm audit fix` (no major versions). Production packages now have 0 high and 0 critical advisories, and the CI audit job is a real check. What's left: 8 moderate/low advisories whose only npm fix is a major downgrade (`shadcn`, `rehype-katex`), plus 1 high in an ESLint-only package.*
+
 ### M1.1 Indexing runs inside the request (B3)  ·  Medium
 - **Why:** captures and edits are indexed in FastAPI `BackgroundTasks`, after the response has been sent. Cloud Run throttles CPU at that point, so a capture may never become searchable.
 - **Design:**

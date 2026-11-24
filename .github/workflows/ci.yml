@@ -119,12 +119,13 @@ jobs:
           pip-audit --skip-editable
 
   audit:
-    name: npm audit (report only)
+    name: npm audit
     runs-on: ubuntu-latest
-    # Report-only for the first runs: Dependabot (.github/dependabot.yml)
-    # opens the fix PRs. Once the current findings are cleared, drop
-    # continue-on-error so a new high/critical advisory fails the build.
-    continue-on-error: true
+    # Fails on any high or critical advisory in what ships (production
+    # dependencies of the extension and the dashboard). Cleared on Nov 24,
+    # 2026 (next 16.4.6 and `npm audit fix`); Dependabot
+    # (.github/dependabot.yml) opens the PRs for new ones. Dev-only tools
+    # (eslint and friends) are not audited here: they never reach users.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
