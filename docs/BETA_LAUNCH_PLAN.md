@@ -104,7 +104,12 @@ All of these are code changes that come with tests. None need new infrastructure
 - **Tests:** in CI, run the end-to-end suite once through the rewrite, with the dashboard on :3000 forwarding to the API on :8000.
 - **Done when:** the end-to-end tests pass in rewrite mode, and a reload keeps you signed in.
 
-### M1.4 No surprise "logged out everywhere" (S1)  ·  Medium
+### M1.4 No surprise "logged out everywhere" (S1)  ·  Medium  ·  ✅ Done Nov 24
+*Done as designed below, with these changes:*
+- *The migration is 0015 (0014 went to M1.1). Besides `rotated_at`, it adds `replaced_by_id`. A grace refresh also requires that the replacement session is still live, so a logout, a "log out everywhere" or a password reset in the last 30 s ends the grace at once.*
+- *The window is the `AUTH_REFRESH_GRACE_SEC` setting (default 30).*
+- *Extension: instead of sending refreshes to the background worker, every context (popup, side panel, worker) takes the same Web Lock as the dashboard. A context that waited, and finds the stored token has changed, uses the new one instead of resending the old.*
+- *Verified with 433 API tests (6 new), 3 new extension tests (one confirmed by a mutation check), a migration round-trip on Neon dev, and an end-to-end test that opens 5 tabs at once.*
 - **Why:** if two tabs (or the extension's popup and background worker) refresh with the same token, the second request looks like token theft and revokes every session. The second tab's 401 is confirmed by an audit probe; the revoke-all comes from reading the code.
 - **Server ([services/auth.py](../services/api/app/services/auth.py) `refresh`):**
   - Add `auth_sessions.rotated_at` (migration 0014). It's set when a token is rotated, as distinct from a logout.

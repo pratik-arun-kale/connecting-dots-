@@ -95,13 +95,28 @@ async def test_refresh_from_the_cookie_rotates_it(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_rotated_cookie_cannot_be_used_again(client: AsyncClient) -> None:
-    # That reuse also revokes the newer sessions is tested across real
-    # commits in tests/services/test_auth_service.py; it can't be seen here,
-    # where every request shares one uncommitted transaction.
+async def test_a_rotated_cookie_cannot_be_used_again(client: AsyncClient, monkeypatch) -> None:
+    # After the grace window (see the next test). That reuse also revokes the
+    # newer sessions is tested across real commits in
+    # tests/services/test_auth_service.py; it can't be seen here, where every
+    # request shares one uncommitted transaction.
+    monkeypatch.setattr(settings, "auth_refresh_grace_sec", 0)
     first = _refresh_cookie(await _login_cookie_mode(client))
     assert (await _refresh_with_cookie(client, first)).status_code == 200
     assert (await _refresh_with_cookie(client, first)).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_two_tabs_refreshing_with_the_same_cookie_both_stay_signed_in(client: AsyncClient) -> None:
+    first = _refresh_cookie(await _login_cookie_mode(client))
+    tab_a = await _refresh_with_cookie(client, first)
+    tab_b = await _refresh_with_cookie(client, first)
+    assert tab_a.status_code == 200 and tab_b.status_code == 200, (tab_a.text, tab_b.text)
+    # Each tab got its own working token.
+    a, b = _refresh_cookie(tab_a), _refresh_cookie(tab_b)
+    assert a != b
+    assert (await _refresh_with_cookie(client, a)).status_code == 200
+    assert (await _refresh_with_cookie(client, b)).status_code == 200
 
 
 @pytest.mark.asyncio

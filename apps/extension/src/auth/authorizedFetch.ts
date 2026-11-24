@@ -9,14 +9,30 @@
  *
  * Concurrent 401s are deduped onto one shared in-flight refresh via
  * `refreshPromise` — the same pattern as the dashboard client.
+ *
+ * Across contexts (the popup, side panel and service worker are separate JS
+ * worlds sharing one chrome.storage), refreshes take turns under a Web Lock
+ * shared by the whole extension. A context that waited, and finds the token
+ * changed meanwhile, uses the stored new access token instead of sending a
+ * refresh token that was just rotated.
  */
 import { getAccessToken, getRefreshToken, setSession, clearSession } from './tokenStorage';
+
+export const REFRESH_LOCK = 'cd-refresh';
 
 let refreshPromise: Promise<string | null> | null = null;
 
 async function doRefresh(baseUrl: string): Promise<string | null> {
+  const seen = await getRefreshToken();
+  if (!seen) return null;
+  const run = () => refreshUnlessDone(baseUrl, seen);
+  return typeof navigator !== 'undefined' && navigator.locks ? navigator.locks.request(REFRESH_LOCK, run) : run();
+}
+
+async function refreshUnlessDone(baseUrl: string, seen: string): Promise<string | null> {
   const refreshToken = await getRefreshToken();
-  if (!refreshToken) return null;
+  if (!refreshToken) return null; // signed out while waiting
+  if (refreshToken !== seen) return getAccessToken(); // another context already refreshed
 
   try {
     const res = await fetch(`${baseUrl}/auth/refresh`, {

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.exceptions import ConflictException, ForbiddenException, UnauthorizedException
 from app.core.security import decode_access_token, hash_refresh_token
+from app.core.settings import settings
 from app.schemas.auth import LoginRequest, RegisterRequest
 from app.services.auth import AuthService
 from tests.conftest import TEST_DB_URL
@@ -134,7 +135,7 @@ async def test_refresh_rejects_an_expired_token(db_session: AsyncSession) -> Non
 
 @pytest.mark.asyncio
 async def test_reusing_an_already_rotated_refresh_token_revokes_the_whole_session_chain(
-    db_session: AsyncSession,
+    db_session: AsyncSession, monkeypatch
 ) -> None:
     """A same-transaction sanity check: within one session, replaying the
     stale token is rejected immediately after rotation. The full "every
@@ -144,6 +145,7 @@ async def test_reusing_an_already_rotated_refresh_token_revokes_the_whole_sessio
     (app/services/auth.py) so it survives the ambient per-request rollback
     in production; within one shared, never-committed test transaction that
     fresh session can't see this session's uncommitted writes at all."""
+    monkeypatch.setattr(settings, "auth_refresh_grace_sec", 0)  # reuse after the grace window
     service = AuthService(db_session)
     user = await service.register(RegisterRequest(email="reuse@test.com", password="password123"))
     _, original_refresh = await service.issue_token_pair(user)
@@ -156,7 +158,7 @@ async def test_reusing_an_already_rotated_refresh_token_revokes_the_whole_sessio
 
 @pytest.mark.asyncio
 async def test_reuse_detection_revokes_sibling_sessions_across_real_commits(
-    _test_schema: None,
+    _test_schema: None, monkeypatch
 ) -> None:
     """The full cross-session theft-detection guarantee, exercised against
     REAL commit boundaries (one fresh, committing session per step) rather
@@ -174,6 +176,7 @@ async def test_reuse_detection_revokes_sibling_sessions_across_real_commits(
     _test_schema drops all tables at the end of the test session; unique
     emails avoid collisions with other tests in the meantime.
     """
+    monkeypatch.setattr(settings, "auth_refresh_grace_sec", 0)  # reuse after the grace window
     engine = create_async_engine(TEST_DB_URL, echo=False)
     try:
         factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -256,3 +259,110 @@ async def test_logout_all_does_not_affect_another_users_sessions(db_session: Asy
         await service.refresh(refresh_a)
     # User B's session survives User A's logout-all.
     await service.refresh(refresh_b)
+
+
+# ── Grace period for a just-rotated token (two tabs refreshing at once) ──────
+# Real commits between steps, as in production, using the engine pattern of
+# test_reuse_detection_revokes_sibling_sessions_across_real_commits.
+
+
+class _Committed:
+    """One fresh, committing session per step."""
+
+    def __init__(self) -> None:
+        self.engine = create_async_engine(TEST_DB_URL, echo=False)
+        self.factory = async_sessionmaker(self.engine, expire_on_commit=False)
+
+    async def step(self, fn):
+        async with self.factory() as session:
+            try:
+                return await fn(AuthService(session, session_factory=self.factory))
+            finally:
+                await session.commit()
+
+    async def refresh_fails(self, token: str) -> None:
+        with pytest.raises(UnauthorizedException):
+            await self.step(lambda svc: svc.refresh(token))
+
+    async def backdate_rotation(self, token: str, seconds: int) -> None:
+        from sqlalchemy import update
+
+        from app.models.auth_session import AuthSession
+
+        async with self.factory() as session:
+            await session.execute(
+                update(AuthSession)
+                .where(AuthSession.refresh_token_hash == hash_refresh_token(token))
+                .values(rotated_at=AuthSession.rotated_at - timedelta(seconds=seconds))
+            )
+            await session.commit()
+
+
+async def _signed_in(c: _Committed, email: str) -> str:
+    user = await c.step(lambda svc: svc.register(RegisterRequest(email=email, password="password123")))
+    _, refresh = await c.step(lambda svc: svc.issue_token_pair(user))
+    return refresh
+
+
+@pytest.mark.asyncio
+async def test_a_second_tab_reusing_a_just_rotated_token_gets_its_own_pair(_test_schema: None) -> None:
+    c = _Committed()
+    try:
+        original = await _signed_in(c, "grace-two-tabs@test.com")
+        _, tab_a, _ = await c.step(lambda svc: svc.refresh(original))
+        _, tab_b, _ = await c.step(lambda svc: svc.refresh(original))  # same token, moments later
+        assert tab_b not in (tab_a, original)
+        # Nothing was revoked: both tabs carry on.
+        await c.step(lambda svc: svc.refresh(tab_a))
+        await c.step(lambda svc: svc.refresh(tab_b))
+    finally:
+        await c.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_reuse_after_the_grace_window_still_revokes_everything(_test_schema: None) -> None:
+    c = _Committed()
+    try:
+        original = await _signed_in(c, "grace-expired@test.com")
+        _, rotated, _ = await c.step(lambda svc: svc.refresh(original))
+        await c.backdate_rotation(original, settings.auth_refresh_grace_sec + 1)
+        await c.refresh_fails(original)
+        await c.refresh_fails(rotated)  # the legitimate successor is gone too
+    finally:
+        await c.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_no_grace_once_the_replacement_has_logged_out(_test_schema: None) -> None:
+    c = _Committed()
+    try:
+        original = await _signed_in(c, "grace-logout@test.com")
+        _, rotated, _ = await c.step(lambda svc: svc.refresh(original))
+        await c.step(lambda svc: svc.logout(rotated))
+        await c.refresh_fails(original)  # within the window, but the user signed out
+    finally:
+        await c.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_no_grace_after_logout_everywhere(_test_schema: None) -> None:
+    c = _Committed()
+    try:
+        original = await _signed_in(c, "grace-logout-all@test.com")
+        _, rotated, user = await c.step(lambda svc: svc.refresh(original))
+        await c.step(lambda svc: svc.logout_all(user.id))
+        await c.refresh_fails(original)
+        await c.refresh_fails(rotated)
+    finally:
+        await c.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_logged_out_token_gets_no_grace(_test_schema: None) -> None:
+    c = _Committed()
+    try:
+        token = await _signed_in(c, "grace-logged-out@test.com")
+        await c.step(lambda svc: svc.logout(token))
+        await c.refresh_fails(token)
+    finally:
+        await c.engine.dispose()
