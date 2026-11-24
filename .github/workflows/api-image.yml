@@ -103,6 +103,36 @@ jobs:
           echo "$out" | tail -n 1
           echo "::notice title=Offline model check passed::$(echo "$out" | tail -n 1)"
 
+      - name: A made-up X-Forwarded-For can't dodge the per-IP limit
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}:${{ steps.names.outputs.sha_tag }}
+        run: |
+          # The image's own CMD, no database. /auth/refresh allows 30 tries per
+          # 15 minutes per address and answers 401 without a token before it
+          # needs the database. Every try claims a different X-Forwarded-For;
+          # if uvicorn believed any of them, the 31st would still be a 401.
+          # Requests come from 127.0.0.1, which uvicorn trusts by default
+          # unless --no-proxy-headers is set, so this catches that flag going.
+          cid=$(docker run -d --network none -e RAG_PRELOAD_MODELS=false \
+                -e JWT_SECRET_KEY=ci-ip-check-not-a-real-secret-0123456789 "$IMAGE")
+          trap 'docker rm -f "$cid" > /dev/null' EXIT
+          for _ in $(seq 1 120); do
+            docker exec "$cid" curl -sf -o /dev/null http://localhost:8000/api/v1/health 2>/dev/null && break
+            sleep 0.5
+          done
+          codes=$(docker exec "$cid" sh -c '
+            for i in $(seq 1 31); do
+              curl -s -o /dev/null -w "%{http_code} " -X POST \
+                -H "X-Forwarded-For: 198.51.100.$i" http://localhost:8000/api/v1/auth/refresh
+            done')
+          echo "status codes: $codes"
+          if [ "$codes" != "$(printf '401 %.0s' $(seq 1 30))429 " ]; then
+            echo "::error title=Per-IP limit dodged::expected 30 x 401 then 429, got: $codes"
+            echo "$(docker logs "$cid" 2>&1 | tail -n 15)"
+            exit 1
+          fi
+          echo "::notice title=Per-IP limit holds::30 tries with 30 different X-Forwarded-For values, then 429"
+
       - name: Startup time and memory (models downloaded vs baked in)
         env:
           IMAGE: ${{ steps.names.outputs.image }}:${{ steps.names.outputs.sha_tag }}

@@ -72,7 +72,13 @@ All of these are code changes that come with tests. None need new infrastructure
 - **Tests:** after a capture returns, its chunks exist. An edited note is found by its new text on the next search. An edit followed by an immediate search returns the new text. The existing reindex tests are updated.
 - **Done when:** no `background_tasks.add_task` remains in the routes, and all tests pass.
 
-### M1.2 Real client IP for rate limits (B5)  ·  Low
+### M1.2 Real client IP for rate limits (B5)  ·  Low  ·  ✅ Done Nov 24
+*Done as designed below, with these specifics:*
+- *Uvicorn now runs with `--no-proxy-headers`. Only dropping `"*"` wasn't enough, because uvicorn still trusts `X-Forwarded-For` from 127.0.0.1 by default.*
+- *New settings: `TRUSTED_PROXY_HOPS` (default 0) and `PROXY_SHARED_SECRET` (at least 32 characters). The proxy sends the secret in `X-Proxy-Secret` and the browser's address in `X-Client-IP`. An address that isn't a valid IP is ignored, and the next rule applies.*
+- *Note for M1.3: Next.js `rewrites()` can't add request headers, so the dashboard's proxy has to be `proxy.ts` (middleware) or a route handler that sets those two headers and overwrites any the browser sent.*
+
+*Verified with 427 tests, 22 of them new. The image workflow also runs the built container and sends 31 refreshes, each with a different `X-Forwarded-For`; the 31st must get a 429. Run against the old flags, the same check gets 31 × 401, so it catches a regression.*
 - **Why:** `--forwarded-allow-ips *` makes uvicorn trust the leftmost `X-Forwarded-For` entry, which the caller controls, so rate limits can be bypassed. Behind the Vercel proxy (M1.3), every dashboard user would also share Vercel's IP, letting only 5 accounts register per hour in total.
 - **Design:**
   - Remove `--forwarded-allow-ips "*"` from the [Dockerfile](../services/api/Dockerfile) `CMD`.

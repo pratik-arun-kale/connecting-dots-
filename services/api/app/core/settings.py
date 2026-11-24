@@ -167,6 +167,31 @@ class Settings(BaseSettings):
     # which create an account per test from one address.
     auth_register_limit_per_hour: int = 5
 
+    # ── Client address (per-IP rate limits, app/core/rate_limit.py) ─────────
+    # How many proxies in front of the API append the address they saw to
+    # X-Forwarded-For. The client is the entry that many places from the
+    # right; everything left of it is whatever the caller sent. 0 (local):
+    # the TCP peer is the client and X-Forwarded-For is ignored. Cloud Run's
+    # front end appends one entry, so 1 there (confirmed against real headers
+    # before launch).
+    trusted_proxy_hops: int = Field(default=0, ge=0)
+    # The dashboard's /api/* proxy sends this in X-Proxy-Secret together with
+    # the browser's address in X-Client-IP; X-Client-IP is believed only when
+    # the secret matches. Unset: X-Client-IP is always ignored.
+    proxy_shared_secret: str | None = None
+
+    @field_validator("proxy_shared_secret")
+    @classmethod
+    def _proxy_secret_long_enough(cls, v: str | None) -> str | None:
+        if not v:
+            return None
+        if len(v) < 32:
+            raise ValueError(
+                "PROXY_SHARED_SECRET must be at least 32 characters — generate one with: "
+                'python -c "import secrets; print(secrets.token_urlsafe(32))"'
+            )
+        return v
+
     # Load the embedding model and reranker at startup, before serving. Loading
     # them on first use instead stalls every request for ~10 s while torch
     # loads (it holds Python's GIL even in a worker thread). Off only to start

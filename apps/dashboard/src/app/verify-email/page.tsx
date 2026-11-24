@@ -32,7 +32,10 @@ function VerifyEmail() {
   const sent = useRef(false);
 
   useEffect(() => {
-    if (!token || sent.current) return;
+    // Wait for AuthProvider's silent refresh to settle first. Its answer
+    // carries the user as they were before this link was opened; landing
+    // after ours, it would put the "Confirm your email" banner back.
+    if (!token || sent.current || status === 'idle') return;
     sent.current = true;
     authService
       .verifyEmail(token)
@@ -43,7 +46,7 @@ function VerifyEmail() {
       .catch((err) =>
         setState({ kind: 'failed', message: extractErrorMessage(err, 'Could not confirm your email. Try again.') }),
       );
-  }, [token, setUser]);
+  }, [token, status, setUser]);
 
   const next = status === 'authenticated' ? { href: '/notes', label: 'Go to your notes' } : { href: '/login', label: 'Sign in' };
 
