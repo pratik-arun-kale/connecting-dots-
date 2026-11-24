@@ -30,6 +30,18 @@ jobs:
     defaults:
       run:
         working-directory: services/api
+    services:
+      # For the restart check: the search index lives in Postgres.
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg16
+        env:
+          POSTGRES_DB: cd_restart
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -132,6 +144,45 @@ jobs:
             exit 1
           fi
           echo "::notice title=Per-IP limit holds::30 tries with 30 different X-Forwarded-For values, then 429"
+
+      - name: Search still finds a note after the API is replaced (index in Postgres)
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}:${{ steps.names.outputs.sha_tag }}
+        run: |
+          # Cloud Run replaces containers: a fresh one keeps nothing on disk.
+          # Capture a note, remove the container, start a NEW one from the
+          # image, and search: the note must still be found.
+          DB=postgresql://postgres:postgres@localhost:5432/cd_restart
+          RUN="docker run --network host -e DATABASE_URL=$DB -e APP_ENV=development -e JWT_SECRET_KEY=ci-restart-check-not-a-real-secret-0123456789"
+          $RUN --rm --entrypoint alembic "$IMAGE" upgrade head
+          start() {
+            cid=$($RUN -d "$IMAGE")
+            for _ in $(seq 1 120); do
+              curl -sf -o /dev/null http://localhost:8000/api/v1/health && return 0
+              sleep 1
+            done
+            echo "::error title=Restart check::API did not come up"; docker logs "$cid" 2>&1 | tail -n 20; exit 1
+          }
+          api() { curl -sf -X "$1" "http://localhost:8000/api/v1$2" -H 'Content-Type: application/json' ${TOKEN:+-H "Authorization: Bearer $TOKEN"} ${3:+-d "$3"}; }
+          json() { python3 -c "import sys,json; print(json.load(sys.stdin)$1)"; }
+
+          start
+          TOKEN=$(api POST /auth/register '{"email":"restart@example.com","password":"restart-password-123"}' | json "['access_token']")
+          PID=$(api POST /projects '{"name":"Restart check"}' | json "['id']")
+          api POST "/projects/$PID/capture" '{"idempotency_key":"restart-check-1","platform":"note","chat_url":"https://chatgpt.com/c/restart","captured_at":"2026-11-24T00:00:00Z","title":"Kubernetes autoscaling","messages":[{"role":"user","content":"Kubernetes autoscaling with the HPA and KEDA, scaling on queue length.","index":0}]}' > /dev/null
+          before=$(api POST /search/conversations "{\"project_id\":\"$PID\",\"query\":\"kubernetes autoscaling\"}" | json "['total_conversations']")
+
+          docker rm -f "$cid" > /dev/null
+          start
+          after=$(api POST /search/conversations "{\"project_id\":\"$PID\",\"query\":\"kubernetes autoscaling\"}" | json "['total_conversations']")
+          docker rm -f "$cid" > /dev/null
+
+          echo "found before: $before, in a new container: $after"
+          if [ "$before" -lt 1 ] || [ "$after" != "$before" ]; then
+            echo "::error title=Restart check::search found $before before and $after after replacing the container"
+            exit 1
+          fi
+          echo "::notice title=Index survives a restart::a new container found the note ($after result)"
 
       - name: Startup time and memory (models downloaded vs baked in)
         env:

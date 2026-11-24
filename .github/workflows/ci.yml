@@ -72,7 +72,7 @@ jobs:
         working-directory: services/api
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:0.8.0-pg16
         env:
           # conftest.py runs tests against "<POSTGRES_DB>_test".
           POSTGRES_DB: ai_context_workspace_test
@@ -147,7 +147,7 @@ jobs:
     needs: [dashboard, api]
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:0.8.0-pg16
         env:
           POSTGRES_DB: ai_context_workspace
           POSTGRES_USER: postgres
