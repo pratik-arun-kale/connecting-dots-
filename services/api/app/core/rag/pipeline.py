@@ -363,7 +363,7 @@ def run_query(project_id: str, question: str) -> dict[str, Any]:
         return {
             "answer": (
                 "No context has been captured for this project yet. "
-                "Open ChatGPT, Claude, Gemini, or Perplexity in your browser and click "
+                "Open ChatGPT, Claude or Gemini in your browser and click "
                 "'Capture Context' in the extension popup first."
             ),
             "confidence": "LOW",
