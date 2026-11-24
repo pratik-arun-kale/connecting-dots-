@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, update
 
 from app.models.context import Context
 from app.models.project import Project
@@ -128,3 +128,34 @@ class ContextRepository(BaseRepository[Context]):
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all()), total
+
+
+    # ── Search index bookkeeping (see Context.indexed_version) ─────────────────
+
+    async def list_stale_for_index(self, project_id: uuid.UUID) -> list[Context]:
+        """A project's live contexts whose current version isn't the one in
+        the search index: edited since, never indexed, or restored from the
+        Trash. Trashed ones are left out by the soft-delete filter."""
+        stmt = (
+            select(Context)
+            .join(Session, Context.session_id == Session.id)
+            .where(
+                Session.project_id == project_id,
+                or_(Context.indexed_version.is_(None), Context.indexed_version != Context.version),
+            )
+            .order_by(Context.created_at)
+        )
+        return list((await self.session.execute(stmt)).scalars().all())
+
+    async def mark_indexed(self, context_id: uuid.UUID, version: int) -> bool:
+        """Record that `version` of the context is now in the index. Does
+        nothing (returns False) if the context was edited again meanwhile, so
+        a newer edit is never marked as indexed. Leaves updated_at alone: it
+        orders the notes list by the reader's last edit, not by indexing."""
+        result = await self.session.execute(
+            update(Context)
+            .where(Context.id == context_id, Context.version == version)
+            .values(indexed_version=version, updated_at=Context.updated_at)
+            .execution_options(synchronize_session=False)
+        )
+        return result.rowcount == 1

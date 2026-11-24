@@ -13,10 +13,10 @@ DELETE /contexts/detail/{context_id}   – delete a note/context
 
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Header, Query, status
+from fastapi import APIRouter, Header, Query, status
 
 from app.core.exceptions import UnprocessableException
-from app.dependencies import ContextServiceDep, CurrentUserDep, RagServiceDep
+from app.dependencies import ContextServiceDep, CurrentUserDep
 from app.schemas.context import (
     ContextCapture,
     ContextCreate,
@@ -26,7 +26,6 @@ from app.schemas.context import (
     NoteListResponse,
     NoteUpdateRequest,
 )
-from app.services.rag_service import raw_content_for_index
 
 router = APIRouter(prefix="/contexts", tags=["Contexts"])
 
@@ -140,8 +139,6 @@ async def update_note(
     context_id: uuid.UUID,
     payload: NoteUpdateRequest,
     service: ContextServiceDep,
-    rag_service: RagServiceDep,
-    background_tasks: BackgroundTasks,
     current_user: CurrentUserDep,
     if_match: str | None = Header(
         default=None,
@@ -149,21 +146,9 @@ async def update_note(
     ),
 ) -> ContextResponse:
     context = await service.update_note(context_id, payload, current_user.id, if_match=_parse_version(if_match))
-
-    # The body and the title are what Ask AI and search match on, so an edit
-    # to either replaces the context's chunks (coalesced across autosaves —
-    # see RagService.reindex_context). The annotation isn't indexed.
-    if payload.model_fields_set & {"content_md", "user_title"}:
-        project_id = await service.project_id_of(context)
-        if project_id is not None:
-            background_tasks.add_task(
-                rag_service.reindex_context,
-                context.id,
-                context.session_id,
-                project_id,
-                raw_content_for_index(context),
-            )
-
+    # Nothing is re-indexed here: the edit bumped `version`, so the next search
+    # or Ask AI question on the project re-indexes this note once, however
+    # many autosaves came before it (ContextService.bring_index_up_to_date).
     return ContextResponse.model_validate(context)
 
 

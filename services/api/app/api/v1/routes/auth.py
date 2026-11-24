@@ -22,7 +22,10 @@ limited per-IP — see app/core/rate_limit.py.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
+import asyncio
+import time
+
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.core.exceptions import ForbiddenException, UnauthorizedException
 from app.core.rate_limit import check_rate_limit, rate_limit
@@ -48,6 +51,11 @@ from app.schemas.auth import (
 from app.services.email import password_reset_email, verification_email
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+# /password-reset never answers sooner than this, registered address or not,
+# so the time spent sending the email gives nothing away. Above a normal
+# Resend round-trip (a few hundred ms). Tests set it to 0.
+PASSWORD_RESET_RESPONSE_FLOOR_SEC = 1.5
 
 # ── Cookie mode (dashboard) ────────────────────────────────────────────────────
 # A client opts in by sending `X-Auth-Mode: cookie`. In that mode the refresh
@@ -131,7 +139,6 @@ async def register(
     payload: RegisterRequest,
     request: Request,
     response: Response,
-    background: BackgroundTasks,
     auth_service: AuthServiceDep,
     account_email: AccountEmailServiceDep,
     email_sender: EmailSenderDep,
@@ -140,8 +147,10 @@ async def register(
     user = await auth_service.register(payload)
     token = await account_email.issue_verification(user)
     if token:
-        # After the response: the account works at once; the email follows.
-        background.add_task(email_sender.send, verification_email(user.email, token))
+        # Sent before responding: a serverless host may give no CPU to work
+        # after the response. The sender logs a failure rather than raising,
+        # so a Resend problem never fails the sign-up.
+        await email_sender.send(verification_email(user.email, token))
     access_token, refresh_token = await auth_service.issue_token_pair(user)
     return _token_pair_response(request, response, access_token, refresh_token, user)
 
@@ -221,13 +230,12 @@ async def logout_all(
 )
 async def request_email_verification(
     current_user: CurrentUserDep,
-    background: BackgroundTasks,
     account_email: AccountEmailServiceDep,
     email_sender: EmailSenderDep,
 ) -> None:
     token = await account_email.issue_verification(current_user)
     if token:
-        background.add_task(email_sender.send, verification_email(current_user.email, token))
+        await email_sender.send(verification_email(current_user.email, token))
 
 
 @router.post(
@@ -253,14 +261,16 @@ async def confirm_email(payload: EmailTokenRequest, account_email: AccountEmailS
 )
 async def request_password_reset(
     payload: PasswordResetRequest,
-    background: BackgroundTasks,
     account_email: AccountEmailServiceDep,
     email_sender: EmailSenderDep,
 ) -> None:
     """Always 202 with no body, whether or not the address is registered, and
-    the email goes out after the response, so neither the answer nor its
-    timing says which addresses have accounts. The per-address limit stops
-    anyone flooding one inbox from many IPs."""
+    never sooner than PASSWORD_RESET_RESPONSE_FLOOR_SEC, so neither the answer
+    nor its timing says which addresses have accounts. (The email is sent
+    before responding, which a serverless host needs; the floor hides how long
+    that took.) The per-address limit stops anyone flooding one inbox from
+    many IPs."""
+    started = time.monotonic()
     check_rate_limit(
         f"password_reset_email:{payload.email.strip().lower()}",
         3,
@@ -270,7 +280,13 @@ async def request_password_reset(
     issued = await account_email.issue_password_reset(payload.email)
     if issued:
         user, token = issued
-        background.add_task(email_sender.send, password_reset_email(user.email, token))
+        await email_sender.send(password_reset_email(user.email, token))
+    # Same minimum time either way. A send slower than the floor (Resend
+    # timing out) would still stand out; that's rare and only says "this
+    # address exists", which registration's duplicate-email error says too.
+    remaining = PASSWORD_RESET_RESPONSE_FLOOR_SEC - (time.monotonic() - started)
+    if remaining > 0:
+        await asyncio.sleep(remaining)
 
 
 @router.post(

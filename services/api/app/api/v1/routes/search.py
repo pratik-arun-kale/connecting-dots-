@@ -13,7 +13,7 @@ import uuid
 from fastapi import APIRouter, status
 
 from app.core.rag.query_normalizer import _max_edit_distance, levenshtein_distance
-from app.dependencies import CurrentUserDep, ProjectServiceDep, RagServiceDep, user_rate_limit
+from app.dependencies import ContextServiceDep, CurrentUserDep, ProjectServiceDep, RagServiceDep, user_rate_limit
 from app.schemas.search import ConversationSearchRequest, ConversationSearchResponse
 
 router = APIRouter(prefix="/search", tags=["Search"])
@@ -64,6 +64,7 @@ async def search_conversations(
     payload: ConversationSearchRequest,
     rag_service: RagServiceDep,
     project_service: ProjectServiceDep,
+    context_service: ContextServiceDep,
     current_user: CurrentUserDep,
 ) -> ConversationSearchResponse:
     # Same reasoning as /projects/{id}/query: RagService has no DB access to
@@ -71,6 +72,9 @@ async def search_conversations(
     # client-supplied project_id (it's in the request BODY, not the path —
     # easy to overlook) is ever used to search ChromaDB.
     await project_service.get_project(payload.project_id, current_user.id)
+    # Notes edited since they were indexed are re-indexed first, so search
+    # finds the latest text.
+    await context_service.bring_index_up_to_date(payload.project_id, rag_service)
 
     result = await rag_service.search_conversations(
         payload.project_id, payload.query, payload.top_k

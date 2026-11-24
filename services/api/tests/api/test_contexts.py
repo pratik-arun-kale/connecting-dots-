@@ -6,6 +6,8 @@ Integration tests for /api/v1/contexts endpoints.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -275,40 +277,141 @@ async def test_set_and_clear_user_title(authenticated_client: AsyncClient) -> No
 
 
 # ── Re-index on edit ───────────────────────────────────────────────────────────
+# An edit only bumps the note's version; the next search or Ask AI question on
+# the project re-indexes it, once, with its latest text (Context.indexed_version).
+
+@pytest.fixture
+def _stub_answer(monkeypatch):
+    """Ask AI's retrieval and answer, stubbed: these tests are about what gets
+    re-indexed before it runs."""
+    from app.services.rag_service import RagService
+
+    async def _answer(self, project_id, question):
+        return {"answer": "stub", "confidence": "LOW", "citations": [], "query_used": question,
+                "corrective_triggered": False}
+
+    monkeypatch.setattr(RagService, "query_project", _answer)
+
+
+async def _ask(client: AsyncClient, project_id: str) -> None:
+    resp = await client.post(f"{PROJECT_BASE}/{project_id}/query", json={"question": "anything new?"})
+    assert resp.status_code == 200, resp.text
+
+
+async def _written_note(client: AsyncClient, project_id: str, monkeypatch) -> tuple[dict, str]:
+    """A dashboard-style note (platform "note"), created through capture,
+    which indexes it in the same request. Indexing is stubbed here.
+    Returns (note, session_id)."""
+    from app.services.rag_service import RagService
+
+    async def _indexed(self, *args):
+        return None
+
+    monkeypatch.setattr(RagService, "index_context", _indexed)
+    resp = await client.post(
+        f"{PROJECT_BASE}/{project_id}/capture",
+        json={
+            "idempotency_key": f"note-{uuid.uuid4().hex}",
+            "platform": "note",
+            "chat_url": "",
+            "captured_at": "2026-11-24T00:00:00Z",
+            "title": "[Note] first words",
+            "messages": [{"role": "user", "content": "first words", "index": 0}],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    note = (await client.get(f"{CONTEXT_BASE}/detail/{resp.json()['context_id']}")).json()
+    return note, resp.json()["session_id"]
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["content_md", "user_title"])
-async def test_editing_body_or_title_schedules_a_reindex(
-    authenticated_client: AsyncClient, reindex_calls: list, field: str
+async def test_editing_body_or_title_reindexes_once_before_the_next_question(
+    authenticated_client: AsyncClient, reindex_calls: list, _stub_answer, monkeypatch, field: str
 ) -> None:
-    project_id, session_id = await _bootstrap(authenticated_client)
-    created = await _create_context(authenticated_client, session_id)
+    project_id, _ = await _bootstrap(authenticated_client)
+    created, session_id = await _written_note(authenticated_client, project_id, monkeypatch)
+    await _ask(authenticated_client, project_id)
+    assert reindex_calls == []  # indexed by its capture request: nothing stale
 
-    response = await authenticated_client.patch(
-        f"{CONTEXT_BASE}/detail/{created['id']}", json={field: "Edited text"}
-    )
-    assert response.status_code == 200
+    url = f"{CONTEXT_BASE}/detail/{created['id']}"
+    for text in ("draft", "draft two", "Edited text"):  # a burst of autosaves
+        response = await authenticated_client.patch(url, json={field: text})
+        assert response.status_code == 200
+    assert reindex_calls == []  # the edits themselves index nothing
+
+    await _ask(authenticated_client, project_id)
     assert len(reindex_calls) == 1
-    context_id, called_session_id, called_project_id, _raw = reindex_calls[0]
+    context_id, called_session_id, called_project_id, raw = reindex_calls[0]
     assert (str(context_id), str(called_session_id), str(called_project_id)) == (
         created["id"],
         session_id,
         project_id,
     )
+    indexed_text = raw["title"] if field == "user_title" else raw["messages"][0]["content"]
+    assert indexed_text == "Edited text"  # the latest version, not an earlier autosave
+
+    await _ask(authenticated_client, project_id)
+    assert len(reindex_calls) == 1  # up to date now: nothing more to do
 
 
 @pytest.mark.asyncio
 async def test_editing_only_the_annotation_does_not_reindex(
-    authenticated_client: AsyncClient, reindex_calls: list
+    authenticated_client: AsyncClient, reindex_calls: list, _stub_answer
 ) -> None:
-    _, session_id = await _bootstrap(authenticated_client)
+    project_id, session_id = await _bootstrap(authenticated_client)
     created = await _create_context(authenticated_client, session_id)
+    await _ask(authenticated_client, project_id)
+    reindex_calls.clear()
 
     response = await authenticated_client.patch(
         f"{CONTEXT_BASE}/detail/{created['id']}", json={"user_note": "my own aside"}
     )
     assert response.status_code == 200
+    await _ask(authenticated_client, project_id)
     assert reindex_calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_failed_reindex_is_retried_on_the_next_question(
+    authenticated_client: AsyncClient, _stub_answer, monkeypatch
+) -> None:
+    from app.services.rag_service import RagService
+
+    attempts: list = []
+
+    async def _flaky(self, *args):
+        attempts.append(args)
+        if len(attempts) == 1:
+            raise RuntimeError("embedding failed")
+
+    monkeypatch.setattr(RagService, "reindex_context", _flaky)
+    project_id, session_id = await _bootstrap(authenticated_client)
+    await _create_context(authenticated_client, session_id)
+
+    await _ask(authenticated_client, project_id)  # the question still works
+    await _ask(authenticated_client, project_id)  # and the note is retried
+    await _ask(authenticated_client, project_id)  # then left alone
+    assert len(attempts) == 2
+
+
+@pytest.mark.asyncio
+async def test_indexing_keeps_the_notes_last_edited_order(
+    authenticated_client: AsyncClient, reindex_calls: list, _stub_answer
+) -> None:
+    # The notes list is ordered by updated_at (the reader's last edit).
+    # Marking a note indexed must not count as an edit.
+    project_id, session_id = await _bootstrap(authenticated_client)
+    first = await _create_context(authenticated_client, session_id, raw_content={"type": "text", "body": "one"})
+    second = await _create_context(authenticated_client, session_id, raw_content={"type": "text", "body": "two"})
+    before = {c["id"]: c["updated_at"] for c in (await authenticated_client.get(CONTEXT_BASE)).json()["items"]}
+
+    await _ask(authenticated_client, project_id)
+    assert len(reindex_calls) == 2  # both were indexed
+
+    after = {c["id"]: c["updated_at"] for c in (await authenticated_client.get(CONTEXT_BASE)).json()["items"]}
+    assert after == before
+    assert set(after) == {first["id"], second["id"]}
 
 
 @pytest.mark.asyncio

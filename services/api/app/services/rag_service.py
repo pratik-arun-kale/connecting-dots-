@@ -18,15 +18,6 @@ from app.models.context import Context
 
 logger = get_logger(__name__)
 
-# A re-index after an edit waits this long and is dropped if a newer edit to
-# the same context arrived meanwhile, so a burst of autosaves (one every
-# ~800 ms while typing) costs one re-embed instead of one per save.
-REINDEX_DELAY_SEC = 5.0
-
-# context_id -> token of its most recent re-index request. In-process only,
-# like app/core/rate_limit.py: with several workers, each coalesces its own.
-_latest_reindex: dict[str, object] = {}
-
 
 def raw_content_for_index(context: Context) -> dict[str, Any]:
     """What to index for a context as it stands now, in the raw_content shape
@@ -61,7 +52,7 @@ class RagService:
     ) -> None:
         """
         Chunk + embed + upsert a captured context into the project's ChromaDB collection.
-        Runs in a background thread — never call from the hot request path directly.
+        The CPU work runs in a worker thread, so the event loop keeps serving.
         """
         await asyncio.to_thread(
             self._index_sync,
@@ -77,22 +68,16 @@ class RagService:
         session_id: uuid.UUID,
         project_id: uuid.UUID,
         raw_content: dict[str, Any],
-        delay: float = REINDEX_DELAY_SEC,
     ) -> None:
         """
-        Replace a context's chunks after an edit. Waits `delay` seconds and
-        gives up if a newer re-index for the same context was requested in
-        the meantime — only the latest edit's content gets embedded.
-        Background-task only, like index_context().
+        Replace a context's chunks with ones built from `raw_content`, now.
+        Called inside a request (ContextService.bring_index_up_to_date, before
+        a search); a burst of autosaves needs no coalescing here because edits
+        only mark the context stale and the next search indexes it once.
         """
-        key = str(context_id)
-        token = object()
-        _latest_reindex[key] = token
-        await asyncio.sleep(delay)
-        if _latest_reindex.get(key) is not token:
-            return
-        del _latest_reindex[key]
-        await asyncio.to_thread(self._reindex_sync, key, str(session_id), str(project_id), raw_content)
+        await asyncio.to_thread(
+            self._reindex_sync, str(context_id), str(session_id), str(project_id), raw_content
+        )
 
     def _reindex_sync(
         self,

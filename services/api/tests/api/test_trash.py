@@ -113,6 +113,16 @@ async def test_restoring_a_note_brings_it_back_and_reindexes_it(
     assert resp.json() == {"id": nid, "project_id": pid}
     assert await _notes_of(authenticated_client, pid) == [nid]
     assert (await authenticated_client.get("/api/v1/trash")).json()["notes"] == []
+
+    # Its chunks went with the trashing; the next question puts them back.
+    async def answer(self, project_id, question):
+        return {"answer": "stub", "confidence": "LOW", "citations": [], "query_used": question,
+                "corrective_triggered": False}
+
+    monkeypatch.setattr(RagService, "query_project", answer)
+    assert reindexed == []
+    asked = await authenticated_client.post(f"/api/v1/projects/{pid}/query", json={"question": "back?"})
+    assert asked.status_code == 200, asked.text
     assert [str(a[0]) for a in reindexed] == [nid]
 
 

@@ -132,6 +132,9 @@ class TrashService:
             if live is not None:
                 note.content_hash = None
         note.deleted_at = None
+        # Its chunks went when it was trashed: mark it unindexed so the next
+        # search or Ask AI question on the project re-indexes it.
+        note.indexed_version = None
         await self._db.flush()
         logger.info("note_restored", context_id=str(context_id))
         return trashed
