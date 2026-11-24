@@ -25,6 +25,9 @@ import { withAuthHeader, refreshOnce } from '@/auth/authorizedFetch'
 import { API_BASE_URL as BASE } from '@/config'
 
 const DEFAULT_TIMEOUT_MS = 10_000
+// One more try after a timeout or a network error, with longer to answer: an
+// API that scaled to zero (Cloud Run) can take this long to start.
+export const COLD_START_TIMEOUT_MS = 45_000
 
 export class HttpStatusError extends Error {
   constructor(public readonly status: number, public readonly bodyText: string) {
@@ -51,6 +54,24 @@ export async function searchConversations(
   params: SearchRequestParams,
   externalSignal: AbortSignal,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  retryTimeoutMs: number = COLD_START_TIMEOUT_MS,
+): Promise<SafeSearchResponse> {
+  try {
+    return await attemptOnce(params, externalSignal, timeoutMs)
+  } catch (err) {
+    // A timeout or a failed connection is what a cold start looks like.
+    // Search only reads, so asking again is safe. Never after the caller
+    // cancelled, and never for an HTTP error or a bad body.
+    const coldStart = err instanceof TimeoutError || err instanceof TypeError
+    if (!coldStart || externalSignal.aborted) throw err
+    return attemptOnce(params, externalSignal, retryTimeoutMs)
+  }
+}
+
+async function attemptOnce(
+  params: SearchRequestParams,
+  externalSignal: AbortSignal,
+  timeoutMs: number,
 ): Promise<SafeSearchResponse> {
   if (externalSignal.aborted) {
     throw new DOMException('Aborted before dispatch', 'AbortError')

@@ -123,7 +123,12 @@ All of these are code changes that come with tests. None need new infrastructure
   - Reuse after logout still fails.
 - **Done when:** the tests pass, and opening 5 dashboard tabs at once keeps you signed in.
 
-### M1.5 Survive cold starts (S2)  ·  Low
+### M1.5 Survive cold starts (S2)  ·  Low  ·  ✅ Done Nov 24
+*Done as designed below, plus:*
+- *The dashboard also retries the silent sign-in refresh (a POST). It's the first request on every page load, and when it failed, the page signed you out. Retrying it is safe thanks to M1.4's grace window.*
+- *Ask AI already allows 120 s and has its own spinner, so it isn't covered.*
+- *Dashboard: [cold-start.ts](../apps/dashboard/src/lib/api/cold-start.ts) and a "Waking up the server…" notice at the top of the page. Extension: the search client retries once with 45 s, and its loading text changes after 3 s.*
+- *Verified with an end-to-end test that holds the first refresh for 4 s and then fails it: the notice shows, the retry succeeds, and the page loads signed in. Plus 4 new and 2 updated extension tests (131 pass).*
 - **Why:** the dashboard's axios timeout is 10 s, and so is the extension's search timeout, while a Cloud Run cold start can take longer.
 - **Steps:**
   - [client.ts](../apps/dashboard/src/lib/api/client.ts): retry a GET once after a timeout or network error, and allow 45 s on that retry.

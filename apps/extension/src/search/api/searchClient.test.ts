@@ -81,15 +81,55 @@ describe('searchConversations', () => {
     ).rejects.toThrow(MalformedResponseError)
   })
 
-  it('throws TimeoutError when the deadline elapses before the fetch resolves', async () => {
-    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+  it('throws TimeoutError when both the first try and the cold-start retry time out', async () => {
+    const fetchMock = vi.fn((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
       init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
-    })))
+    }))
+    vi.stubGlobal('fetch', fetchMock)
 
-    const promise = searchConversations({ projectId: 'p1', query: 'RAG', topK: 10 }, new AbortController().signal, 5_000)
+    const promise = searchConversations({ projectId: 'p1', query: 'RAG', topK: 10 }, new AbortController().signal, 5_000, 20_000)
     const assertion = expect(promise).rejects.toThrow(TimeoutError)
     await vi.advanceTimersByTimeAsync(5_001)
+    expect(fetchMock).toHaveBeenCalledTimes(2) // the retry is under way
+    await vi.advanceTimersByTimeAsync(20_001)
     await assertion
+  })
+
+  it('answers from the retry when the first try times out (a cold start)', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => {
+      calls += 1
+      if (calls === 1) {
+        return new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        })
+      }
+      return Promise.resolve(new Response(JSON.stringify(validBody), { status: 200 }))
+    }))
+
+    const promise = searchConversations({ projectId: 'p1', query: 'RAG', topK: 10 }, new AbortController().signal, 5_000)
+    await vi.advanceTimersByTimeAsync(5_001)
+    await expect(promise).resolves.toMatchObject({ queryUsed: 'RAG' })
+  })
+
+  it('answers from the retry after a failed connection', async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(new Response(JSON.stringify(validBody), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(
+      searchConversations({ projectId: 'p1', query: 'RAG', topK: 10 }, new AbortController().signal),
+    ).resolves.toMatchObject({ queryUsed: 'RAG' })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry an HTTP error', async () => {
+    const fetchMock = vi.fn(async () => new Response('boom', { status: 500 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(
+      searchConversations({ projectId: 'p1', query: 'RAG', topK: 10 }, new AbortController().signal),
+    ).rejects.toThrow(HttpStatusError)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('re-throws a raw AbortError (not TimeoutError) when the EXTERNAL signal aborts — supersession, not timeout', async () => {
@@ -122,10 +162,12 @@ describe('searchConversations', () => {
     ).rejects.toMatchObject({ name: 'AbortError' })
   })
 
-  it('propagates a network-level TypeError (offline/DNS/connection-refused) unmodified', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))))
+  it('propagates a network-level TypeError (offline/DNS/connection-refused) once the retry fails too', async () => {
+    const fetchMock = vi.fn(() => Promise.reject(new TypeError('Failed to fetch')))
+    vi.stubGlobal('fetch', fetchMock)
     await expect(
       searchConversations({ projectId: 'p1', query: 'RAG', topK: 10 }, new AbortController().signal),
     ).rejects.toThrow(TypeError)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

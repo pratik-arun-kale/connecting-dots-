@@ -1,6 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL } from '@/lib/constants';
 import { useAuthStore } from '@/store/auth-store';
+import { coldStartRetry, startSlowTimer } from './cold-start';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -19,6 +20,7 @@ apiClient.interceptors.request.use(
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    startSlowTimer(config);
     return config;
   },
   (error) => Promise.reject(error),
@@ -44,8 +46,17 @@ function isAuthEndpoint(url?: string): boolean {
 }
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    response.config._slow?.finish();
+    return response;
+  },
   async (error: AxiosError) => {
+    // A sleeping API (cold start): ask once more, with longer to answer.
+    // The "waking up" timer keeps running across the retry.
+    const again = coldStartRetry(error);
+    if (again) return apiClient(again);
+    error.config?._slow?.finish();
+
     const status = error.response?.status;
     const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
 
@@ -73,6 +84,10 @@ apiClient.interceptors.response.use(
       return apiClient(originalRequest);
     } catch (refreshError) {
       clearSession();
+      // A full page load on purpose: it drops every cached query and in-memory
+      // state of the signed-out user. This runs outside React, so there is no
+      // router to use here anyway.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       if (typeof window !== 'undefined') window.location.href = '/login';
       return Promise.reject(refreshError);
     }
