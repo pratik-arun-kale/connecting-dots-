@@ -85,11 +85,14 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # Uvicorn with:
 #   --workers 1       → single process (use replica scaling in K8s/ECS)
 #   --loop uvloop     → faster event loop (installed via uvicorn[standard])
-#   --proxy-headers   → trust X-Forwarded-* from reverse proxy / load balancer
+#   --no-proxy-headers → never replace the client address with an
+#                        X-Forwarded-For entry (uvicorn takes the leftmost,
+#                        which the caller writes). The address for rate limits
+#                        is worked out in app/core/rate_limit.py instead
+#                        (TRUSTED_PROXY_HOPS, PROXY_SHARED_SECRET).
 CMD ["uvicorn", "main:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
      "--workers", "1", \
      "--loop", "uvloop", \
-     "--proxy-headers", \
-     "--forwarded-allow-ips", "*"]
+     "--no-proxy-headers"]
