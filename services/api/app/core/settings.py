@@ -167,6 +167,11 @@ class Settings(BaseSettings):
     # which create an account per test from one address.
     auth_register_limit_per_hour: int = 5
 
+    # Seconds after a refresh token is rotated during which it may be traded
+    # once more without counting as theft: two tabs refreshing at the same
+    # moment send the same token. Reuse after this revokes every session.
+    auth_refresh_grace_sec: int = Field(default=30, ge=0, le=300)
+
     # ── Client address (per-IP rate limits, app/core/rate_limit.py) ─────────
     # How many proxies in front of the API append the address they saw to
     # X-Forwarded-For. The client is the entry that many places from the

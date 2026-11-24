@@ -23,6 +23,7 @@ from app.core.security import (
     verify_password_async,
 )
 from app.core.settings import settings
+from app.models.auth_session import AuthSession
 from app.models.user import User
 from app.repositories.auth_session import AuthSessionRepository
 from app.repositories.user import UserRepository
@@ -103,14 +104,18 @@ class AuthService:
         """Returns (access_token, raw_refresh_token). The raw refresh token
         is returned to the caller exactly once — only its SHA-256 hash is
         ever persisted (see AuthSession.refresh_token_hash)."""
+        access_token, raw_refresh, _ = await self._issue(user)
+        return access_token, raw_refresh
+
+    async def _issue(self, user: User) -> tuple[str, str, AuthSession]:
         access_token = create_access_token(user.id)
         raw_refresh = generate_refresh_token()
-        await self._auth_sessions.create(
+        auth_session = await self._auth_sessions.create(
             user_id=user.id,
             refresh_token_hash=hash_refresh_token(raw_refresh),
             expires_at=datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_token_expire_days),
         )
-        return access_token, raw_refresh
+        return access_token, raw_refresh, auth_session
 
     async def refresh(self, raw_refresh_token: str) -> tuple[str, str, User]:
         """Validates and rotates a refresh token.
@@ -120,11 +125,25 @@ class AuthService:
         immediately, forcing a fresh login everywhere. This is what makes
         rotation actually detect theft rather than just limiting a stolen
         token's lifetime.
+
+        One exception: a token rotated less than auth_refresh_grace_sec ago
+        whose replacement is still live gets a new pair of its own. That is
+        two tabs (or the extension's popup and worker) that refreshed at the
+        same moment, not theft. A logout, logout-everywhere or password reset
+        revokes the replacement, which ends the grace at once.
         """
         token_hash = hash_refresh_token(raw_refresh_token)
         auth_session = await self._auth_sessions.get_by_refresh_token_hash(token_hash)
         if auth_session is None:
             raise UnauthorizedException("Invalid refresh token.")
+
+        if auth_session.revoked_at is not None and await self._in_grace(auth_session):
+            user = await self._users.get_by_id(auth_session.user_id)
+            if user is None or not user.is_active:
+                raise UnauthorizedException("Invalid refresh token.")
+            access_token, new_raw_refresh, _ = await self._issue(user)
+            logger.info("refresh_token_grace_reuse", user_id=str(user.id))
+            return access_token, new_raw_refresh, user
 
         if auth_session.revoked_at is not None:
             logger.warning("refresh_token_reuse_detected", user_id=str(auth_session.user_id))
@@ -148,12 +167,28 @@ class AuthService:
         if user is None or not user.is_active:
             raise UnauthorizedException("Invalid refresh token.")
 
-        # Rotate: mark this one used+revoked in a single update, then issue a new pair.
+        # Rotate: issue the new pair, then mark this one rotated (revoked, and
+        # which session replaced it) in a single update.
+        access_token, new_raw_refresh, replacement = await self._issue(user)
         now = datetime.now(timezone.utc)
-        await self._auth_sessions.update(auth_session, revoked_at=now, last_used_at=now)
-        access_token, new_raw_refresh = await self.issue_token_pair(user)
+        await self._auth_sessions.update(
+            auth_session, revoked_at=now, rotated_at=now, last_used_at=now, replaced_by_id=replacement.id
+        )
         logger.info("refresh_token_rotated", user_id=str(user.id))
         return access_token, new_raw_refresh, user
+
+    async def _in_grace(self, auth_session: AuthSession) -> bool:
+        """Rotated (not logged out) moments ago, unexpired, and the session
+        that replaced it is still live."""
+        now = datetime.now(timezone.utc)
+        if auth_session.rotated_at is None or auth_session.replaced_by_id is None:
+            return False
+        if now - auth_session.rotated_at >= timedelta(seconds=settings.auth_refresh_grace_sec):
+            return False
+        if auth_session.expires_at <= now:
+            return False
+        replacement = await self._auth_sessions.get_by_id(auth_session.replaced_by_id)
+        return replacement is not None and replacement.is_active
 
     async def logout(self, raw_refresh_token: str) -> None:
         """Idempotent: logging out an already-revoked or unrecognized token

@@ -40,11 +40,21 @@ export const authService = {
     return response.data;
   },
 
-  /** Rotates the cookie. `legacyToken` is only for moving an old localStorage token into a cookie. */
+  /**
+   * Rotates the cookie. `legacyToken` is only for moving an old localStorage token into a cookie.
+   *
+   * Tabs take turns (a Web Lock shared by every tab of this origin): the next
+   * tab sends the cookie the previous one just received, not the one it
+   * replaced. The API also tolerates a just-rotated token for a few seconds,
+   * so a browser without Web Locks still isn't signed out.
+   */
   async refresh(legacyToken?: string | null): Promise<TokenPair> {
     const body = legacyToken ? { refresh_token: legacyToken } : {};
-    const response = await apiClient.post<TokenPair>('/auth/refresh', body, COOKIE_MODE);
-    return response.data;
+    const send = async () => (await apiClient.post<TokenPair>('/auth/refresh', body, COOKIE_MODE)).data;
+    if (typeof navigator !== 'undefined' && navigator.locks) {
+      return navigator.locks.request('cd-refresh', send);
+    }
+    return send();
   },
 
   /** Revokes this session's refresh token and clears the cookie. */

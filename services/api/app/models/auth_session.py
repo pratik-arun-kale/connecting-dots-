@@ -46,6 +46,14 @@ class AuthSession(Base, UUIDPrimaryKeyMixin):
     )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set (with revoked_at) when this token was traded for a new one, as
+    # opposed to a logout. For settings.auth_refresh_grace_sec afterwards the
+    # same token may be traded again (a second tab that refreshed at the same
+    # moment), as long as `replaced_by_id` is still live; see AuthService.refresh.
+    rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    replaced_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("auth_sessions.id", ondelete="SET NULL"), nullable=True
+    )
 
     user: Mapped[User] = relationship("User", lazy="noload")
 
