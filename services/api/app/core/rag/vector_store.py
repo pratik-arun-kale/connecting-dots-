@@ -27,6 +27,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.core.logging import get_logger
 from app.core.rag import index_db
+from app.db import base as _base  # noqa: F401  (before app.models: importing a model first is a circular import)
 from app.models.search_index import ContextChunk, ProjectVocabulary
 
 logger = get_logger(__name__)
