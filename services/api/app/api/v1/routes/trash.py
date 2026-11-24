@@ -15,17 +15,16 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, Depends, status
 
 from app.core.settings import settings
-from app.dependencies import CurrentUserDep, DbSession, RagServiceDep
+from app.dependencies import CurrentUserDep, DbSession
 from app.schemas.trash import (
     RestoredResponse,
     TrashedNoteResponse,
     TrashedProjectResponse,
     TrashResponse,
 )
-from app.services.rag_service import raw_content_for_index
 from app.services.trash import TrashService, purge_at
 
 router = APIRouter(prefix="/trash", tags=["Trash"])
@@ -75,17 +74,12 @@ async def list_trash(current_user: CurrentUserDep, trash: TrashServiceDep) -> Tr
 async def restore_note(
     context_id: uuid.UUID,
     current_user: CurrentUserDep,
-    rag_service: RagServiceDep,
-    background_tasks: BackgroundTasks,
     trash: TrashServiceDep,
 ) -> RestoredResponse:
+    # Its chunks were removed when it was trashed. restore_note() marks it
+    # unindexed, so the next search or Ask AI question puts them back.
     restored = await trash.restore_note(context_id, current_user.id)
-    note = restored.context
-    # Its chunks were removed when it was trashed; put them back.
-    background_tasks.add_task(
-        rag_service.reindex_context, note.id, note.session_id, restored.project.id, raw_content_for_index(note), 0
-    )
-    return RestoredResponse(id=note.id, project_id=restored.project.id)
+    return RestoredResponse(id=restored.context.id, project_id=restored.project.id)
 
 
 @router.post(

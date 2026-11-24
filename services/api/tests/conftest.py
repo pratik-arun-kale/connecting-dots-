@@ -136,12 +136,22 @@ def _reset_rate_limit_buckets() -> None:
     _rate_limit_buckets.clear()
 
 
+@pytest.fixture(autouse=True)
+def _no_password_reset_floor(monkeypatch) -> None:
+    """/password-reset pads every answer to 1.5 s so its timing can't reveal
+    which addresses have accounts; tests don't wait for that."""
+    from app.api.v1.routes import auth as auth_routes
+
+    monkeypatch.setattr(auth_routes, "PASSWORD_RESET_RESPONSE_FLOOR_SEC", 0)
+
+
 @pytest.fixture
 def reindex_calls(monkeypatch) -> list[tuple[Any, ...]]:
-    """Records RagService.reindex_context calls instead of running them — a
-    real one waits REINDEX_DELAY_SEC and then embeds text. Both test-client
-    fixtures use it; take it by name to assert on what was scheduled
-    (tests/services/test_rag_reindex.py covers the real method)."""
+    """Records RagService.reindex_context calls instead of running them (a
+    real one embeds text with the model). Search and Ask AI call it for notes
+    edited since they were indexed (ContextService.bring_index_up_to_date).
+    Both test-client fixtures use it; take it by name to assert on what was
+    re-indexed (tests/services/test_rag_reindex.py covers the real method)."""
     calls: list[tuple[Any, ...]] = []
 
     async def _record(self, *args: Any, **kwargs: Any) -> None:

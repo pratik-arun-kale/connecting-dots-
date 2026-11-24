@@ -56,7 +56,12 @@ All of these are code changes that come with tests. None need new infrastructure
 ### M1.0 Dashboard dependency vulnerabilities  ·  Low  ·  ✅ Done Nov 24
 *`npm audit` reported 2 critical and 17 high advisories in the dashboard's production packages. The worst were in `next` 16.2.6: remote code execution via image optimization, SSRF in rewrites, and cache poisoning. Fixed by upgrading `next` and `eslint-config-next` to 16.4.6 and running `npm audit fix` (no major versions). Production packages now have 0 high and 0 critical advisories, and the CI audit job is a real check. What's left: 8 moderate/low advisories whose only npm fix is a major downgrade (`shadcn`, `rehype-katex`), plus 1 high in an ESLint-only package.*
 
-### M1.1 Indexing runs inside the request (B3)  ·  Medium
+### M1.1 Indexing runs inside the request (B3)  ·  Medium  ·  ✅ Done Nov 24
+*Done as designed below (migration 0014 adds `contexts.indexed_version`). Two additions:*
+- *Annotation-only edits keep the index marked current, so they cost no re-index.*
+- *Password reset now sends its email before answering, then pads every answer to 1.5 s, so the response time still doesn't reveal which addresses have accounts.*
+
+*Verified with 405 tests, a migration round-trip on Neon dev plus a backfill check on a scratch database, and a real-model run: a capture is searchable at once, an edit is found by its new text, a trashed note disappears, and a restored one comes back.*
 - **Why:** captures and edits are indexed in FastAPI `BackgroundTasks`, after the response has been sent. Cloud Run throttles CPU at that point, so a capture may never become searchable.
 - **Design:**
   - **New capture** (`POST /projects/{id}/capture`, [projects.py](../services/api/app/api/v1/routes/projects.py)): await `rag_service.index_context(...)` before returning. An indexing error is logged, and the note stays saved.

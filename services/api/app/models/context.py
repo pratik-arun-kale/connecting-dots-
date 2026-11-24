@@ -54,6 +54,10 @@ class Context(Base, UUIDPrimaryKeyMixin):
     # Bumped on every edit; a client sends it back in If-Match so an edit made
     # elsewhere in the meantime is a 409, never a silent overwrite.
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    # The `version` the search index holds; None = not indexed yet. A context
+    # whose indexed_version != version is re-indexed before the next search or
+    # Ask AI question on its project (ContextService.bring_index_up_to_date).
+    indexed_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # In the Trash since then (hidden everywhere else, see app/db/soft_delete.py);
     # purged for good after settings.trash_retention_days.
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

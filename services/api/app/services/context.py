@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from sqlalchemy.exc import IntegrityError
@@ -24,7 +25,13 @@ from app.repositories.session import SessionRepository
 from app.schemas.capture import CaptureConversationRequest, CaptureConversationResponse
 from app.schemas.context import ContextCapture, ContextCreate, NoteUpdateRequest
 
+if TYPE_CHECKING:
+    from app.services.rag_service import RagService
+
 logger = get_logger(__name__)
+
+# Note fields the search index is built from (see raw_content_for_index).
+INDEXED_FIELDS = frozenset({"content_md", "user_title"})
 
 _PLATFORM_HOST_PATTERNS: dict[str, tuple[str, ...]] = {
     "chatgpt": ("chatgpt.com", "chat.openai.com"),
@@ -326,12 +333,72 @@ class ContextService:
 
         updates = payload.model_dump(exclude_unset=True)
         updates["version"] = context.version + 1
+        # Search and Ask AI match on the body and the title, not on the
+        # reader's private annotation: an annotation-only edit keeps an
+        # up-to-date index marked up to date, so it costs no re-index.
+        if not (payload.model_fields_set & INDEXED_FIELDS) and context.indexed_version == context.version:
+            updates["indexed_version"] = updates["version"]
         if "user_title" in updates:
             # Blank means "no title of my own" — back to the automatic one.
             updates["user_title"] = (updates["user_title"] or "").strip() or None
         context = await self._repo.update(context, **updates)
         logger.info("note_updated", context_id=str(context_id), fields=list(updates.keys()))
         return context
+
+    # ── Search index ──────────────────────────────────────────────────────────
+    # Indexing happens inside requests, never after the response: a serverless
+    # host may stop giving the process CPU once a response is sent. A new
+    # capture is indexed by its own request; an edit only bumps `version`, and
+    # the next search or Ask AI question on the project catches it up.
+
+    async def index_new_capture(
+        self,
+        context_id: uuid.UUID,
+        session_id: uuid.UUID,
+        project_id: uuid.UUID,
+        raw_content: dict[str, Any],
+        rag_service: RagService,
+    ) -> bool:
+        """Index a just-captured context and record it as indexed. An indexing
+        failure is logged, not raised: the capture is saved either way, and
+        the context stays unindexed (indexed_version NULL) until the next
+        search on the project retries it."""
+        try:
+            await rag_service.index_context(context_id, session_id, project_id, raw_content)
+        except Exception:
+            logger.exception("rag_index_failed", context_id=str(context_id), project_id=str(project_id))
+            return False
+        # A new context is version 1; if it was somehow edited already, the
+        # mark is skipped and the next search re-indexes the newer text.
+        return await self._repo.mark_indexed(context_id, 1)
+
+    async def bring_index_up_to_date(self, project_id: uuid.UUID, rag_service: RagService) -> int:
+        """Re-index the project's contexts that changed since they were
+        indexed (see Context.indexed_version). Called before a search or Ask
+        AI question so it sees every edit; usually there are none or one.
+        Returns how many were re-indexed. A failure leaves that context stale
+        for the next call rather than failing the search."""
+        # Lazy: rag_service pulls in torch and the RAG stack, which scripts that
+        # use ContextService for other things (purge_trash, seed) don't need.
+        from app.services.rag_service import raw_content_for_index
+
+        stale = await self._repo.list_stale_for_index(project_id)
+        if not stale:
+            return 0
+        done = 0
+        for context in stale:
+            version = context.version  # read before the await: the row may change meanwhile
+            try:
+                await rag_service.reindex_context(
+                    context.id, context.session_id, project_id, raw_content_for_index(context)
+                )
+            except Exception:
+                logger.exception("rag_reindex_failed", context_id=str(context.id), project_id=str(project_id))
+                continue
+            if await self._repo.mark_indexed(context.id, version):
+                done += 1
+        logger.info("rag_index_caught_up", project_id=str(project_id), stale=len(stale), reindexed=done)
+        return done
 
     async def project_id_of(self, context: Context) -> uuid.UUID | None:
         """The project a context belongs to (through its session) — what the

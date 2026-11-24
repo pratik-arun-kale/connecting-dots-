@@ -12,7 +12,7 @@ DELETE /projects/{id}      – delete a project
 
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Query, status
+from fastapi import APIRouter, Query, status
 
 from app.dependencies import (
     ContextServiceDep,
@@ -151,14 +151,15 @@ async def capture_conversation(
     payload: CaptureConversationRequest,
     context_service: ContextServiceDep,
     rag_service: RagServiceDep,
-    background_tasks: BackgroundTasks,
     current_user: CurrentUserDep,
 ) -> CaptureConversationResponse:
     # capture_conversation() itself verifies project_id belongs to current_user
     # before writing anything — see app/services/context.py.
     result = await context_service.capture_conversation(project_id, payload, current_user.id)
 
-    # Index into ChromaDB in the background — only for new captures (not idempotent replays)
+    # Indexed before the response, only for new captures (not idempotent
+    # replays): a serverless host may give no CPU to work done after it. A
+    # failure is logged and retried by the next search; the capture stands.
     if result.created:
         raw_content = {
             "title": payload.title,
@@ -167,12 +168,8 @@ async def capture_conversation(
             "messages": [m.model_dump() for m in payload.messages],
             "metadata": payload.metadata or {},
         }
-        background_tasks.add_task(
-            rag_service.index_context,
-            result.context_id,
-            result.session_id,
-            project_id,
-            raw_content,
+        await context_service.index_new_capture(
+            result.context_id, result.session_id, project_id, raw_content, rag_service
         )
 
     return result
@@ -191,6 +188,7 @@ async def query_project_contexts(
     payload: RagQueryRequest,
     rag_service: RagServiceDep,
     project_service: ProjectServiceDep,
+    context_service: ContextServiceDep,
     current_user: CurrentUserDep,
 ) -> RagQueryResponse:
     # Ownership MUST be validated before RagService is ever called — it's
@@ -199,6 +197,9 @@ async def query_project_contexts(
     # who knows a project_id could RAG-query another user's captured
     # conversations straight through Ask AI.
     await project_service.get_project(project_id, current_user.id)
+    # Notes edited since they were indexed are re-indexed first, so the
+    # answer reflects the latest text.
+    await context_service.bring_index_up_to_date(project_id, rag_service)
     result = await rag_service.query_project(project_id, payload.question)
     return RagQueryResponse(**result)
 

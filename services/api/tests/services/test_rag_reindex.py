@@ -2,12 +2,12 @@
 tests/services/test_rag_reindex.py
 ───────────────────────────────────
 Unit tests for re-indexing after an edit (app/services/rag_service.py):
-what text gets indexed, and how bursts of autosaves are coalesced.
+what text gets indexed, and that a re-index runs when asked (no delay: it is
+called inside a search request, see ContextService.bring_index_up_to_date).
 No DB, no vector store — _reindex_sync is replaced by a recorder.
 """
 from __future__ import annotations
 
-import asyncio
 import uuid
 
 import pytest
@@ -72,35 +72,24 @@ class TestRawContentForIndex:
         assert raw["title"] == "[Note] first words"
 
 
-class TestReindexCoalescing:
+class TestReindexNow:
     @pytest.fixture
     def synced(self, monkeypatch) -> list[tuple]:
         calls: list[tuple] = []
         monkeypatch.setattr(RagService, "_reindex_sync", lambda self, *args: calls.append(args))
         return calls
 
-    async def test_a_burst_of_edits_reindexes_once_with_the_latest_content(self, synced):
+    async def test_reindex_runs_immediately_with_the_given_content(self, synced):
         service = RagService()
         context_id = uuid.uuid4()
-        await asyncio.gather(
-            service.reindex_context(context_id, SESSION_ID, PROJECT_ID, {"v": 1}, delay=0.05),
-            service.reindex_context(context_id, SESSION_ID, PROJECT_ID, {"v": 2}, delay=0.05),
-            service.reindex_context(context_id, SESSION_ID, PROJECT_ID, {"v": 3}, delay=0.05),
-        )
-        assert synced == [(str(context_id), str(SESSION_ID), str(PROJECT_ID), {"v": 3})]
+        await service.reindex_context(context_id, SESSION_ID, PROJECT_ID, {"v": 1})
+        assert synced == [(str(context_id), str(SESSION_ID), str(PROJECT_ID), {"v": 1})]
 
-    async def test_different_contexts_are_not_coalesced(self, synced):
-        service = RagService()
-        a, b = uuid.uuid4(), uuid.uuid4()
-        await asyncio.gather(
-            service.reindex_context(a, SESSION_ID, PROJECT_ID, {"v": "a"}, delay=0.05),
-            service.reindex_context(b, SESSION_ID, PROJECT_ID, {"v": "b"}, delay=0.05),
-        )
-        assert sorted(call[0] for call in synced) == sorted([str(a), str(b)])
-
-    async def test_edits_far_apart_each_reindex(self, synced):
+    async def test_each_call_reindexes(self, synced):
+        # Coalescing autosaves is the caller's job now (edits only mark a
+        # note stale), so every call here does the work.
         service = RagService()
         context_id = uuid.uuid4()
-        await service.reindex_context(context_id, SESSION_ID, PROJECT_ID, {"v": 1}, delay=0.01)
-        await service.reindex_context(context_id, SESSION_ID, PROJECT_ID, {"v": 2}, delay=0.01)
+        await service.reindex_context(context_id, SESSION_ID, PROJECT_ID, {"v": 1})
+        await service.reindex_context(context_id, SESSION_ID, PROJECT_ID, {"v": 2})
         assert [call[3] for call in synced] == [{"v": 1}, {"v": 2}]
