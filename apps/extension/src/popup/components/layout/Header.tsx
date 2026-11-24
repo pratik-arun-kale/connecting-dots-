@@ -23,7 +23,7 @@ export function Header() {
           </svg>
         </div>
         <span className="text-sm font-semibold text-ink-1 tracking-tight">
-          Context Workspace
+          Connecting Dots
         </span>
       </div>
 

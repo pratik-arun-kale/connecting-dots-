@@ -53,7 +53,7 @@ export default function LoginPage() {
         <div className="mb-6 text-center">
           <h1 className="text-lg font-semibold text-[#0f172a]">Sign in</h1>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            Access your Context Workspace.
+            Sign in to Connecting Dots.
           </p>
         </div>
 

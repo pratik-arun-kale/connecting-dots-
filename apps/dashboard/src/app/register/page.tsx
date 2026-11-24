@@ -59,7 +59,7 @@ export default function RegisterPage() {
         <div className="mb-6 text-center">
           <h1 className="text-lg font-semibold text-[#0f172a]">Create your account</h1>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            Set up your Context Workspace.
+            Create your Connecting Dots account.
           </p>
         </div>
 

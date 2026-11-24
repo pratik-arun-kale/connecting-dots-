@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     )
 
     # ── Application ─────────────────────────────────────────────────────────
-    app_name: str = "AI Context Workspace"
+    app_name: str = "Connecting Dots"
     app_version: str = "0.1.0"
     app_env: Literal["development", "staging", "production"] = "development"
     debug: bool = False

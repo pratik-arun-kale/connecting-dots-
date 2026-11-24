@@ -1,6 +1,6 @@
 
 # ─────────────────────────────────────────────────────────────────────────────
-# AI Context Workspace — local development stack
+# Connecting Dots API — local development stack
 # ─────────────────────────────────────────────────────────────────────────────
 # Services:
 #   backend   – FastAPI app (hot-reload via volume mount)

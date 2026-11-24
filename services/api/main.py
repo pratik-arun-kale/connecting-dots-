@@ -157,7 +157,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description=(
-            "AI Context Workspace API — captures, stores, and structures AI "
+            "Connecting Dots API — captures, stores, and structures AI "
             "session content from multiple platforms."
         ),
         docs_url="/docs" if not settings.is_production else None,

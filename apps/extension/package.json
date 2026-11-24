@@ -3,7 +3,7 @@
   "name": "context-workspace",
   "private": true,
   "version": "3.0.0",
-  "description": "Context Workspace — premium AI project manager Chrome extension",
+  "description": "Connecting Dots — keeps your AI conversations searchable, as a Chrome extension",
   "scripts": {
     "dev": "vite build --config vite.popup.config.ts --watch --mode development",
     "build": "node scripts/build.mjs --mode development",
