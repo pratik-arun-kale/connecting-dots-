@@ -87,7 +87,13 @@ All of these are code changes that come with tests. None need new infrastructure
 - **Tests:** a spoofed `X-Forwarded-For` doesn't change the rate-limit bucket. Two different clients behind the proxy get different buckets.
 - **Done when:** the tests pass. M6 confirms the hop count on Cloud Run.
 
-### M1.3 Dashboard forwards `/api/*` to the API (B4)  ·  Low
+### M1.3 Dashboard forwards `/api/*` to the API (B4)  ·  Low  ·  ✅ Done Nov 24
+*Done with [src/proxy.ts](../apps/dashboard/src/proxy.ts) (Next 16's "proxy", formerly middleware) instead of `rewrites()`, because the request needs the M1.2 headers. Specifics:*
+- *`NEXT_PUBLIC_API_BASE_URL` may now be the path `/api/v1`. Use that on Vercel, so preview deployments with their own hostnames work too.*
+- *On Vercel only, the proxy reports `x-real-ip` as `X-Client-IP`, together with `PROXY_SHARED_SECRET`. Vercel sets that header itself. Anywhere else no address is reported, because a header there could be made up.*
+- *A local run against an echo server confirmed what reaches the upstream: path, query, body, `Origin` and cookies, with `Host` rewritten to the upstream's. The browser's own `X-Proxy-Secret` and `X-Client-IP` were replaced. `Set-Cookie` came back.*
+- *CI's end-to-end job now runs in proxy mode. A new test checks that the browser contacts no origin except the dashboard, and that the session survives a reload.*
+- *Still to check on Vercel (M6): the timeout for proxied requests covers Ask AI.*
 - **Why:** `*.vercel.app` and `*.run.app` are different sites, so the `SameSite=Strict` refresh cookie is never sent, and users are logged out on every reload.
 - **Design:**
   - In [next.config.ts](../apps/dashboard/next.config.ts), add `rewrites()` with `/api/:path*` → `${API_UPSTREAM_URL}/api/:path*`. `API_UPSTREAM_URL` is a new server-only variable, the Cloud Run URL.
