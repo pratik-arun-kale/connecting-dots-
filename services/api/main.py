@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import api_router
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
+from app.core.rag import index_db
 from app.core.settings import settings
 from app.db.engine import dispose_engine
 from app.middleware.body_limit import BodySizeLimitMiddleware
@@ -145,6 +146,7 @@ async def lifespan(app: FastAPI):
     if purge_task is not None:
         purge_task.cancel()
     await dispose_engine()
+    index_db.dispose()
     logger.info("app_stopped")
 
 

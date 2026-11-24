@@ -27,7 +27,7 @@ class Project(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Ownership boundary for the whole Project → Session → Context tree, and
-    # the ChromaDB collection scoped to this project_id — see
+    # the search index scoped to this project_id — see
     # app/services/project.py::get_project for where this is enforced.
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),

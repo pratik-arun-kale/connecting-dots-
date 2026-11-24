@@ -19,4 +19,4 @@ class Base(DeclarativeBase):
 # Import all models so Alembic's autogenerate can see them.
 # Keep this list in sync when adding new model modules.
 from app.db import soft_delete  # noqa: E402, F401 — hides trashed rows from every ORM query
-from app.models import auth_session, context, email_token, project, session, user  # noqa: E402, F401
+from app.models import auth_session, context, email_token, project, search_index, session, user  # noqa: E402, F401

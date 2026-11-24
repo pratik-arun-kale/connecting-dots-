@@ -96,6 +96,7 @@ class Settings(BaseSettings):
 
     _database_connect_args: dict = PrivateAttr(default_factory=dict)
     _sync_database_url: str = PrivateAttr(default="")
+    _sync_runtime_database_url: str = PrivateAttr(default="")
     _database_log_fields: dict = PrivateAttr(default_factory=dict)
 
     @model_validator(mode="after")
@@ -111,6 +112,7 @@ class Settings(BaseSettings):
             database=self.postgres_db,
         ).render_as_string(hide_password=False)
         self._sync_database_url = db_url.sync_url(self.database_url_unpooled or raw)
+        self._sync_runtime_database_url = db_url.sync_url(raw)
         self._database_log_fields = db_url.describe(raw)
         self.database_url, self._database_connect_args = db_url.async_engine_config(raw)
         return self
@@ -129,6 +131,12 @@ class Settings(BaseSettings):
     @property
     def sync_database_url(self) -> str:
         return self._sync_database_url
+
+    # Sync URL (psycopg2) for the search index's queries at runtime: the same
+    # (pooled) database as the app, unlike sync_database_url.
+    @property
+    def sync_runtime_database_url(self) -> str:
+        return self._sync_runtime_database_url
 
     # ── Logging ──────────────────────────────────────────────────────────────
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

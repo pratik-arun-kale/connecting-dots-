@@ -5,7 +5,7 @@ Flow:
   question
     → query transform (typo/acronym/synonym)
     → BM25 retrieval   (rank-bm25, built fresh from all project chunks)
-    → vector retrieval (ChromaDB cosine similarity)
+    → vector retrieval (pgvector cosine similarity, app/core/rag/vector_store.py)
     → RRF fusion
     → cross-encoder reranking
     → confidence grading (HIGH / MEDIUM / LOW)

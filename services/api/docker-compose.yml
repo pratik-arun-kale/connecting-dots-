@@ -57,7 +57,7 @@ services:
 
   # ── PostgreSQL ────────────────────────────────────────────────────────────────
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.0-pg16
     container_name: acw_postgres
     restart: unless-stopped
     ports:

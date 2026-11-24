@@ -1,7 +1,7 @@
 """
 app/services/rag_service.py
 ────────────────────────────
-RagService — indexes captured contexts into ChromaDB and handles RAG queries.
+RagService — indexes captured contexts into the search index (Postgres) and handles RAG queries.
 
 Both public methods are async; CPU-heavy work is offloaded to a thread pool
 via asyncio.to_thread() so the FastAPI event loop is never blocked.
@@ -51,7 +51,7 @@ class RagService:
         raw_content: dict[str, Any],
     ) -> None:
         """
-        Chunk + embed + upsert a captured context into the project's ChromaDB collection.
+        Chunk + embed + upsert a captured context into the project's search index.
         The CPU work runs in a worker thread, so the event loop keeps serving.
         """
         await asyncio.to_thread(

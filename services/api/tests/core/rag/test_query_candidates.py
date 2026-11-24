@@ -6,6 +6,8 @@ this only exercises the candidate-generation logic, not retrieval.
 """
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from app.core.rag import vocabulary
@@ -13,11 +15,15 @@ from app.core.rag.query_candidates import generate_query_candidates
 
 
 @pytest.fixture(autouse=True)
-def _isolated_vocab_storage(tmp_path, monkeypatch):
-    monkeypatch.setattr(vocabulary, "VOCAB_DIR", tmp_path)
-    vocabulary._cache.clear()
+def _isolated_vocab_storage(pgvector_db):
+    """Vocabularies live in the test database's project_vocabulary table;
+    pgvector_db empties it (and the in-memory cache) after each test."""
     yield
-    vocabulary._cache.clear()
+
+
+def _p(name: str) -> str:
+    """A fixed project id (a UUID, like every real one) for a readable name."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"test-project:{name}"))
 
 
 class TestCandidateGenerationWithoutProject:
@@ -83,19 +89,19 @@ class TestCandidateGenerationWithoutProject:
 class TestCandidateGenerationWithProject:
     def test_vocab_corrected_candidate_uses_learned_vocabulary(self):
         vocabulary.update_vocabulary_from_context(
-            "proj-1",
+            _p("proj-1"),
             {
                 "title": "LangGraph Notes",
                 "platform": "chatgpt",
                 "messages": [{"role": "user", "content": "Using LangGraph again today"}],
             },
         )
-        candidates = generate_query_candidates("Lang Grap", project_id="proj-1")
+        candidates = generate_query_candidates("Lang Grap", project_id=_p("proj-1"))
         by_label = {c.label: c.query for c in candidates}
         assert by_label.get("vocab_corrected") == "LangGraph"
 
     def test_falls_back_gracefully_with_no_learned_vocabulary(self):
         # No vocabulary has been indexed for this project — should not error,
         # and vocab_corrected should just equal spell_corrected (deduped away).
-        candidates = generate_query_candidates("Where did I discuss RAG?", project_id="empty-proj")
+        candidates = generate_query_candidates("Where did I discuss RAG?", project_id=_p("empty-proj"))
         assert any(c.query == "RAG" for c in candidates)
