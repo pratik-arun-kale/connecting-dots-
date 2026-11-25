@@ -38,6 +38,7 @@ from app.dependencies import (
     user_rate_limit,
 )
 from app.schemas.auth import (
+    DeleteAccountRequest,
     EmailTokenRequest,
     LoginRequest,
     LogoutRequest,
@@ -218,6 +219,20 @@ async def logout_all(
     await auth_service.logout_all(current_user.id)
     if _cookie_mode(request):
         _clear_refresh_cookie(response)
+
+
+@router.delete(
+    "/account",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete the current account and everything in it (needs the password)",
+    # A stolen access token must not become unlimited password guesses.
+    dependencies=[user_rate_limit("delete_account", max_requests=5, window_seconds=3600)],
+)
+async def delete_account(
+    payload: DeleteAccountRequest, response: Response, current_user: CurrentUserDep, auth_service: AuthServiceDep
+) -> None:
+    await auth_service.delete_account(current_user.id, payload.password)
+    _clear_refresh_cookie(response)  # harmless for the extension, which has no cookie
 
 
 # ── Email verification ─────────────────────────────────────────────────────────

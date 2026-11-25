@@ -30,6 +30,12 @@ class LoginRequest(AppBaseModel):
 
 # refresh_token is optional on refresh/logout: the dashboard sends it in an
 # httpOnly cookie instead (see app/api/v1/routes/auth.py).
+class DeleteAccountRequest(AppBaseModel):
+    """The current password, so a stolen access token alone can't delete an account."""
+
+    password: str = Field(..., min_length=1, max_length=256)
+
+
 class RefreshRequest(AppBaseModel):
     refresh_token: str | None = None
 
