@@ -15,7 +15,7 @@ test('an account is deleted from Settings and can no longer sign in', async ({ p
 
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page).toHaveURL(/\/settings$/, NAVIGATION);
-  await expect(page.getByText(email)).toBeVisible();
+  await expect(page.getByRole('main').getByText(email)).toBeVisible(); // also in the confirm-email banner
 
   await page.getByRole('button', { name: 'Delete my account' }).click();
   const dialog = page.getByRole('dialog');
