@@ -25,7 +25,7 @@ jobs:
       run:
         working-directory: apps/extension
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -50,7 +50,7 @@ jobs:
     env:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -89,7 +89,7 @@ jobs:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -127,7 +127,7 @@ jobs:
     # (.github/dependabot.yml) opens the PRs for new ones. Dev-only tools
     # (eslint and friends) are not audited here: they never reach users.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -172,7 +172,7 @@ jobs:
       # Each Playwright test signs up its own user, all from one IP.
       AUTH_REGISTER_LIMIT_PER_HOUR: "100"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
