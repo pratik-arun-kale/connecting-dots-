@@ -33,7 +33,7 @@ rank-bm25>=0.2.2
 
 # RAG answer generation (Ask AI) — OpenAI chat completions + token counting
 openai==2.24.0
-tiktoken>=0.8.0
+tiktoken>=0.14.0
 
 # Authentication — password hashing + JWT + email validation (pydantic EmailStr)
 argon2-cffi==25.1.0
