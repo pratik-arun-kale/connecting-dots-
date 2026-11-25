@@ -90,7 +90,7 @@ jobs:
       POSTGRES_PASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -173,7 +173,7 @@ jobs:
       AUTH_REGISTER_LIMIT_PER_HOUR: "100"
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
