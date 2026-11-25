@@ -19,7 +19,6 @@
     "check": "npm run lint && npm run typecheck && npm test"
   },
   "dependencies": {
-    "@neon/config": "^1.14.2",
-    "@neon/env": "^2.1.5"
+    "@neon/config": "^1.14.2"
   }
 }

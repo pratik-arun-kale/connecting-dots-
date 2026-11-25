@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Context Workspace",
+  "name": "Connecting Dots",
   "version": "3.0.0",
   "description": "AI project memory layer — organize ChatGPT, Claude, and Gemini workflows.",
   "permissions": [

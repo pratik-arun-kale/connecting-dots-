@@ -37,14 +37,12 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
         duration_ms = round((time.perf_counter() - start) * 1000, 2)
 
-        origin = request.headers.get("origin")
         logger.info(
             "http_request",
             method=request.method,
             path=request.url.path,
             status_code=response.status_code,
             duration_ms=duration_ms,
-            origin=origin,  # [DEBUG] remove once CORS is verified stable
         )
 
         # Echo the request_id back to the caller for traceability

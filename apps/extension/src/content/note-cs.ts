@@ -620,7 +620,7 @@ if (!window.__CW_NOTE_CS__) {
     const fab = document.createElement('button');
     fab.type = 'button';
     fab.className = 'fab';
-    fab.setAttribute('aria-label', 'Context Workspace quick actions');
+    fab.setAttribute('aria-label', 'Connecting Dots quick actions');
     fab.appendChild(buildLogoMark());
 
     const menu = document.createElement('div');

@@ -18,7 +18,6 @@ from app.core.settings import settings
 from app.db.engine import dispose_engine
 from app.middleware.body_limit import BodySizeLimitMiddleware
 from app.middleware.logging import RequestLoggingMiddleware
-from app.utils.redis import close_redis
 
 configure_logging()
 logger = get_logger(__name__)
@@ -146,7 +145,6 @@ async def lifespan(app: FastAPI):
     if purge_task is not None:
         purge_task.cancel()
     await dispose_engine()
-    await close_redis()
     logger.info("app_stopped")
 
 
@@ -157,7 +155,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description=(
-            "AI Context Workspace API — captures, stores, and structures AI "
+            "Connecting Dots API — captures, stores, and structures AI "
             "session content from multiple platforms."
         ),
         docs_url="/docs" if not settings.is_production else None,

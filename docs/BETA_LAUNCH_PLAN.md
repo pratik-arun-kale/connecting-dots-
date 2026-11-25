@@ -136,7 +136,13 @@ All of these are code changes that come with tests. None need new infrastructure
   - Do the same in the extension's [searchClient.ts](../apps/extension/src/search/api/searchClient.ts).
 - **Done when:** with the API stopped and started again, the first dashboard load succeeds without an error.
 
-### M1.6 Quick fixes  ·  Low (all together, about ½ day)
+### M1.6 Quick fixes  ·  Low (all together, about ½ day)  ·  ✅ Done Nov 24 (S7 moved to M2.7)
+*Done as listed below, with these specifics:*
+- *S4: `/settings` is a temporary redirect (307) in `next.config.ts`, so M3.3 can bring the page back.*
+- *S8: covers all three search trace logs, including the candidates and retrieval traces. A test captures every log event of a search and fails on the old code.*
+- *S11: the rename also covers the dashboard (tab title, sign-in and sign-up pages) and the API (health, docs title, logs).*
+- *S7 is not done. The notes feed filter and the Ctrl+K search dialog match each note's full text in the browser, so a list with only 200-character previews would quietly stop finding words further into a note. Slimming the list needs that text filter on the server first, which belongs with M2.7.*
+- *Cleanup: 8 components went, not 7, because `shared/page-header` was only used by the Settings page. `chatgpt/claude/gemini-cs.js` went from 485 lines to 79 in total; the ready/sign-in detection is unchanged. The unused `EXTRACT_CONVERSATION` message types went too.*
 - **S4:** hide the mock [Settings page](../apps/dashboard/src/app/(workspace)/settings/page.tsx) (redirect it to `/notes`). M3.3 replaces it.
 - **S8:** stop logging `original_query`, `normalized_query` and conversation titles in `pipeline.py` (`conversation_search_final_trace`). Log counts and lengths instead.
 - **S11:** rename the extension in [manifest.dist.json](../apps/extension/manifest.dist.json) from "Context Workspace" to "Connecting Dots", and check the popup and side panel text.
@@ -164,7 +170,7 @@ All of these are code changes that come with tests. None need new infrastructure
 
 **Ranking stays identical.** The same embeddings, the same `rank_bm25`, the same fusion, reranking and grading run. Only where chunks are stored changes. Moving keyword search into SQL is a separate, later step (M2.7).
 
-### M2.1 Schema (migration 0015)  ·  Medium
+### M2.1 Schema (migration 0016)  ·  Medium
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;              -- 0.8.7 available on the Neon project
 
@@ -217,6 +223,7 @@ CREATE TABLE project_vocabulary (
 ### M2.7 Later, not for the beta: keyword search in SQL
 - Today every search loads all of a project's chunks to build BM25 in Python. That's fine for testers.
 - Before about 100 users: replace it with Postgres full-text search, or with `pg_search` (true BM25, available on Neon), so searches stop pulling every chunk across the network. That ends up costing against Neon's 5 GB/month transfer limit.
+- **Slim notes list (S7, moved from M1.6):** add a text filter to `GET /contexts` (the same SQL search), move the notes feed filter and the Ctrl+K dialog onto it, then return a `NoteSummary` (title, source, dates and a ~200-character preview) instead of full notes. The note page keeps `GET /contexts/detail/{id}`.
 
 **M2 gate:** search results are identical before and after (M2.4), the restart test passes (M2.5), and all tests are green.
 

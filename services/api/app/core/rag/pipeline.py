@@ -363,7 +363,7 @@ def run_query(project_id: str, question: str) -> dict[str, Any]:
         return {
             "answer": (
                 "No context has been captured for this project yet. "
-                "Open ChatGPT, Claude, Gemini, or Perplexity in your browser and click "
+                "Open ChatGPT, Claude or Gemini in your browser and click "
                 "'Capture Context' in the extension popup first."
             ),
             "confidence": "LOW",
@@ -530,10 +530,12 @@ def search_conversations(
     This function is CPU-bound and should be called via asyncio.to_thread().
     """
     candidates = generate_query_candidates(query, project_id)
+    # Traces carry lengths, ids and scores only: what someone searched for,
+    # and the titles of their conversations, never reach the logs.
     logger.info(
         "conversation_search_candidates_trace",
-        original_query=query,
-        candidates=[{"label": c.label, "query": c.query, "weight": c.weight} for c in candidates],
+        query_length=len(query),
+        candidates=[{"label": c.label, "query_length": len(c.query), "weight": c.weight} for c in candidates],
     )
 
     retrieval = _retrieve_multi_candidate(project_id, candidates)
@@ -541,7 +543,7 @@ def search_conversations(
     normalized_query = retrieval["query_used"]  # most-corrected candidate — used for fallback/suggestions/bonuses
     logger.info(
         "conversation_search_retrieval_trace",
-        retrieval_query=retrieval["query_used"],
+        retrieval_query_length=len(retrieval["query_used"]),
         confidence=retrieval["confidence"],
         chunks_indexed=retrieval["chunks_indexed"],
         candidate_chunks=retrieval.get("candidate_chunks", {}),
@@ -550,7 +552,6 @@ def search_conversations(
             {
                 "chunk_id": r["chunk_id"],
                 "context_id": r["metadata"].get("context_id", ""),
-                "title": r["metadata"].get("title", ""),
                 "reranker_score": r.get("reranker_score", 0.0),
                 "matched_by": r.get("matched_by", []),
             }
@@ -571,12 +572,13 @@ def search_conversations(
 
         logger.info(
             "conversation_search_final_trace",
-            original_query=query,
-            normalized_query=normalized_query,
+            query_length=len(query),
+            normalized_query_length=len(normalized_query),
             fuzzy_title_fallback_used=bool(fuzzy_matches),
             suggestions_generated=suggestions_payload is not None,
             final_conversations=[
-                {"title": c["title"], "relevance_score": c["relevance_score"]} for c in fuzzy_matches
+                {"conversation_id": c["conversation_id"], "relevance_score": c["relevance_score"]}
+                for c in fuzzy_matches
             ],
         )
         return {
@@ -635,10 +637,11 @@ def search_conversations(
 
     logger.info(
         "conversation_search_final_trace",
-        original_query=query,
-        normalized_query=normalized_query,
+        query_length=len(query),
+        normalized_query_length=len(normalized_query),
         final_conversations=[
-            {"title": c["title"], "relevance_score": c["relevance_score"]} for c in results[:top_k]
+            {"conversation_id": c["conversation_id"], "relevance_score": c["relevance_score"]}
+            for c in results[:top_k]
         ],
     )
 

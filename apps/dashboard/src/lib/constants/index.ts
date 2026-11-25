@@ -4,7 +4,7 @@ import { env } from "@/lib/env";
 // Application Constants
 // ──────────────────────────────────────────────
 
-export const APP_NAME = "Context Workspace" as const;
+export const APP_NAME = "Connecting Dots" as const;
 
 // Includes the /api/v1 prefix, so service calls like `/projects/...` resolve
 // correctly. Set NEXT_PUBLIC_API_BASE_URL in .env.local (see .env.example).

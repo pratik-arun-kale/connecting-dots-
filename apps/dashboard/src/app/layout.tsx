@@ -9,7 +9,7 @@ import './globals.css';
 const noteFont = Literata({ subsets: ['latin'], display: 'swap', variable: '--font-note-face' });
 
 export const metadata: Metadata = {
-  title: 'Context Workspace',
+  title: 'Connecting Dots',
   description: 'AI-powered developer context workspace dashboard',
 };
 
