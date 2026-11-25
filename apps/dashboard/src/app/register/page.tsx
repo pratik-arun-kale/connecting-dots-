@@ -137,6 +137,10 @@ export default function RegisterPage() {
             Sign in
           </Link>
         </p>
+        <p className="mt-4 text-center text-[12px] text-muted-foreground">
+          By creating an account you agree to the <Link href="/terms" className="underline underline-offset-2">terms</Link> and
+          the <Link href="/privacy" className="underline underline-offset-2">privacy policy</Link>.
+        </p>
       </Card>
     </div>
   );
