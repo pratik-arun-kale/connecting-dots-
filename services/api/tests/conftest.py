@@ -18,9 +18,11 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.core.rag import index_db, vocabulary
 from app.core.rate_limit import _buckets as _rate_limit_buckets
 from app.core.settings import settings
 from app.db.base import Base
@@ -60,6 +62,25 @@ def _test_database_url() -> str:
 
 TEST_DB_URL = _test_database_url()
 
+
+def _sync_test_url() -> str:
+    """TEST_DB_URL for psycopg2 (the search index's engine): asyncpg's ssl=
+    becomes libpq's sslmode=."""
+    url = make_url(TEST_DB_URL)
+    query = dict(url.query)
+    ssl = query.pop("ssl", None)
+    if ssl and "sslmode" not in query:
+        query["sslmode"] = "require" if ssl in ("true", "True", "1") else ssl
+    return url.set(drivername="postgresql+psycopg2", query=query).render_as_string(hide_password=False)
+
+
+# The search index's tables need the pgvector extension. A test database
+# without it (a plain local Postgres) still runs everything else: those two
+# tables aren't created and the tests that need them are skipped. CI uses a
+# Postgres image with pgvector, so nothing is skipped there.
+SEARCH_INDEX_TABLES = {"context_chunks", "project_vocabulary"}
+PGVECTOR = {"available": False}
+
 # ── Engine / session scoped to the test session ───────────────────────────────
 # No custom `event_loop` fixture here, and asyncio_default_fixture_loop_scope
 # is deliberately left unset in pyproject.toml — see the comment there for
@@ -81,10 +102,24 @@ async def _test_schema() -> AsyncGenerator[None, None]:
     session-scoped fixture, regardless of asyncio_default_fixture_loop_scope).
     """
     engine = create_async_engine(TEST_DB_URL, echo=False)
+    async with engine.connect() as conn:
+        try:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.commit()
+            PGVECTOR["available"] = True
+        except Exception:
+            await conn.rollback()
+    tables = [
+        t for t in Base.metadata.sorted_tables if PGVECTOR["available"] or t.name not in SEARCH_INDEX_TABLES
+    ]
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(lambda sync: Base.metadata.create_all(sync, tables=tables))
     await engine.dispose()
+    if not PGVECTOR["available"]:
+        print("\n[conftest] the test database has no pgvector: search index tests are skipped")
+    index_db.use_engine(create_engine(_sync_test_url(), pool_size=2, max_overflow=2))
     yield
+    index_db.use_engine(None)
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -124,6 +159,27 @@ async def db_session(_test_schema) -> AsyncGenerator[AsyncSession, None]:
                 await session.rollback()
     finally:
         await engine.dispose()
+
+
+@pytest.fixture
+def pgvector_db(_test_schema) -> None:
+    """Request this in a test that reads or writes the search index
+    (vector_store, vocabulary): skipped without pgvector, and the index is
+    emptied afterwards. Its writes commit on their own connection, outside the
+    test's rolled-back transaction."""
+    if not PGVECTOR["available"]:
+        pytest.skip("the test database has no pgvector extension")
+    yield
+    with index_db.engine().begin() as conn:
+        conn.execute(text("DELETE FROM context_chunks"))
+        conn.execute(text("DELETE FROM project_vocabulary"))
+    vocabulary.clear_cache()
+
+
+@pytest.fixture(autouse=True)
+def _clear_vocabulary_cache() -> None:
+    """A project's vocabulary is cached in memory; no test sees another's."""
+    vocabulary.clear_cache()
 
 
 @pytest.fixture(autouse=True)

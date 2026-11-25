@@ -70,7 +70,7 @@ async def search_conversations(
     # Same reasoning as /projects/{id}/query: RagService has no DB access to
     # check ownership itself, so it must be validated here, before the
     # client-supplied project_id (it's in the request BODY, not the path —
-    # easy to overlook) is ever used to search ChromaDB.
+    # easy to overlook) is ever used to search the index.
     await project_service.get_project(payload.project_id, current_user.id)
     # Notes edited since they were indexed are re-indexed first, so search
     # finds the latest text.

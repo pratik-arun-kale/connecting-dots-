@@ -164,7 +164,17 @@ All of these are code changes that come with tests. None need new infrastructure
 
 ---
 
-## M2 — Search index moves into Postgres (days 4–8)
+## M2 — Search index moves into Postgres (days 4–8)  ·  ✅ M2.1–M2.6 done Nov 24
+
+*Done, with these changes from the steps below:*
+- *Migration **0016**, not 0015. **No foreign keys**: since M1.1 a capture is indexed inside its request, before that request commits, so a separate connection can't see the new `contexts` row, and a foreign key would reject every chunk. Deletes stay explicit, as with ChromaDB, and the trash purge also removes chunks whose note is gone and that are over an hour old (`vector_store.delete_orphans`). For M3.2 (account deletion), call `delete_project_collection` and `delete_vocabulary` for each project.*
+- ***No HNSW index**: with an approximate index, Postgres can take the nearest chunks across all projects and only then filter to one, returning fewer than asked for. An exact scan of one project's chunks is fast at beta sizes and never less accurate than ChromaDB was. Chunks keep their insertion order (`seq`), so BM25 breaks ties as before.*
+- *M2.3: `reindex_notes.py` only covered written notes, so captured conversations would have been missed. Instead, 0016 marks every context "not indexed", so each project's next search rebuilds it (M1.1's mechanism), and the new [rebuild_search_index.py](../services/api/scripts/rebuild_search_index.py) indexes everything up front. Neon dev is on 0016 (round-tripped); it has no notes yet.*
+- *M2.4: the baseline was recorded with ChromaDB first (identical across two runs, to 1e-9): 30 notes, 20 searches, 10 Ask AI questions. [test_search_equivalence.py](../services/api/tests/core/rag/test_search_equivalence.py) re-runs it against Postgres in CI, and it passed locally on a Neon test branch: same ids, same order, scores within 1e-5.*
+- *Tests: CI's Postgres is now `pgvector/pgvector:0.8.0-pg16`. A local Postgres without pgvector still runs everything else; the 57 index tests are skipped there.*
+- *M2.5: the image workflow captures a note, removes the container, starts a new one, and searches. `docker restart` alone wouldn't prove anything, because it keeps the container's files.*
+- *M2.6: dropping `chromadb` removes 46 packages from the resolve (129 → 84), including `onnxruntime`, `kubernetes`, `grpcio` and OpenTelemetry. Nothing in the app imports any of them. Measured in the image workflow: 721.3 → 645.1 MB compressed, 403 MiB instead of 418 MiB after startup, healthy after 5.1 s instead of 8.3 s.*
+- *M2.5 passed in CI: a new container found the note captured before the old one was removed.*
 
 **Why (B2):** ChromaDB and the vocabulary JSON files live in `services/api/data/`. Cloud Run's disk is temporary and stored in memory, so every restart wipes search and Ask AI. With two instances, each would hold a different partial index. Moving the index into Neon fixes all of this, and backups then cover it too.
 

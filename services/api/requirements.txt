@@ -25,8 +25,9 @@ structlog==24.4.0
 # HTTP client (future AI pipeline calls)
 httpx==0.28.1
 
-# RAG Pipeline — vector store, embeddings, hybrid retrieval, reranking
-chromadb>=0.5.0
+# RAG Pipeline — embeddings, hybrid retrieval, reranking. The vectors live in
+# Postgres (pgvector); pgvector here is its SQLAlchemy type.
+pgvector==0.5.1
 sentence-transformers>=2.3.1
 rank-bm25>=0.2.2
 

@@ -15,6 +15,7 @@ The Trash: what deleting a note or project does now, and what undoes it.
 """
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -199,4 +200,10 @@ class TrashService:
 
         if project_ids or notes:
             logger.info("trash_purged", notes=len(notes), projects=len(project_ids))
+        # Search chunks whose note is gone (a best-effort delete that failed,
+        # or a capture whose request rolled back after indexing).
+        try:
+            await asyncio.to_thread(vector_store.delete_orphans)
+        except Exception:
+            logger.warning("vector_orphan_sweep_failed", exc_info=True)
         return len(notes), len(project_ids)

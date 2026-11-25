@@ -8,10 +8,11 @@ module only adds to it). Used by:
   - query_candidates.py  (candidate 5: fuzzy-correct against learned vocab)
   - suggestions.py        ("did you mean" topic/technology suggestions)
 
-Storage: one JSON file per project under data/vocabulary/{project_id}.json —
-the same on-disk convention vector_store.py already uses for ChromaDB
-(data/chromadb/), loaded lazily and cached in-memory per project_id so
-repeated searches never hit disk twice for the same project.
+Storage: one row per project in project_vocabulary (Postgres, see
+app/models/search_index.py), loaded lazily and cached in memory per
+project_id so repeated searches don't read it twice. The cache is per
+process: fine with one API instance; with several, an instance would keep
+using its copy until it restarts.
 
 Update trigger: called from RagService._index_sync() immediately after
 chunking, once per captured context — see the "how it is updated" note in
@@ -19,11 +20,10 @@ extract_terms_from_context()'s docstring.
 """
 from __future__ import annotations
 
-import json
 import re
 import threading
+import uuid
 from collections import Counter
-from pathlib import Path
 from typing import Any
 
 from app.core.logging import get_logger
@@ -34,10 +34,6 @@ from app.core.rag.query_normalizer import (
 )
 
 logger = get_logger(__name__)
-
-# Stored at services/api/data/vocabulary/ — mirrors vector_store.py's
-# CHROMA_DIR convention (parents[3] = services/api/).
-VOCAB_DIR = Path(__file__).resolve().parents[3] / "data" / "vocabulary"
 
 # A learned term needs at least this many occurrences before it's trusted
 # enough to use as an auto-CORRECTION target (candidate 5). Kept at 1 (i.e.
@@ -249,12 +245,13 @@ def extract_terms_from_context(raw_content: dict[str, Any]) -> list[tuple[str, s
     return terms
 
 
-# ── Storage: JSON file per project + in-memory cache ─────────────────────────
+# ── Storage: a row per project in project_vocabulary + in-memory cache ────────
 
 
-def _vocab_path(project_id: str) -> Path:
-    VOCAB_DIR.mkdir(parents=True, exist_ok=True)
-    return VOCAB_DIR / f"{project_id}.json"
+def _table():
+    from app.models.search_index import ProjectVocabulary
+
+    return ProjectVocabulary.__table__
 
 
 def _load_vocab(project_id: str) -> dict[str, VocabEntry]:
@@ -263,14 +260,22 @@ def _load_vocab(project_id: str) -> dict[str, VocabEntry]:
     if cached is not None:
         return cached
 
-    path = _vocab_path(project_id)
+    from sqlalchemy import select
+
+    from app.core.rag import index_db
+
     vocab: dict[str, VocabEntry] = {}
-    if path.exists():
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
+    table = _table()
+    try:
+        with index_db.engine().connect() as conn:
+            raw = conn.execute(
+                select(table.c.entries).where(table.c.project_id == uuid.UUID(str(project_id)))
+            ).scalar_one_or_none()
+        if raw:
             vocab = {k: VocabEntry.from_dict(v) for k, v in raw.items()}
-        except Exception:
-            logger.warning("vocabulary_load_failed", project_id=project_id)
+    except Exception:
+        logger.warning("vocabulary_load_failed", project_id=project_id, exc_info=True)
+        return vocab  # not cached: the next search tries again
 
     with _cache_lock:
         _cache[project_id] = vocab
@@ -278,22 +283,44 @@ def _load_vocab(project_id: str) -> dict[str, VocabEntry]:
 
 
 def _save_vocab(project_id: str, vocab: dict[str, VocabEntry]) -> None:
-    path = _vocab_path(project_id)
+    from sqlalchemy import func
+    from sqlalchemy.dialects.postgresql import insert
+
+    from app.core.rag import index_db
+
+    table = _table()
     data = {k: v.to_dict() for k, v in vocab.items()}
-    path.write_text(json.dumps(data), encoding="utf-8")
+    stmt = insert(table).values(project_id=uuid.UUID(str(project_id)), entries=data)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[table.c.project_id], set_={"entries": stmt.excluded.entries, "updated_at": func.now()}
+    )
+    with index_db.engine().begin() as conn:
+        conn.execute(stmt)
     with _cache_lock:
         _cache[project_id] = vocab
 
 
 def delete_vocabulary(project_id: str) -> None:
-    """Forgets a deleted project's learned vocabulary — the cached copy and
-    the JSON file. Best-effort; a missing file just means nothing was learned."""
+    """Forgets a deleted project's learned vocabulary: the cached copy and
+    its row. Best-effort; no row just means nothing was learned."""
+    from sqlalchemy import delete
+
+    from app.core.rag import index_db
+
     with _cache_lock:
         _cache.pop(project_id, None)
+    table = _table()
     try:
-        (VOCAB_DIR / f"{project_id}.json").unlink(missing_ok=True)
-    except OSError:
+        with index_db.engine().begin() as conn:
+            conn.execute(delete(table).where(table.c.project_id == uuid.UUID(str(project_id))))
+    except Exception:
         logger.warning("vocabulary_delete_failed", project_id=project_id, exc_info=True)
+
+
+def clear_cache() -> None:
+    """Forget every cached vocabulary (tests)."""
+    with _cache_lock:
+        _cache.clear()
 
 
 def update_vocabulary_from_context(project_id: str, raw_content: dict[str, Any]) -> int:
