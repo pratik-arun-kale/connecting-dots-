@@ -32,7 +32,7 @@ sentence-transformers>=2.3.1
 rank-bm25>=0.2.2
 
 # RAG answer generation (Ask AI) — OpenAI chat completions + token counting
-openai==2.24.0
+openai==3.57.0
 tiktoken>=0.8.0
 
 # Authentication — password hashing + JWT + email validation (pydantic EmailStr)
