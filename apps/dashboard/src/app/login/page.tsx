@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card';
 import { authService } from '@/lib/api/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
 import { extractErrorMessage } from '@/lib/api/error-message';
+import { LegalLinks } from '@/components/legal/legal-links';
 
 const schema = z.object({
   email: z.string().min(1, 'Email is required').email('Enter a valid email'),
@@ -120,6 +121,7 @@ export default function LoginPage() {
             Create one
           </Link>
         </p>
+        <LegalLinks className="mt-4" />
       </Card>
     </div>
   );

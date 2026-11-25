@@ -87,4 +87,9 @@ export const authService = {
   async logoutAll(): Promise<void> {
     await apiClient.post('/auth/logout-all', {}, COOKIE_MODE);
   },
+
+  /** Deletes the account and everything in it, for good. Needs the current password. */
+  async deleteAccount(password: string): Promise<void> {
+    await apiClient.delete('/auth/account', { ...COOKIE_MODE, data: { password } });
+  },
 };

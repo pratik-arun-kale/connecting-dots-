@@ -239,7 +239,15 @@ CREATE TABLE project_vocabulary (
 
 ---
 
-## M3 — Trust and feedback (days 4–8, alongside M2)
+## M3 — Trust and feedback (days 4–8, alongside M2)  ·  ✅ M3.1–M3.4 done Nov 25 (M3.5 moves to M6)
+
+*Done, with these decisions:*
+- *M3.1: [/privacy](../apps/dashboard/src/app/privacy/page.tsx) and [/terms](../apps/dashboard/src/app/terms/page.tsx) are written for an individual operator in India (DPDP Act, with access and deletion rights for everyone). The contact address is `NEXT_PUBLIC_CONTACT_EMAIL`, a new dedicated address; until it's set the pages say so. **Before launch: set it, and read both pages.** They're linked from sign-in, sign-up (with an "agree to the terms" line), the sidebar, Settings and the extension popup.*
+- *M3.2: `DELETE /auth/account` returns **403** for a wrong password (not 401: the dashboard would treat a 401 as an expired session, refresh and resend it), with 5 attempts per hour per user. The search index has no foreign keys (M2), so each project's chunks and vocabulary are removed explicitly, trashed projects included.*
+- *M3.3: Settings shows the email and its confirmation status (with resend), "Log out of all devices", and "Delete my account" (password in a dialog). It replaces the redirect. A gear in the sidebar opens it.*
+- *M3.4: an **email link** instead of a Tally form (your choice). "Send feedback" opens an email to the contact address with the five questions, the version (the Vercel commit, or the extension's manifest version) and where it came from. It's in the sidebar, under Ask AI answers (👍/👎) and in the extension popup (via `/feedback?from=extension&version=…`).*
+- *M3.5 needs the Google Cloud project, so it's done in M6 (log-based alert on `level=error`).*
+- *Tests: account deletion (nothing of the user is left in any table, another user's data is untouched, guesses are limited, the search index goes), plus end-to-end tests for deleting from Settings, the public legal pages, and the feedback link's version.*
 
 ### M3.1 Privacy policy and terms pages (B8)  ·  Low–Medium
 - **New pages:** `apps/dashboard/src/app/privacy/page.tsx` and `apps/dashboard/src/app/terms/page.tsx`. They're static and need no login.

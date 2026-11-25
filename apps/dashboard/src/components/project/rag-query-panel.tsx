@@ -15,6 +15,7 @@ import {
   ChevronUp,
   RefreshCw,
 } from 'lucide-react';
+import { FeedbackLink } from '@/components/legal/legal-links';
 
 // ── Confidence badge ───────────────────────────────────────────────────────────
 
@@ -131,6 +132,11 @@ function AnswerBlock({ result }: { result: RagQueryResponse }) {
           {result.answer}
         </p>
       </div>
+      <p className="flex items-center gap-3 text-[12px] text-muted-foreground">
+        Was this helpful?
+        <FeedbackLink from="ask-ai-helpful" className="hover:text-foreground" aria-label="Yes, send feedback">👍</FeedbackLink>
+        <FeedbackLink from="ask-ai-not-helpful" className="hover:text-foreground" aria-label="No, send feedback">👎</FeedbackLink>
+      </p>
 
       {/* Query used (if different from original) */}
       {result.query_used !== result.query_used && (
@@ -280,7 +286,7 @@ export function RagQueryPanel({ projectId, chunksIndexed = 0 }: RagQueryPanelPro
           </div>
           <div className="text-center space-y-1">
             <p className="text-sm font-medium text-foreground">Thinking…</p>
-            <p className="text-xs text-muted-foreground">Retrieving · reranking · generating answer with qwen2.5:3b</p>
+            <p className="text-xs text-muted-foreground">Searching your notes · ranking passages · writing an answer</p>
           </div>
         </div>
       )}

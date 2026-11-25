@@ -3,10 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import {
-  Brain, House, Layers, LogOut, MessageSquare, Moon, MoreHorizontal, Trash2,
-  PanelLeft, Plus, Search, Sparkles, Sun,
-} from 'lucide-react';
+import { Brain, House, Layers, LogOut, MessageSquare, Moon, MoreHorizontal, PanelLeft, Plus, Search, Settings, Sparkles, Sun, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useSearchStore, useSidebarStore, useWorkspaceStore } from '@/store';
 import { useThemeStore } from '@/store/theme-store';
@@ -20,6 +17,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { Project } from '@/types';
+import { FeedbackLink } from '@/components/legal/legal-links';
 
 const rowClass = (active: boolean) => cn(
   'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors cursor-pointer',
@@ -222,6 +220,15 @@ export function Sidebar({ variant = 'desktop', onNavigate }: { variant?: 'deskto
       )}
       {collapsed && <div className="flex-1" />}
 
+      {!collapsed && (
+        <p className="shrink-0 px-4 pb-1.5 pt-2 text-[12px] text-muted-foreground">
+          <FeedbackLink from="sidebar" className="hover:text-foreground">Send feedback</FeedbackLink>
+          {' · '}
+          <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
+          {' · '}
+          <Link href="/terms" className="hover:text-foreground">Terms</Link>
+        </p>
+      )}
       <AccountRow collapsed={collapsed} />
 
       {settingsProject && (
@@ -267,6 +274,9 @@ function AccountRow({ collapsed }: { collapsed: boolean }) {
       >
         {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
       </button>
+      <Link href="/settings" aria-label="Settings" title="Settings" className={iconButton}>
+        <Settings className="h-4 w-4" />
+      </Link>
       <button type="button" onClick={logout} aria-label="Log out" title="Log out" className={iconButton}>
         <LogOut className="h-4 w-4" />
       </button>

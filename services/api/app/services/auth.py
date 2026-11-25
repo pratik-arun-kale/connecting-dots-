@@ -6,14 +6,17 @@ rotation + reuse detection), and logout.
 """
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.exceptions import ConflictException, ForbiddenException, UnauthorizedException
 from app.core.logging import get_logger
+from app.core.rag import vector_store, vocabulary
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
@@ -23,7 +26,9 @@ from app.core.security import (
     verify_password_async,
 )
 from app.core.settings import settings
+from app.db.soft_delete import INCLUDE_DELETED
 from app.models.auth_session import AuthSession
+from app.models.project import Project
 from app.models.user import User
 from app.repositories.auth_session import AuthSessionRepository
 from app.repositories.user import UserRepository
@@ -48,6 +53,7 @@ class AuthService:
         db: AsyncSession,
         session_factory: Callable[[], AsyncSession] | async_sessionmaker[AsyncSession] | None = None,
     ) -> None:
+        self._db = db
         self._users = UserRepository(db)
         self._auth_sessions = AuthSessionRepository(db)
         # Used ONLY by the reuse-detection path below, which deliberately
@@ -199,6 +205,38 @@ class AuthService:
         if auth_session is not None and auth_session.revoked_at is None:
             await self._auth_sessions.revoke(auth_session)
             logger.info("user_logout", user_id=str(auth_session.user_id))
+
+    async def delete_account(self, user_id: uuid.UUID, password: str) -> int:
+        """Deletes the user and everything that belongs to them, once the
+        password checks out. Returns how many projects went.
+
+        The database cascades from users to projects, sessions, contexts,
+        auth_sessions and email_tokens. The search index has no foreign keys
+        (see app/models/search_index.py), so each project's chunks and
+        vocabulary are removed here, trashed projects included. Best-effort:
+        the trash purge's orphan sweep removes anything left behind."""
+        user = await self._users.get_by_id(user_id)
+        if user is None:
+            raise UnauthorizedException("Invalid credentials.")
+        if not await verify_password_async(password, user.password_hash):
+            # 403, not 401: the access token is fine, only the confirmation is
+            # wrong. A 401 would make the dashboard refresh and resend it.
+            raise ForbiddenException("That password isn't right.")
+
+        project_ids = list(
+            (
+                await self._db.execute(
+                    select(Project.id).where(Project.user_id == user_id).execution_options(**{INCLUDE_DELETED: True})
+                )
+            ).scalars()
+        )
+        await self._db.execute(delete(User).where(User.id == user_id))
+        await self._db.flush()
+        for project_id in project_ids:
+            await asyncio.to_thread(vector_store.delete_project_collection, str(project_id))
+            await asyncio.to_thread(vocabulary.delete_vocabulary, str(project_id))
+        logger.info("account_deleted", user_id=str(user_id), projects=len(project_ids))
+        return len(project_ids)
 
     async def logout_all(self, user_id: uuid.UUID) -> None:
         await self._auth_sessions.revoke_all_for_user(user_id)

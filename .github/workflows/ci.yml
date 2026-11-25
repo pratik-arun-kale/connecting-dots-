@@ -167,6 +167,8 @@ jobs:
       # src/proxy.ts forwards to the API, so the sign-in cookie is same-site.
       NEXT_PUBLIC_API_BASE_URL: /api/v1
       API_UPSTREAM_URL: http://127.0.0.1:8000
+      # The privacy, terms and feedback pages show it (legal-pages.spec.ts).
+      NEXT_PUBLIC_CONTACT_EMAIL: beta@example.com
       # Each Playwright test signs up its own user, all from one IP.
       AUTH_REGISTER_LIMIT_PER_HOUR: "100"
     steps:
@@ -221,6 +223,7 @@ jobs:
           # account-email.spec.ts reads the links from this log.
           E2E_API_LOG: ${{ github.workspace }}/api.log
           E2E_DASHBOARD_PROXY: "1"
+          E2E_CONTACT_EMAIL: beta@example.com
         run: |
           npm ci
           npx playwright install --with-deps chromium

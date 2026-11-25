@@ -4,6 +4,7 @@ import { LoginGate } from '@/components/auth/LoginGate'
 import { PopupShell } from './components/layout/PopupShell'
 import { Header }    from './components/layout/Header'
 import { NavBar }    from './components/layout/NavBar'
+import { PopupFooter } from './components/layout/PopupFooter'
 import { HomePage }      from './pages/HomePage'
 import { ProjectsPage }   from './pages/ProjectsPage'
 import { useBackendHealth }  from './hooks/useBackendHealth'
@@ -64,6 +65,7 @@ export function App() {
       <LoginGate>
         <AuthenticatedPopup />
       </LoginGate>
+      <PopupFooter />
     </PopupShell>
   )
 }
