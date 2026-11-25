@@ -3,10 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import {
-  Brain, House, Layers, LogOut, MessageSquare, Moon, MoreHorizontal, Trash2,
-  PanelLeft, Plus, Search, Sparkles, Sun,
-} from 'lucide-react';
+import { Brain, House, Layers, LogOut, MessageSquare, Moon, MoreHorizontal, PanelLeft, Plus, Search, Settings, Sparkles, Sun, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useSearchStore, useSidebarStore, useWorkspaceStore } from '@/store';
 import { useThemeStore } from '@/store/theme-store';
@@ -267,6 +264,9 @@ function AccountRow({ collapsed }: { collapsed: boolean }) {
       >
         {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
       </button>
+      <Link href="/settings" aria-label="Settings" title="Settings" className={iconButton}>
+        <Settings className="h-4 w-4" />
+      </Link>
       <button type="button" onClick={logout} aria-label="Log out" title="Log out" className={iconButton}>
         <LogOut className="h-4 w-4" />
       </button>

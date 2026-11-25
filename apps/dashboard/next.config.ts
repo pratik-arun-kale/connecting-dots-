@@ -57,12 +57,6 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
-  async redirects() {
-    // The Settings page was a mock with buttons that did nothing; it comes
-    // back with real account settings (beta plan M3.3). Temporary (307), so
-    // browsers don't remember it.
-    return [{ source: "/settings", destination: "/notes", permanent: false }];
-  },
 };
 
 export default nextConfig;
