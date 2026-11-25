@@ -216,7 +216,7 @@ jobs:
           measure "before: models downloaded at startup" -e RAG_MODELS_DIR= -e HF_HUB_OFFLINE=0 -e TRANSFORMERS_OFFLINE=0
           measure "after: baked models, --network none" --network none
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
